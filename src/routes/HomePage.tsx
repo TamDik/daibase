@@ -27,7 +27,7 @@ import {
   writePage,
 } from "../api/tauriCommands";
 
-const defaultPagePath = "Pages/Main";
+const defaultPageLocation = "Page:Main";
 
 export function HomePage() {
   const [namespaces, setNamespaces] = useState<NamespaceSummary[]>([]);
@@ -36,7 +36,7 @@ export function HomePage() {
   const [contentTree, setContentTree] = useState<ContentTree>({ pages: [] });
   const [page, setPage] = useState<PageContent | null>(null);
   const [draft, setDraft] = useState("");
-  const [locationInput, setLocationInput] = useState(defaultPagePath);
+  const [locationInput, setLocationInput] = useState(defaultPageLocation);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [namespaceName, setNamespaceName] = useState("");
@@ -67,7 +67,7 @@ export function HomePage() {
       const nextPage = await readPageOrVirtual(namespaceId, normalizedPath);
       setPage(nextPage);
       setDraft(nextPage.content);
-      setLocationInput(displayPagePath(nextPage.path));
+      setLocationInput(pathToPageLocation(nextPage.path));
       setIsEditing(false);
 
       if (mode === "history") {
@@ -96,7 +96,7 @@ export function HomePage() {
     setContentTree(detail.content);
     setPage(mainPage);
     setDraft(mainPage.content);
-    setLocationInput(displayPagePath(mainPage.path));
+    setLocationInput(pathToPageLocation(mainPage.path));
     setHistory([mainPage.path]);
     setHistoryIndex(0);
     setIsEditing(false);
@@ -115,7 +115,7 @@ export function HomePage() {
         setContentTree({ pages: [] });
         setPage(null);
         setDraft("");
-        setLocationInput(defaultPagePath);
+        setLocationInput(defaultPageLocation);
         setHistory([]);
         setHistoryIndex(-1);
         setIsEditing(false);
@@ -255,7 +255,7 @@ export function HomePage() {
       setPage(nextPage);
       setDraft(nextPage.content);
       setContentTree(nextContent);
-      setLocationInput(displayPagePath(nextPage.path));
+      setLocationInput(pathToPageLocation(nextPage.path));
       setIsEditing(false);
       setSavedMessage(`保存しました: ${result.revision_id}`);
     } catch (caught) {
@@ -449,7 +449,7 @@ export function HomePage() {
                       >
                         <ListItemText
                           primary={pageTitle(item.path)}
-                          secondary={displayPagePath(item.path)}
+                          secondary={pathToPageLocation(item.path)}
                         />
                       </ListItemButton>
                     ))}
@@ -474,7 +474,7 @@ export function HomePage() {
                   ネームスペースを作成してください
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  最初のページは {defaultPagePath} として作成されます。
+                  最初のページは {defaultPageLocation} として作成されます。
                 </Typography>
               </Paper>
             ) : (
@@ -499,7 +499,7 @@ export function HomePage() {
                       {pageTitle(page.path)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {displayPagePath(page.path)}
+                      {pathToPageLocation(page.path)}
                     </Typography>
                   </Box>
                   {isEditing ? (
@@ -562,19 +562,17 @@ export function HomePage() {
 
 function normalizePagePath(path: string) {
   const trimmed = path.trim();
-  const withPagesPrefix = trimmed.startsWith("Pages/")
-    ? trimmed
-    : `Pages/${trimmed}`;
-
-  if (withPagesPrefix.endsWith(".md")) {
-    return withPagesPrefix;
-  }
+  const pageName = trimmed.startsWith("Page:")
+    ? trimmed.slice("Page:".length)
+    : trimmed;
+  const withoutExtension = pageName.replace(/\.md$/, "");
+  const withPagesPrefix = `Pages/${withoutExtension}`;
 
   return `${withPagesPrefix}.md`;
 }
 
-function displayPagePath(path: string) {
-  return path.replace(/\.md$/, "");
+function pathToPageLocation(path: string) {
+  return `Page:${path.replace(/^Pages\//, "").replace(/\.md$/, "")}`;
 }
 
 function pageTitle(path: string) {
@@ -714,11 +712,13 @@ function MarkdownPreview({
 function resolveMarkdownLink(currentPath: string, target: string) {
   const [pathWithoutFragment] = target.split("#");
   const pathWithoutQuery = pathWithoutFragment.split("?")[0];
-  if (pathWithoutQuery.startsWith("Pages/")) {
+  if (pathWithoutQuery.startsWith("Page:")) {
     return normalizePagePath(pathWithoutQuery);
   }
 
-  const currentParts = displayPagePath(currentPath).split("/");
+  const currentParts = pathToPageLocation(currentPath)
+    .slice("Page:".length)
+    .split("/");
   currentParts.pop();
   const resolvedParts = [...currentParts, pathWithoutQuery].flatMap((part) =>
     part.split("/"),
