@@ -13,6 +13,8 @@ import {
   listNamespaces,
   openNamespace,
   readPage,
+  resolveLocation,
+  resolveMarkdownLink,
   writePage,
 } from "../api/tauriCommands";
 import { AppHeader } from "../components/AppHeader";
@@ -22,12 +24,7 @@ import {
   NamespacesSpecialPage,
   SpecialPagesIndex,
 } from "../components/SpecialPages";
-import {
-  defaultPageLocation,
-  namespacesLocation,
-  pageLocation,
-  resolveLocation,
-} from "../lib/location";
+import { defaultPageLocation, namespacesLocation, pageLocation } from "../lib/location";
 
 type PageView = {
   kind: "page";
@@ -81,7 +78,6 @@ export function HomePage() {
     async (
       rawLocation: string,
       mode: "push" | "replace" | "history" = "push",
-      namespaceCandidates = namespaces,
       sourceNamespace = activeNamespace,
     ) => {
       if (isDirty && !window.confirm("未保存の変更を破棄して移動しますか？")) {
@@ -90,7 +86,7 @@ export function HomePage() {
 
       setError(null);
       setSavedMessage(null);
-      const resolved = resolveLocation(rawLocation, namespaceCandidates, sourceNamespace);
+      const resolved = await resolveLocation(rawLocation, sourceNamespace?.id ?? null);
       const nextLocation =
         resolved.kind === "page"
           ? pageLocation(resolved.pagePath, resolved.namespace)
@@ -153,7 +149,7 @@ export function HomePage() {
         return next;
       });
     },
-    [activeNamespace, historyIndex, isDirty, namespaces],
+    [activeNamespace, historyIndex, isDirty],
   );
 
   useEffect(() => {
@@ -208,7 +204,7 @@ export function HomePage() {
       setRootPath("");
       const nextNamespaces = await listNamespaces();
       setNamespaces(nextNamespaces);
-      await navigate(defaultPageLocation, "push", nextNamespaces, namespace);
+      await navigate(defaultPageLocation, "push", namespace);
     } catch (caught) {
       setError(errorMessage(caught));
     }
@@ -378,6 +374,9 @@ export function HomePage() {
               onCancelEditing={handleCancelEditing}
               onDraftChange={setDraft}
               onOpenLocation={(location) => void navigate(location)}
+              onResolveMarkdownLink={(target) =>
+                resolveMarkdownLink(pageView.namespace.id, pageView.page.path, target)
+              }
               onSave={() => void handleSave()}
               onStartEditing={handleStartEditing}
             />

@@ -14,6 +14,8 @@ vi.mock("../api/tauriCommands", () => ({
   listNamespaces: vi.fn(),
   openNamespace: vi.fn(),
   readPage: vi.fn(),
+  resolveLocation: vi.fn(),
+  resolveMarkdownLink: vi.fn(),
   writePage: vi.fn(),
 }));
 
@@ -36,6 +38,8 @@ describe("HomePage", () => {
     vi.mocked(api.listNamespaces).mockReset();
     vi.mocked(api.openNamespace).mockReset();
     vi.mocked(api.readPage).mockReset();
+    vi.mocked(api.resolveLocation).mockReset();
+    vi.mocked(api.resolveMarkdownLink).mockReset();
     vi.mocked(api.writePage).mockReset();
 
     vi.mocked(api.listNamespaces).mockResolvedValue([workNamespace]);
@@ -49,6 +53,39 @@ describe("HomePage", () => {
       }
 
       throw new Error("ページが見つかりません");
+    });
+    vi.mocked(api.resolveLocation).mockImplementation(async (location, sourceNamespaceId) => {
+      const namespace = sourceNamespaceId === workNamespace.id ? workNamespace : workNamespace;
+      if (location === "Special:Namespaces") {
+        return {
+          kind: "specialNamespaces",
+          location: "Special:Namespaces",
+        };
+      }
+      if (location === "Special:SpecialPages" || location === "Work:Special:SpecialPages") {
+        return {
+          kind: "specialPages",
+          namespace,
+          location: "Work:Special:SpecialPages",
+        };
+      }
+      if (location === "Special:Pages" || location === "Work:Special:Pages") {
+        return {
+          kind: "specialPagesList",
+          namespace,
+          location: "Work:Special:Pages",
+        };
+      }
+      const pageName = location.replace(/^Work:/, "").replace(/^Page:/, "");
+      return {
+        kind: "page",
+        namespace,
+        pagePath: `Pages/${pageName}.md`,
+        location: `Work:Page:${pageName}`,
+      };
+    });
+    vi.mocked(api.resolveMarkdownLink).mockImplementation(async (_namespaceId, _path, target) => {
+      return `Work:Page:${target}`;
     });
   });
 

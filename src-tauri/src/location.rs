@@ -9,6 +9,7 @@ pub const SPECIAL_PAGES_LOCATION: &str = "Special:SpecialPages";
 pub enum ResolvedLocation {
     Page {
         namespace: NamespaceSummary,
+        #[serde(rename = "pagePath")]
         page_path: String,
         location: String,
     },

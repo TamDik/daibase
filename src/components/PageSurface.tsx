@@ -19,6 +19,7 @@ export function PageSurface({
   onCancelEditing,
   onDraftChange,
   onOpenLocation,
+  onResolveMarkdownLink,
   onSave,
   onStartEditing,
 }: {
@@ -31,6 +32,7 @@ export function PageSurface({
   onCancelEditing: () => void;
   onDraftChange: (value: string) => void;
   onOpenLocation: (location: string) => void;
+  onResolveMarkdownLink: (target: string) => Promise<string>;
   onSave: () => void;
   onStartEditing: () => void;
 }) {
@@ -91,10 +93,9 @@ export function PageSurface({
           />
         ) : (
           <MarkdownPreview
-            currentNamespace={currentNamespace}
-            currentPath={page.path}
             markdown={previewContent}
             onOpenLocation={onOpenLocation}
+            onResolveMarkdownLink={onResolveMarkdownLink}
           />
         )}
       </Box>

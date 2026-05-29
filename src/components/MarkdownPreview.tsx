@@ -4,19 +4,14 @@ import Typography from "@mui/material/Typography";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import type { NamespaceSummary } from "../api/tauriCommands";
-import { resolveMarkdownLink } from "../lib/location";
-
 export function MarkdownPreview({
-  currentNamespace,
-  currentPath,
   markdown,
   onOpenLocation,
+  onResolveMarkdownLink,
 }: {
-  currentNamespace: NamespaceSummary;
-  currentPath: string;
   markdown: string;
   onOpenLocation: (location: string) => void;
+  onResolveMarkdownLink: (target: string) => Promise<string>;
 }) {
   return (
     <Box
@@ -59,7 +54,7 @@ export function MarkdownPreview({
                   }
 
                   event.preventDefault();
-                  onOpenLocation(resolveMarkdownLink(currentNamespace, currentPath, linkTarget));
+                  void onResolveMarkdownLink(linkTarget).then(onOpenLocation);
                 }}
               >
                 {children}

@@ -41,6 +41,28 @@ export type SaveResult = {
   saved_at: string;
 };
 
+export type ResolvedLocation =
+  | {
+      kind: "page";
+      namespace: NamespaceSummary;
+      pagePath: string;
+      location: string;
+    }
+  | {
+      kind: "specialNamespaces";
+      location: string;
+    }
+  | {
+      kind: "specialPages";
+      namespace: NamespaceSummary;
+      location: string;
+    }
+  | {
+      kind: "specialPagesList";
+      namespace: NamespaceSummary;
+      location: string;
+    };
+
 export function listNamespaces() {
   return invoke<NamespaceSummary[]>("list_namespaces");
 }
@@ -76,5 +98,24 @@ export function writePage(namespaceId: string, path: string, content: string) {
 export function listContent(namespaceId: string) {
   return invoke<ContentTree>("list_content", {
     namespaceId,
+  });
+}
+
+export function resolveLocation(location: string, sourceNamespaceId: string | null) {
+  return invoke<ResolvedLocation>("resolve_location", {
+    location,
+    sourceNamespaceId,
+  });
+}
+
+export function resolveMarkdownLink(
+  currentNamespaceId: string,
+  currentPath: string,
+  target: string,
+) {
+  return invoke<string>("resolve_markdown_link", {
+    currentNamespaceId,
+    currentPath,
+    target,
   });
 }
