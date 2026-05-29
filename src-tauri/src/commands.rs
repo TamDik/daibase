@@ -1,5 +1,8 @@
 use crate::location::ResolvedLocation;
-use crate::models::{ContentTree, NamespaceDetail, NamespaceSummary, PageContent, SaveResult};
+use crate::models::{
+    ContentTree, NamespaceDetail, NamespaceSummary, OpenLocationResult, PageContent, SaveResult,
+    SpecialPageSummary,
+};
 use std::path::PathBuf;
 use tauri::AppHandle;
 
@@ -84,4 +87,103 @@ pub fn resolve_markdown_link(
         &current_path,
         &target,
     ))
+}
+
+#[tauri::command]
+pub fn open_location(
+    app: AppHandle,
+    location: String,
+    source_namespace_id: Option<String>,
+) -> Result<OpenLocationResult, String> {
+    let namespaces = crate::namespace::list_namespaces(&app)?;
+    let source_namespace = source_namespace_id
+        .as_deref()
+        .map(|namespace_id| {
+            namespaces
+                .iter()
+                .find(|namespace| namespace.id == namespace_id)
+                .ok_or_else(|| "ネームスペースが見つかりません。".to_string())
+        })
+        .transpose()?;
+    let resolved = crate::location::resolve_location(&location, &namespaces, source_namespace)?;
+
+    match resolved {
+        ResolvedLocation::Page {
+            namespace,
+            page_path,
+            location,
+        } => {
+            let detail = crate::namespace::open_namespace(&app, namespace.id.clone())?;
+            let page = read_page_or_virtual(&app, &detail.namespace, &page_path)?;
+            Ok(OpenLocationResult::Page {
+                location,
+                namespace: detail.namespace,
+                page,
+            })
+        }
+        ResolvedLocation::SpecialNamespaces { location } => {
+            Ok(OpenLocationResult::SpecialNamespaces {
+                location,
+                namespaces,
+            })
+        }
+        ResolvedLocation::SpecialPages {
+            namespace,
+            location,
+        } => Ok(OpenLocationResult::SpecialPages {
+            location,
+            pages: special_pages_for_namespace(&namespace),
+            namespace,
+        }),
+        ResolvedLocation::SpecialPagesList {
+            namespace,
+            location,
+        } => {
+            let detail = crate::namespace::open_namespace(&app, namespace.id.clone())?;
+            Ok(OpenLocationResult::SpecialPagesList {
+                location,
+                namespace: detail.namespace,
+                content: detail.content,
+            })
+        }
+    }
+}
+
+fn read_page_or_virtual(
+    app: &AppHandle,
+    namespace: &NamespaceSummary,
+    path: &str,
+) -> Result<PageContent, String> {
+    match crate::namespace::read_page(app, namespace.id.clone(), path.to_string()) {
+        Ok(page) => Ok(page),
+        Err(error) if error.contains("ページが見つかりません") => Ok(PageContent {
+            namespace_id: namespace.id.clone(),
+            file_id: String::new(),
+            path: path.to_string(),
+            content: String::new(),
+            latest_revision_id: None,
+            is_virtual: true,
+        }),
+        Err(error) => Err(error),
+    }
+}
+
+fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialPageSummary> {
+    vec![
+        SpecialPageSummary {
+            title: "Special Pages".to_string(),
+            description: "全ての Special ページを表示します。".to_string(),
+            location: format!("{}:Special:SpecialPages", namespace.name),
+        },
+        SpecialPageSummary {
+            title: "Namespaces".to_string(),
+            description: "登録済み namespace の確認と新規作成を行います。".to_string(),
+            location: "Special:Namespaces".to_string(),
+        },
+        SpecialPageSummary {
+            title: "Pages".to_string(),
+            description: "namespace 内の全ページを表示します。".to_string(),
+            location: format!("{}:Special:Pages", namespace.name),
+        },
+    ]
 }

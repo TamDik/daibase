@@ -54,6 +54,7 @@ pub struct PageContent {
     pub path: String,
     pub content: String,
     pub latest_revision_id: Option<String>,
+    pub is_virtual: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -75,6 +76,37 @@ pub struct ContentTree {
 pub struct FileSummary {
     pub file_id: String,
     pub path: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SpecialPageSummary {
+    pub title: String,
+    pub description: String,
+    pub location: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum OpenLocationResult {
+    Page {
+        location: String,
+        namespace: NamespaceSummary,
+        page: PageContent,
+    },
+    SpecialNamespaces {
+        location: String,
+        namespaces: Vec<NamespaceSummary>,
+    },
+    SpecialPages {
+        location: String,
+        namespace: NamespaceSummary,
+        pages: Vec<SpecialPageSummary>,
+    },
+    SpecialPagesList {
+        location: String,
+        namespace: NamespaceSummary,
+        content: ContentTree,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

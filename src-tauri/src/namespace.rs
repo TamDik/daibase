@@ -116,6 +116,7 @@ pub fn read_page(
         path: normalized_path,
         content,
         latest_revision_id,
+        is_virtual: false,
     })
 }
 

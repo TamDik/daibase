@@ -9,14 +9,16 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
-import type { ContentTree, NamespaceSummary } from "../api/tauriCommands";
+import type { ContentTree, NamespaceSummary, SpecialPageSummary } from "../api/tauriCommands";
 import { pageLocation, pageTitle } from "../lib/location";
 
 export function SpecialPagesIndex({
-  namespace,
+  location,
+  pages,
   onOpenLocation,
 }: {
-  namespace: NamespaceSummary;
+  location: string;
+  pages: SpecialPageSummary[];
   onOpenLocation: (location: string) => void;
 }) {
   return (
@@ -26,32 +28,20 @@ export function SpecialPagesIndex({
           Special Pages
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          {namespace.name}:Special:SpecialPages
+          {location}
         </Typography>
       </Box>
       <Box sx={{ p: 3 }}>
         <List dense disablePadding>
-          <ListItemButton
-            onClick={() => onOpenLocation(`${namespace.name}:Special:SpecialPages`)}
-            sx={{ borderRadius: 1 }}
-          >
-            <ListItemText primary="Special Pages" secondary="全ての Special ページを表示します。" />
-          </ListItemButton>
-          <ListItemButton
-            onClick={() => onOpenLocation("Special:Namespaces")}
-            sx={{ borderRadius: 1 }}
-          >
-            <ListItemText
-              primary="Namespaces"
-              secondary="登録済み namespace の確認と新規作成を行います。"
-            />
-          </ListItemButton>
-          <ListItemButton
-            onClick={() => onOpenLocation(`${namespace.name}:Special:Pages`)}
-            sx={{ borderRadius: 1 }}
-          >
-            <ListItemText primary="Pages" secondary="namespace 内の全ページを表示します。" />
-          </ListItemButton>
+          {pages.map((page) => (
+            <ListItemButton
+              key={page.location}
+              onClick={() => onOpenLocation(page.location)}
+              sx={{ borderRadius: 1 }}
+            >
+              <ListItemText primary={page.title} secondary={page.description} />
+            </ListItemButton>
+          ))}
         </List>
       </Box>
     </Paper>

@@ -9,11 +9,12 @@ import {
   type ContentTree,
   type NamespaceSummary,
   type PageContent,
+  type SpecialPageSummary,
   createNamespace,
   listNamespaces,
+  openLocation,
   openNamespace,
   readPage,
-  resolveLocation,
   resolveMarkdownLink,
   writePage,
 } from "../api/tauriCommands";
@@ -41,6 +42,7 @@ type SpecialView =
       kind: "specialPages";
       location: string;
       namespace: NamespaceSummary;
+      pages: SpecialPageSummary[];
     }
   | {
       kind: "pages";
@@ -86,52 +88,49 @@ export function HomePage() {
 
       setError(null);
       setSavedMessage(null);
-      const resolved = await resolveLocation(rawLocation, sourceNamespace?.id ?? null);
-      const nextLocation =
-        resolved.kind === "page"
-          ? pageLocation(resolved.pagePath, resolved.namespace)
-          : resolved.location;
+      const opened = await openLocation(rawLocation, sourceNamespace?.id ?? null);
+      const nextLocation = opened.location;
 
-      if (resolved.kind === "specialNamespaces") {
+      if (opened.kind === "specialNamespaces") {
+        setNamespaces(opened.namespaces);
         setPageView(null);
-        setSpecialView({ kind: "namespaces", location: resolved.location });
+        setSpecialView({ kind: "namespaces", location: opened.location });
         setDraft("");
-        setLocationInput(resolved.location);
+        setLocationInput(opened.location);
         setIsEditing(false);
-      } else if (resolved.kind === "specialPages") {
+      } else if (opened.kind === "specialPages") {
+        setActiveNamespace(opened.namespace);
         setPageView(null);
         setSpecialView({
           kind: "specialPages",
-          location: resolved.location,
-          namespace: resolved.namespace,
+          location: opened.location,
+          namespace: opened.namespace,
+          pages: opened.pages,
         });
         setDraft("");
-        setLocationInput(resolved.location);
+        setLocationInput(opened.location);
         setIsEditing(false);
-      } else if (resolved.kind === "specialPagesList") {
-        const detail = await openNamespace(resolved.namespace.id);
-        setActiveNamespace(detail.namespace);
+      } else if (opened.kind === "specialPagesList") {
+        setActiveNamespace(opened.namespace);
         setPageView(null);
         setSpecialView({
           kind: "pages",
-          location: resolved.location,
-          namespace: detail.namespace,
-          content: detail.content,
+          location: opened.location,
+          namespace: opened.namespace,
+          content: opened.content,
         });
         setDraft("");
-        setLocationInput(resolved.location);
+        setLocationInput(opened.location);
         setIsEditing(false);
       } else {
-        const detail = await openNamespace(resolved.namespace.id);
-        const nextPage = await readPageOrVirtual(detail.namespace.id, resolved.pagePath);
-        setActiveNamespace(detail.namespace);
+        setActiveNamespace(opened.namespace);
         setPageView({
           kind: "page",
-          namespace: detail.namespace,
-          page: nextPage,
+          namespace: opened.namespace,
+          page: opened.page,
         });
         setSpecialView(null);
-        setDraft(nextPage.content);
+        setDraft(opened.page.content);
         setLocationInput(nextLocation);
         setIsEditing(false);
       }
@@ -350,7 +349,8 @@ export function HomePage() {
 
           {specialView?.kind === "specialPages" && (
             <SpecialPagesIndex
-              namespace={specialView.namespace}
+              location={specialView.location}
+              pages={specialView.pages}
               onOpenLocation={(location) => void navigate(location)}
             />
           )}
@@ -397,25 +397,6 @@ export function HomePage() {
   );
 }
 
-async function readPageOrVirtual(namespaceId: string, path: string) {
-  try {
-    return await readPage(namespaceId, path);
-  } catch (caught) {
-    if (!isMissingPageError(caught)) {
-      throw caught;
-    }
-
-    return {
-      namespace_id: namespaceId,
-      file_id: "",
-      path,
-      content: "",
-      latest_revision_id: null,
-      is_virtual: true,
-    } satisfies PageContent;
-  }
-}
-
 function errorMessage(error: unknown) {
   if (typeof error === "string") {
     return error;
@@ -426,8 +407,4 @@ function errorMessage(error: unknown) {
   }
 
   return "エラーが発生しました。";
-}
-
-function isMissingPageError(error: unknown) {
-  return errorMessage(error).includes("ページが見つかりません");
 }

@@ -41,6 +41,12 @@ export type SaveResult = {
   saved_at: string;
 };
 
+export type SpecialPageSummary = {
+  title: string;
+  description: string;
+  location: string;
+};
+
 export type ResolvedLocation =
   | {
       kind: "page";
@@ -61,6 +67,31 @@ export type ResolvedLocation =
       kind: "specialPagesList";
       namespace: NamespaceSummary;
       location: string;
+    };
+
+export type OpenLocationResult =
+  | {
+      kind: "page";
+      location: string;
+      namespace: NamespaceSummary;
+      page: PageContent;
+    }
+  | {
+      kind: "specialNamespaces";
+      location: string;
+      namespaces: NamespaceSummary[];
+    }
+  | {
+      kind: "specialPages";
+      location: string;
+      namespace: NamespaceSummary;
+      pages: SpecialPageSummary[];
+    }
+  | {
+      kind: "specialPagesList";
+      location: string;
+      namespace: NamespaceSummary;
+      content: ContentTree;
     };
 
 export function listNamespaces() {
@@ -98,6 +129,13 @@ export function writePage(namespaceId: string, path: string, content: string) {
 export function listContent(namespaceId: string) {
   return invoke<ContentTree>("list_content", {
     namespaceId,
+  });
+}
+
+export function openLocation(location: string, sourceNamespaceId: string | null) {
+  return invoke<OpenLocationResult>("open_location", {
+    location,
+    sourceNamespaceId,
   });
 }
 

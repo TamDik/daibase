@@ -12,9 +12,9 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 vi.mock("../api/tauriCommands", () => ({
   createNamespace: vi.fn(),
   listNamespaces: vi.fn(),
+  openLocation: vi.fn(),
   openNamespace: vi.fn(),
   readPage: vi.fn(),
-  resolveLocation: vi.fn(),
   resolveMarkdownLink: vi.fn(),
   writePage: vi.fn(),
 }));
@@ -36,9 +36,9 @@ describe("HomePage", () => {
 
   beforeEach(() => {
     vi.mocked(api.listNamespaces).mockReset();
+    vi.mocked(api.openLocation).mockReset();
     vi.mocked(api.openNamespace).mockReset();
     vi.mocked(api.readPage).mockReset();
-    vi.mocked(api.resolveLocation).mockReset();
     vi.mocked(api.resolveMarkdownLink).mockReset();
     vi.mocked(api.writePage).mockReset();
 
@@ -54,12 +54,13 @@ describe("HomePage", () => {
 
       throw new Error("ページが見つかりません");
     });
-    vi.mocked(api.resolveLocation).mockImplementation(async (location, sourceNamespaceId) => {
+    vi.mocked(api.openLocation).mockImplementation(async (location, sourceNamespaceId) => {
       const namespace = sourceNamespaceId === workNamespace.id ? workNamespace : workNamespace;
       if (location === "Special:Namespaces") {
         return {
           kind: "specialNamespaces",
           location: "Special:Namespaces",
+          namespaces: [workNamespace],
         };
       }
       if (location === "Special:SpecialPages" || location === "Work:Special:SpecialPages") {
@@ -67,6 +68,23 @@ describe("HomePage", () => {
           kind: "specialPages",
           namespace,
           location: "Work:Special:SpecialPages",
+          pages: [
+            {
+              title: "Special Pages",
+              description: "全ての Special ページを表示します。",
+              location: "Work:Special:SpecialPages",
+            },
+            {
+              title: "Namespaces",
+              description: "登録済み namespace の確認と新規作成を行います。",
+              location: "Special:Namespaces",
+            },
+            {
+              title: "Pages",
+              description: "namespace 内の全ページを表示します。",
+              location: "Work:Special:Pages",
+            },
+          ],
         };
       }
       if (location === "Special:Pages" || location === "Work:Special:Pages") {
@@ -74,14 +92,26 @@ describe("HomePage", () => {
           kind: "specialPagesList",
           namespace,
           location: "Work:Special:Pages",
+          content: contentTree,
         };
       }
       const pageName = location.replace(/^Work:/, "").replace(/^Page:/, "");
+      const path = `Pages/${pageName}.md`;
       return {
         kind: "page",
         namespace,
-        pagePath: `Pages/${pageName}.md`,
         location: `Work:Page:${pageName}`,
+        page:
+          path === "Pages/Main.md"
+            ? page(path, "# Main\n\n[Draft](Draft)")
+            : {
+                namespace_id: namespace.id,
+                file_id: "",
+                path,
+                content: "",
+                latest_revision_id: null,
+                is_virtual: true,
+              },
       };
     });
     vi.mocked(api.resolveMarkdownLink).mockImplementation(async (_namespaceId, _path, target) => {

@@ -16,6 +16,7 @@ pub fn run() {
             commands::read_page,
             commands::write_page,
             commands::list_content,
+            commands::open_location,
             commands::resolve_location,
             commands::resolve_markdown_link,
         ])
