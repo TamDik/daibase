@@ -1,4 +1,5 @@
 mod commands;
+mod location;
 mod models;
 mod namespace;
 mod paths;
@@ -15,6 +16,8 @@ pub fn run() {
             commands::read_page,
             commands::write_page,
             commands::list_content,
+            commands::resolve_location,
+            commands::resolve_markdown_link,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
