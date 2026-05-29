@@ -96,6 +96,34 @@ describe("HomePage", () => {
     expect(screen.getByRole("heading", { name: "All Pages" })).toBeInTheDocument();
     expect(screen.getByText("Work:Page:Guide/Intro")).toBeInTheDocument();
   });
+
+  it("保存完了メッセージはページ内 Alert ではなく Snackbar として表示する", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.writePage).mockResolvedValue({
+      namespace_id: workNamespace.id,
+      file_id: "file-main",
+      path: "Pages/Main.md",
+      revision_id: "rev_saved",
+      object_id: "sha256:saved",
+      saved_at: "2026-01-01T00:00:00Z",
+    });
+    vi.mocked(api.readPage)
+      .mockResolvedValueOnce(page("Pages/Main.md", "# Main\n\n[Draft](Draft)"))
+      .mockResolvedValueOnce(page("Pages/Main.md", "# Updated"));
+
+    render(<HomePage />);
+
+    await user.click(await screen.findByRole("button", { name: "編集" }));
+    const editor = screen.getByRole("textbox", { name: "Markdown" });
+    await user.clear(editor);
+    await user.type(editor, "# Updated");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    const snackbar = await screen.findByRole("alert");
+    expect(snackbar).toHaveTextContent("保存しました");
+    expect(snackbar).not.toHaveTextContent("rev_saved");
+    expect(snackbar.closest(".MuiSnackbar-root")).not.toBeNull();
+  });
 });
 
 function namespace(id: string, name: string): NamespaceSummary {

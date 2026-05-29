@@ -1,5 +1,6 @@
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -273,7 +274,7 @@ export function HomePage() {
     setError(null);
     setSavedMessage(null);
     try {
-      const result = await writePage(pageView.namespace.id, pageView.page.path, draft);
+      await writePage(pageView.namespace.id, pageView.page.path, draft);
       const nextPage = await readPage(pageView.namespace.id, pageView.page.path);
       setPageView({
         kind: "page",
@@ -283,7 +284,7 @@ export function HomePage() {
       setDraft(nextPage.content);
       setLocationInput(pageLocation(nextPage.path, pageView.namespace));
       setIsEditing(false);
-      setSavedMessage(`保存しました: ${result.revision_id}`);
+      setSavedMessage("保存しました");
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -318,7 +319,6 @@ export function HomePage() {
         <Stack spacing={2}>
           {isLoading && <Alert severity="info">読み込み中</Alert>}
           {error && <Alert severity="error">{error}</Alert>}
-          {savedMessage && <Alert severity="success">{savedMessage}</Alert>}
           {page?.is_virtual && <Alert severity="info">このページはまだ作成されていません。</Alert>}
 
           {specialView?.kind === "namespaces" && (
@@ -358,6 +358,16 @@ export function HomePage() {
           )}
         </Stack>
       </Box>
+      <Snackbar
+        open={savedMessage !== null}
+        autoHideDuration={4000}
+        onClose={() => setSavedMessage(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+      >
+        <Alert severity="success" variant="filled" onClose={() => setSavedMessage(null)}>
+          {savedMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
