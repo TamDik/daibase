@@ -17,7 +17,11 @@ import {
 } from "../api/tauriCommands";
 import { AppHeader } from "../components/AppHeader";
 import { PageSurface } from "../components/PageSurface";
-import { AllPagesSpecialPage, NamespacesSpecialPage } from "../components/SpecialPages";
+import {
+  PagesSpecialPage,
+  NamespacesSpecialPage,
+  SpecialPagesIndex,
+} from "../components/SpecialPages";
 import {
   defaultPageLocation,
   namespacesLocation,
@@ -37,7 +41,12 @@ type SpecialView =
       location: string;
     }
   | {
-      kind: "allPages";
+      kind: "specialPages";
+      location: string;
+      namespace: NamespaceSummary;
+    }
+  | {
+      kind: "pages";
       location: string;
       namespace: NamespaceSummary;
       content: ContentTree;
@@ -93,12 +102,22 @@ export function HomePage() {
         setDraft("");
         setLocationInput(resolved.location);
         setIsEditing(false);
-      } else if (resolved.kind === "specialAllPages") {
+      } else if (resolved.kind === "specialPages") {
+        setPageView(null);
+        setSpecialView({
+          kind: "specialPages",
+          location: resolved.location,
+          namespace: resolved.namespace,
+        });
+        setDraft("");
+        setLocationInput(resolved.location);
+        setIsEditing(false);
+      } else if (resolved.kind === "specialPagesList") {
         const detail = await openNamespace(resolved.namespace.id);
         setActiveNamespace(detail.namespace);
         setPageView(null);
         setSpecialView({
-          kind: "allPages",
+          kind: "pages",
           location: resolved.location,
           namespace: detail.namespace,
           content: detail.content,
@@ -333,8 +352,15 @@ export function HomePage() {
             />
           )}
 
-          {specialView?.kind === "allPages" && (
-            <AllPagesSpecialPage
+          {specialView?.kind === "specialPages" && (
+            <SpecialPagesIndex
+              namespace={specialView.namespace}
+              onOpenLocation={(location) => void navigate(location)}
+            />
+          )}
+
+          {specialView?.kind === "pages" && (
+            <PagesSpecialPage
               content={specialView.content}
               namespace={specialView.namespace}
               onOpenLocation={(location) => void navigate(location)}

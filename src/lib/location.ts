@@ -2,6 +2,7 @@ import type { NamespaceSummary } from "../api/tauriCommands";
 
 export const defaultPageLocation = "Page:Main";
 export const namespacesLocation = "Special:Namespaces";
+export const specialPagesLocation = "Special:SpecialPages";
 
 export type ResolvedLocation =
   | {
@@ -15,7 +16,12 @@ export type ResolvedLocation =
       location: string;
     }
   | {
-      kind: "specialAllPages";
+      kind: "specialPages";
+      namespace: NamespaceSummary;
+      location: string;
+    }
+  | {
+      kind: "specialPagesList";
       namespace: NamespaceSummary;
       location: string;
     };
@@ -58,12 +64,21 @@ export function resolveLocation(
     };
   }
 
-  if (kind === "Special" && name === "AllPages") {
+  if (kind === "Special" && name === "SpecialPages") {
     const resolvedNamespace = requireNamespace(namespace);
     return {
-      kind: "specialAllPages",
+      kind: "specialPages",
       namespace: resolvedNamespace,
-      location: `${resolvedNamespace.name}:Special:AllPages`,
+      location: `${resolvedNamespace.name}:${specialPagesLocation}`,
+    };
+  }
+
+  if (kind === "Special" && name === "Pages") {
+    const resolvedNamespace = requireNamespace(namespace);
+    return {
+      kind: "specialPagesList",
+      namespace: resolvedNamespace,
+      location: `${resolvedNamespace.name}:Special:Pages`,
     };
   }
 

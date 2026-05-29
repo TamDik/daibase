@@ -48,11 +48,19 @@ describe("resolveLocation", () => {
     });
   });
 
-  it("namespace 省略の Special:AllPages を参照元 namespace で補完する", () => {
-    expect(resolveLocation("Special:AllPages", namespaces, workNamespace)).toEqual({
-      kind: "specialAllPages",
+  it("namespace 省略の Special:SpecialPages を参照元 namespace で補完する", () => {
+    expect(resolveLocation("Special:SpecialPages", namespaces, workNamespace)).toEqual({
+      kind: "specialPages",
       namespace: workNamespace,
-      location: "Work:Special:AllPages",
+      location: "Work:Special:SpecialPages",
+    });
+  });
+
+  it("namespace 省略の Special:Pages を参照元 namespace で補完する", () => {
+    expect(resolveLocation("Special:Pages", namespaces, workNamespace)).toEqual({
+      kind: "specialPagesList",
+      namespace: workNamespace,
+      location: "Work:Special:Pages",
     });
   });
 
@@ -107,8 +115,8 @@ describe("resolveMarkdownLink", () => {
       "Page:Main",
     );
     expect(
-      resolveMarkdownLink(workNamespace, "Pages/Guide/Intro.md", "Main:Special:AllPages"),
-    ).toBe("Main:Special:AllPages");
+      resolveMarkdownLink(workNamespace, "Pages/Guide/Intro.md", "Main:Special:Pages"),
+    ).toBe("Main:Special:Pages");
   });
 });
 

@@ -83,18 +83,36 @@ describe("HomePage", () => {
     expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
   });
 
-  it("Special:AllPages を現在の namespace で表示する", async () => {
+  it("Special:Pages を現在の namespace で表示する", async () => {
     const user = userEvent.setup();
     render(<HomePage />);
 
     const locationInput = await screen.findByDisplayValue("Work:Page:Main");
     await user.clear(locationInput);
-    await user.type(locationInput, "Special:AllPages");
+    await user.type(locationInput, "Special:Pages");
     await user.click(screen.getByRole("button", { name: "開く" }));
 
-    expect(await screen.findByDisplayValue("Work:Special:AllPages")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "All Pages" })).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Work:Special:Pages")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Pages" })).toBeInTheDocument();
     expect(screen.getByText("Work:Page:Guide/Intro")).toBeInTheDocument();
+  });
+
+  it("Special:SpecialPages で全ての Special ページを表示する", async () => {
+    const user = userEvent.setup();
+    render(<HomePage />);
+
+    const locationInput = await screen.findByDisplayValue("Work:Page:Main");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:SpecialPages");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    expect(await screen.findByDisplayValue("Work:Special:SpecialPages")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Special Pages" })).toBeInTheDocument();
+    expect(screen.getByText(/全ての Special ページを表示します。/)).toBeInTheDocument();
+    expect(screen.getByText(/登録済み namespace の確認と新規作成を行います。/)).toBeInTheDocument();
+    expect(screen.getByText("Pages")).toBeInTheDocument();
+    expect(screen.getByText("namespace 内の全ページを表示します。")).toBeInTheDocument();
+    expect(screen.queryByText(/Work namespace/)).not.toBeInTheDocument();
   });
 
   it("保存完了メッセージはページ内 Alert ではなく Snackbar として表示する", async () => {
