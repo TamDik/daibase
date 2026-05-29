@@ -25,9 +25,14 @@ import {
   readPage,
   writePage,
 } from "../api/tauriCommands";
-
-const defaultPageLocation = "Page:Main";
-const namespacesLocation = "Special:Namespaces";
+import {
+  defaultPageLocation,
+  namespacesLocation,
+  pageLocation,
+  pageTitle,
+  resolveLocation,
+  resolveMarkdownLink,
+} from "../lib/location";
 
 type PageView = {
   kind: "page";
@@ -47,27 +52,9 @@ type SpecialView =
       content: ContentTree;
     };
 
-type ResolvedLocation =
-  | {
-      kind: "page";
-      namespace: NamespaceSummary;
-      pagePath: string;
-      location: string;
-    }
-  | {
-      kind: "specialNamespaces";
-      location: string;
-    }
-  | {
-      kind: "specialAllPages";
-      namespace: NamespaceSummary;
-      location: string;
-    };
-
 export function HomePage() {
   const [namespaces, setNamespaces] = useState<NamespaceSummary[]>([]);
-  const [activeNamespace, setActiveNamespace] =
-    useState<NamespaceSummary | null>(null);
+  const [activeNamespace, setActiveNamespace] = useState<NamespaceSummary | null>(null);
   const [pageView, setPageView] = useState<PageView | null>(null);
   const [specialView, setSpecialView] = useState<SpecialView | null>({
     kind: "namespaces",
@@ -103,11 +90,7 @@ export function HomePage() {
 
       setError(null);
       setSavedMessage(null);
-      const resolved = resolveLocation(
-        rawLocation,
-        namespaceCandidates,
-        sourceNamespace,
-      );
+      const resolved = resolveLocation(rawLocation, namespaceCandidates, sourceNamespace);
       const nextLocation =
         resolved.kind === "page"
           ? pageLocation(resolved.pagePath, resolved.namespace)
@@ -134,10 +117,7 @@ export function HomePage() {
         setIsEditing(false);
       } else {
         const detail = await openNamespace(resolved.namespace.id);
-        const nextPage = await readPageOrVirtual(
-          detail.namespace.id,
-          resolved.pagePath,
-        );
+        const nextPage = await readPageOrVirtual(detail.namespace.id, resolved.pagePath);
         setActiveNamespace(detail.namespace);
         setPageView({
           kind: "page",
@@ -156,9 +136,7 @@ export function HomePage() {
 
       setHistory((current) => {
         const base =
-          mode === "replace"
-            ? current.slice(0, historyIndex)
-            : current.slice(0, historyIndex + 1);
+          mode === "replace" ? current.slice(0, historyIndex) : current.slice(0, historyIndex + 1);
         const last = base[base.length - 1];
         const next = last === nextLocation ? base : [...base, nextLocation];
         setHistoryIndex(next.length - 1);
@@ -177,10 +155,7 @@ export function HomePage() {
         setNamespaces(result);
         if (result.length > 0) {
           const detail = await openNamespace(result[0].id);
-          const mainPage = await readPage(
-            detail.namespace.id,
-            detail.namespace.default_page,
-          );
+          const mainPage = await readPage(detail.namespace.id, detail.namespace.default_page);
           const location = pageLocation(mainPage.path, detail.namespace);
           setActiveNamespace(detail.namespace);
           setPageView({
@@ -308,11 +283,7 @@ export function HomePage() {
     setError(null);
     setSavedMessage(null);
     try {
-      const result = await writePage(
-        pageView.namespace.id,
-        pageView.page.path,
-        draft,
-      );
+      const result = await writePage(pageView.namespace.id, pageView.page.path, draft);
       const nextPage = await readPage(pageView.namespace.id, pageView.page.path);
       setPageView({
         kind: "page",
@@ -386,11 +357,7 @@ export function HomePage() {
             }}
             sx={{ flex: 1 }}
           />
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => void handleLocationSubmit()}
-          >
+          <Button variant="outlined" size="small" onClick={() => void handleLocationSubmit()}>
             開く
           </Button>
         </Stack>
@@ -401,9 +368,7 @@ export function HomePage() {
           {isLoading && <Alert severity="info">読み込み中</Alert>}
           {error && <Alert severity="error">{error}</Alert>}
           {savedMessage && <Alert severity="success">{savedMessage}</Alert>}
-          {page?.is_virtual && (
-            <Alert severity="info">このページはまだ作成されていません。</Alert>
-          )}
+          {page?.is_virtual && <Alert severity="info">このページはまだ作成されていません。</Alert>}
 
           {specialView?.kind === "namespaces" && (
             <NamespacesSpecialPage
@@ -610,10 +575,7 @@ function PageSurface({
   onStartEditing: () => void;
 }) {
   return (
-    <Paper
-      variant="outlined"
-      sx={{ borderRadius: 1, bgcolor: "#ffffff", overflow: "hidden" }}
-    >
+    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff", overflow: "hidden" }}>
       <Box
         sx={{
           display: "flex",
@@ -678,96 +640,6 @@ function PageSurface({
       </Box>
     </Paper>
   );
-}
-
-function resolveLocation(
-  rawLocation: string,
-  namespaces: NamespaceSummary[],
-  sourceNamespace: NamespaceSummary | null,
-): ResolvedLocation {
-  const location = rawLocation.trim();
-  if (location === "Special:Namespaces") {
-    return {
-      kind: "specialNamespaces",
-      location: namespacesLocation,
-    };
-  }
-
-  const parts = location.split(":");
-  if (parts.length < 2) {
-    return {
-      kind: "page",
-      namespace: requireNamespace(sourceNamespace),
-      pagePath: normalizePagePath(location),
-      location: pageLocationFromName(location, requireNamespace(sourceNamespace)),
-    };
-  }
-
-  const first = parts[0];
-  const second = parts[1];
-  const hasNamespace = first !== "Page" && first !== "Special";
-  const namespace = hasNamespace
-    ? findNamespaceByName(namespaces, first)
-    : sourceNamespace;
-  const kind = hasNamespace ? second : first;
-  const name = parts.slice(hasNamespace ? 2 : 1).join(":");
-
-  if (kind === "Special" && name === "Namespaces") {
-    return {
-      kind: "specialNamespaces",
-      location: namespacesLocation,
-    };
-  }
-
-  if (kind === "Special" && name === "AllPages") {
-    const resolvedNamespace = requireNamespace(namespace);
-    return {
-      kind: "specialAllPages",
-      namespace: resolvedNamespace,
-      location: `${resolvedNamespace.name}:Special:AllPages`,
-    };
-  }
-
-  if (kind === "Page") {
-    const resolvedNamespace = requireNamespace(namespace);
-    return {
-      kind: "page",
-      namespace: resolvedNamespace,
-      pagePath: normalizePagePath(name),
-      location: pageLocationFromName(name, resolvedNamespace),
-    };
-  }
-
-  throw new Error(`未対応のロケーションです: ${location}`);
-}
-
-function normalizePagePath(pageName: string) {
-  const withoutPrefix = pageName.startsWith("Page:")
-    ? pageName.slice("Page:".length)
-    : pageName;
-  const withoutExtension = withoutPrefix.trim().replace(/\.md$/, "");
-  return `Pages/${withoutExtension}.md`;
-}
-
-function pageLocation(path: string, namespace: NamespaceSummary) {
-  const name = path.replace(/^Pages\//, "").replace(/\.md$/, "");
-  return pageLocationFromName(name, namespace);
-}
-
-function pageLocationFromName(
-  pageName: string,
-  namespace: NamespaceSummary,
-) {
-  const normalizedName = pageName.replace(/^Pages\//, "").replace(/\.md$/, "");
-  return `${namespace.name}:Page:${normalizedName}`;
-}
-
-function pageTitle(path: string) {
-  const parts = path
-    .replace(/^Pages\//, "")
-    .replace(/\.md$/, "")
-    .split("/");
-  return parts[parts.length - 1] ?? path;
 }
 
 async function readPageOrVirtual(namespaceId: string, path: string) {
@@ -841,13 +713,7 @@ function MarkdownPreview({
                   }
 
                   event.preventDefault();
-                  onOpenLocation(
-                    resolveMarkdownLink(
-                      currentNamespace,
-                      currentPath,
-                      linkTarget,
-                    ),
-                  );
+                  onOpenLocation(resolveMarkdownLink(currentNamespace, currentPath, linkTarget));
                 }}
               >
                 {children}
@@ -902,65 +768,6 @@ function MarkdownPreview({
       </ReactMarkdown>
     </Box>
   );
-}
-
-function resolveMarkdownLink(
-  currentNamespace: NamespaceSummary,
-  currentPath: string,
-  target: string,
-) {
-  const [pathWithoutFragment] = target.split("#");
-  const pathWithoutQuery = pathWithoutFragment.split("?")[0];
-  const parts = pathWithoutQuery.split(":");
-
-  if (
-    parts.length >= 2 &&
-    (parts[0] === "Page" || parts[0] === "Special" || parts[1] === "Page" || parts[1] === "Special")
-  ) {
-    return pathWithoutQuery;
-  }
-
-  const currentParts = currentPath
-    .replace(/^Pages\//, "")
-    .replace(/\.md$/, "")
-    .split("/");
-  currentParts.pop();
-  const resolvedParts = [...currentParts, pathWithoutQuery].flatMap((part) =>
-    part.split("/"),
-  );
-  const normalizedParts: string[] = [];
-
-  for (const part of resolvedParts) {
-    if (part === "" || part === ".") {
-      continue;
-    }
-
-    if (part === "..") {
-      normalizedParts.pop();
-      continue;
-    }
-
-    normalizedParts.push(part);
-  }
-
-  return pageLocationFromName(normalizedParts.join("/"), currentNamespace);
-}
-
-function requireNamespace(namespace: NamespaceSummary | null) {
-  if (!namespace) {
-    throw new Error("ネームスペースを選択してください。");
-  }
-
-  return namespace;
-}
-
-function findNamespaceByName(namespaces: NamespaceSummary[], name: string) {
-  const namespace = namespaces.find((item) => item.name === name);
-  if (!namespace) {
-    throw new Error(`ネームスペースが見つかりません: ${name}`);
-  }
-
-  return namespace;
 }
 
 function errorMessage(error: unknown) {
