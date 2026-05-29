@@ -1,19 +1,8 @@
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import Divider from "@mui/material/Divider";
-import Link from "@mui/material/Link";
-import List from "@mui/material/List";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemText from "@mui/material/ListItemText";
-import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
 import { open } from "@tauri-apps/plugin-dialog";
-import Typography from "@mui/material/Typography";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import {
   type ContentTree,
@@ -25,13 +14,14 @@ import {
   readPage,
   writePage,
 } from "../api/tauriCommands";
+import { AppHeader } from "../components/AppHeader";
+import { PageSurface } from "../components/PageSurface";
+import { AllPagesSpecialPage, NamespacesSpecialPage } from "../components/SpecialPages";
 import {
   defaultPageLocation,
   namespacesLocation,
   pageLocation,
-  pageTitle,
   resolveLocation,
-  resolveMarkdownLink,
 } from "../lib/location";
 
 type PageView = {
@@ -314,54 +304,15 @@ export function HomePage() {
         color: "#1f2328",
       }}
     >
-      <Box
-        component="header"
-        sx={{
-          borderBottom: "1px solid #d0d7de",
-          bgcolor: "#ffffff",
-          px: 2,
-          py: 1.25,
-        }}
-      >
-        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
-          <Typography variant="h6" component="h1" sx={{ fontWeight: 700 }}>
-            Daibase
-          </Typography>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => void handleGoBack()}
-            disabled={!canGoBack}
-            sx={{ minWidth: 40 }}
-          >
-            &lt;
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => void handleGoForward()}
-            disabled={!canGoForward}
-            sx={{ minWidth: 40 }}
-          >
-            &gt;
-          </Button>
-          <TextField
-            aria-label="現在のロケーション"
-            size="small"
-            value={locationInput}
-            onChange={(event) => setLocationInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                void handleLocationSubmit();
-              }
-            }}
-            sx={{ flex: 1 }}
-          />
-          <Button variant="outlined" size="small" onClick={() => void handleLocationSubmit()}>
-            開く
-          </Button>
-        </Stack>
-      </Box>
+      <AppHeader
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        locationInput={locationInput}
+        onGoBack={() => void handleGoBack()}
+        onGoForward={() => void handleGoForward()}
+        onLocationChange={setLocationInput}
+        onLocationSubmit={() => void handleLocationSubmit()}
+      />
 
       <Box component="main" sx={{ p: 3 }}>
         <Stack spacing={2}>
@@ -411,237 +362,6 @@ export function HomePage() {
   );
 }
 
-function NamespacesSpecialPage({
-  namespaces,
-  namespaceName,
-  rootPath,
-  onCreateNamespace,
-  onNamespaceNameChange,
-  onOpenLocation,
-  onRootPathSelect,
-}: {
-  namespaces: NamespaceSummary[];
-  namespaceName: string;
-  rootPath: string;
-  onCreateNamespace: () => void;
-  onNamespaceNameChange: (value: string) => void;
-  onOpenLocation: (location: string) => void;
-  onRootPathSelect: () => void;
-}) {
-  return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
-        <Typography variant="h5" component="h2">
-          Namespaces
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Special:Namespaces
-        </Typography>
-      </Box>
-      <Stack spacing={3} sx={{ p: 3 }}>
-        <Box>
-          {namespaces.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              まだ作成されていません。
-            </Typography>
-          ) : (
-            <List dense disablePadding>
-              {namespaces.map((namespace) => (
-                <ListItemButton
-                  key={namespace.id}
-                  onClick={() => onOpenLocation(`${namespace.name}:Page:Main`)}
-                  sx={{ borderRadius: 1 }}
-                >
-                  <ListItemText
-                    primary={namespace.name}
-                    secondary={`${namespace.name}:Special:AllPages`}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          )}
-        </Box>
-
-        <Divider />
-
-        <Stack spacing={1.5} sx={{ maxWidth: 560 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-            新規作成
-          </Typography>
-          <TextField
-            label="名前"
-            size="small"
-            value={namespaceName}
-            onChange={(event) => onNamespaceNameChange(event.target.value)}
-          />
-          <Stack direction="row" spacing={1}>
-            <TextField
-              label="保存先フォルダ"
-              size="small"
-              value={rootPath}
-              placeholder="未選択"
-              slotProps={{
-                input: {
-                  readOnly: true,
-                },
-              }}
-              sx={{ flex: 1 }}
-            />
-            <Button variant="outlined" onClick={onRootPathSelect}>
-              選択
-            </Button>
-          </Stack>
-          <Button
-            variant="contained"
-            onClick={onCreateNamespace}
-            disabled={!namespaceName.trim() || !rootPath.trim()}
-          >
-            作成
-          </Button>
-        </Stack>
-      </Stack>
-    </Paper>
-  );
-}
-
-function AllPagesSpecialPage({
-  namespace,
-  content,
-  onOpenLocation,
-}: {
-  namespace: NamespaceSummary;
-  content: ContentTree;
-  onOpenLocation: (location: string) => void;
-}) {
-  return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
-        <Typography variant="h5" component="h2">
-          All Pages
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {namespace.name}:Special:AllPages
-        </Typography>
-      </Box>
-      <Box sx={{ p: 3 }}>
-        {content.pages.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            ページはまだありません。
-          </Typography>
-        ) : (
-          <List dense disablePadding>
-            {content.pages.map((item) => (
-              <ListItemButton
-                key={item.path}
-                onClick={() => onOpenLocation(pageLocation(item.path, namespace))}
-                sx={{ borderRadius: 1 }}
-              >
-                <ListItemText
-                  primary={pageTitle(item.path)}
-                  secondary={pageLocation(item.path, namespace)}
-                />
-              </ListItemButton>
-            ))}
-          </List>
-        )}
-      </Box>
-    </Paper>
-  );
-}
-
-function PageSurface({
-  currentNamespace,
-  draft,
-  isEditing,
-  isSaving,
-  page,
-  previewContent,
-  onCancelEditing,
-  onDraftChange,
-  onOpenLocation,
-  onSave,
-  onStartEditing,
-}: {
-  currentNamespace: NamespaceSummary;
-  draft: string;
-  isEditing: boolean;
-  isSaving: boolean;
-  page: PageContent;
-  previewContent: string;
-  onCancelEditing: () => void;
-  onDraftChange: (value: string) => void;
-  onOpenLocation: (location: string) => void;
-  onSave: () => void;
-  onStartEditing: () => void;
-}) {
-  return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff", overflow: "hidden" }}>
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 2,
-          flexWrap: "wrap",
-          borderBottom: "1px solid #d0d7de",
-          px: 2,
-          py: 1.5,
-        }}
-      >
-        <Box>
-          <Typography variant="h5" component="h2">
-            {pageTitle(page.path)}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {pageLocation(page.path, currentNamespace)}
-          </Typography>
-        </Box>
-        {isEditing ? (
-          <Stack direction="row" spacing={1}>
-            <Button variant="outlined" onClick={onCancelEditing} disabled={isSaving}>
-              キャンセル
-            </Button>
-            <Button variant="contained" onClick={onSave} disabled={isSaving}>
-              {isSaving ? "保存中" : "保存"}
-            </Button>
-          </Stack>
-        ) : (
-          <Button variant="contained" onClick={onStartEditing}>
-            編集
-          </Button>
-        )}
-      </Box>
-
-      <Box sx={{ p: 3 }}>
-        {isEditing ? (
-          <TextField
-            label="Markdown"
-            value={draft}
-            onChange={(event) => onDraftChange(event.target.value)}
-            multiline
-            minRows={24}
-            fullWidth
-            sx={{
-              "& textarea": {
-                fontFamily:
-                  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-                lineHeight: 1.6,
-              },
-            }}
-          />
-        ) : (
-          <MarkdownPreview
-            currentNamespace={currentNamespace}
-            currentPath={page.path}
-            markdown={previewContent}
-            onOpenLocation={onOpenLocation}
-          />
-        )}
-      </Box>
-    </Paper>
-  );
-}
-
 async function readPageOrVirtual(namespaceId: string, path: string) {
   try {
     return await readPage(namespaceId, path);
@@ -659,115 +379,6 @@ async function readPageOrVirtual(namespaceId: string, path: string) {
       is_virtual: true,
     } satisfies PageContent;
   }
-}
-
-function MarkdownPreview({
-  currentNamespace,
-  currentPath,
-  markdown,
-  onOpenLocation,
-}: {
-  currentNamespace: NamespaceSummary;
-  currentPath: string;
-  markdown: string;
-  onOpenLocation: (location: string) => void;
-}) {
-  return (
-    <Box
-      sx={{
-        "& > :first-of-type": { mt: 0 },
-        "& > :last-child": { mb: 0 },
-        "& table": {
-          borderCollapse: "collapse",
-          width: "100%",
-        },
-        "& th, & td": {
-          border: "1px solid #d0d7de",
-          p: 1,
-        },
-        "& code": {
-          bgcolor: "#f6f8fa",
-          borderRadius: 0.5,
-          px: 0.5,
-        },
-        "& pre": {
-          bgcolor: "#f6f8fa",
-          borderRadius: 1,
-          overflow: "auto",
-          p: 2,
-        },
-      }}
-    >
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a({ href, children }) {
-            const linkTarget = href ?? "";
-            const isExternal = /^https?:\/\//.test(linkTarget);
-            return (
-              <Link
-                href={isExternal ? linkTarget : "#"}
-                onClick={(event) => {
-                  if (isExternal) {
-                    return;
-                  }
-
-                  event.preventDefault();
-                  onOpenLocation(resolveMarkdownLink(currentNamespace, currentPath, linkTarget));
-                }}
-              >
-                {children}
-              </Link>
-            );
-          },
-          h1({ children }) {
-            return (
-              <Typography variant="h4" component="h1" sx={{ mt: 3, mb: 1.5 }}>
-                {children}
-              </Typography>
-            );
-          },
-          h2({ children }) {
-            return (
-              <Typography variant="h5" component="h2" sx={{ mt: 2.5, mb: 1 }}>
-                {children}
-              </Typography>
-            );
-          },
-          h3({ children }) {
-            return (
-              <Typography variant="h6" component="h3" sx={{ mt: 2, mb: 1 }}>
-                {children}
-              </Typography>
-            );
-          },
-          p({ children }) {
-            return (
-              <Typography variant="body1" sx={{ mb: 1.5 }}>
-                {children}
-              </Typography>
-            );
-          },
-          li({ children }) {
-            return (
-              <Typography component="li" variant="body1" sx={{ mb: 0.5 }}>
-                {children}
-              </Typography>
-            );
-          },
-          img({ alt }) {
-            return (
-              <Typography variant="body2" color="text.secondary">
-                {alt}
-              </Typography>
-            );
-          },
-        }}
-      >
-        {markdown}
-      </ReactMarkdown>
-    </Box>
-  );
 }
 
 function errorMessage(error: unknown) {
