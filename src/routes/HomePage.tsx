@@ -2,6 +2,7 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
+import Link from "@mui/material/Link";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
@@ -11,6 +12,8 @@ import TextField from "@mui/material/TextField";
 import { open } from "@tauri-apps/plugin-dialog";
 import Typography from "@mui/material/Typography";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import {
   type ContentTree,
@@ -110,7 +113,7 @@ export function HomePage() {
         setContentTree({ pages: [] });
         setPage(null);
         setDraft("");
-      setLocationInput(defaultPagePath);
+        setLocationInput(defaultPagePath);
         setHistory([]);
         setHistoryIndex(-1);
         setIsEditing(false);
@@ -258,8 +261,8 @@ export function HomePage() {
     }
   };
 
-  const preview = useMemo(
-    () => renderPreview(isEditing ? draft : (page?.content ?? "")),
+  const previewContent = useMemo(
+    () => (isEditing ? draft : (page?.content ?? "")),
     [draft, isEditing, page?.content],
   );
 
@@ -534,7 +537,11 @@ export function HomePage() {
                       }}
                     />
                   ) : (
-                    <Stack spacing={1.5}>{preview}</Stack>
+                    <MarkdownPreview
+                      currentPath={page.path}
+                      markdown={previewContent}
+                      onOpenPage={handleOpenPage}
+                    />
                   )}
                 </Box>
               </Paper>
@@ -571,45 +578,141 @@ function pageTitle(path: string) {
   return parts[parts.length - 1] ?? path;
 }
 
-function renderPreview(markdown: string) {
-  const lines = markdown.split(/\r?\n/);
-  return lines.map((line, index) => {
-    const key = `${index}-${line}`;
+function MarkdownPreview({
+  currentPath,
+  markdown,
+  onOpenPage,
+}: {
+  currentPath: string;
+  markdown: string;
+  onOpenPage: (path: string) => Promise<void>;
+}) {
+  return (
+    <Box
+      sx={{
+        "& > :first-of-type": { mt: 0 },
+        "& > :last-child": { mb: 0 },
+        "& table": {
+          borderCollapse: "collapse",
+          width: "100%",
+        },
+        "& th, & td": {
+          border: "1px solid #d0d7de",
+          p: 1,
+        },
+        "& code": {
+          bgcolor: "#f6f8fa",
+          borderRadius: 0.5,
+          px: 0.5,
+        },
+        "& pre": {
+          bgcolor: "#f6f8fa",
+          borderRadius: 1,
+          overflow: "auto",
+          p: 2,
+        },
+      }}
+    >
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a({ href, children }) {
+            const linkTarget = href ?? "";
+            const isExternal = /^https?:\/\//.test(linkTarget);
+            return (
+              <Link
+                href={isExternal ? linkTarget : "#"}
+                onClick={(event) => {
+                  if (isExternal) {
+                    return;
+                  }
 
-    if (line.startsWith("# ")) {
-      return (
-        <Typography key={key} variant="h4" component="h1">
-          {line.slice(2)}
-        </Typography>
-      );
+                  event.preventDefault();
+                  void onOpenPage(resolveMarkdownLink(currentPath, linkTarget));
+                }}
+              >
+                {children}
+              </Link>
+            );
+          },
+          h1({ children }) {
+            return (
+              <Typography variant="h4" component="h1" sx={{ mt: 3, mb: 1.5 }}>
+                {children}
+              </Typography>
+            );
+          },
+          h2({ children }) {
+            return (
+              <Typography variant="h5" component="h2" sx={{ mt: 2.5, mb: 1 }}>
+                {children}
+              </Typography>
+            );
+          },
+          h3({ children }) {
+            return (
+              <Typography variant="h6" component="h3" sx={{ mt: 2, mb: 1 }}>
+                {children}
+              </Typography>
+            );
+          },
+          p({ children }) {
+            return (
+              <Typography variant="body1" sx={{ mb: 1.5 }}>
+                {children}
+              </Typography>
+            );
+          },
+          li({ children }) {
+            return (
+              <Typography component="li" variant="body1" sx={{ mb: 0.5 }}>
+                {children}
+              </Typography>
+            );
+          },
+          img({ alt }) {
+            return (
+              <Typography variant="body2" color="text.secondary">
+                {alt}
+              </Typography>
+            );
+          },
+        }}
+      >
+        {markdown}
+      </ReactMarkdown>
+    </Box>
+  );
+}
+
+function resolveMarkdownLink(currentPath: string, target: string) {
+  const [pathWithoutFragment] = target.split("#");
+  const pathWithoutQuery = pathWithoutFragment.split("?")[0];
+  if (pathWithoutQuery.startsWith("Pages/")) {
+    return normalizePagePath(pathWithoutQuery);
+  }
+
+  const currentParts = displayPagePath(currentPath).split("/");
+  currentParts.pop();
+  const resolvedParts = [...currentParts, pathWithoutQuery].flatMap((part) =>
+    part.split("/"),
+  );
+  const normalizedParts: string[] = [];
+
+  for (const part of resolvedParts) {
+    if (part === "" || part === ".") {
+      continue;
     }
 
-    if (line.startsWith("## ")) {
-      return (
-        <Typography key={key} variant="h5" component="h2">
-          {line.slice(3)}
-        </Typography>
-      );
+    if (part === "..") {
+      normalizedParts.pop();
+      continue;
     }
 
-    if (line.startsWith("### ")) {
-      return (
-        <Typography key={key} variant="h6" component="h3">
-          {line.slice(4)}
-        </Typography>
-      );
-    }
+    normalizedParts.push(part);
+  }
 
-    if (line.trim() === "") {
-      return <Box key={key} sx={{ height: 8 }} />;
-    }
-
-    return (
-      <Typography key={key} variant="body1" sx={{ whiteSpace: "pre-wrap" }}>
-        {line}
-      </Typography>
-    );
-  });
+  return normalizePagePath(normalizedParts.join("/"));
 }
 
 function errorMessage(error: unknown) {

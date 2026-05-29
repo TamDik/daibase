@@ -374,6 +374,8 @@ React 側はアプリ状態とユーザー操作を担当します。
 - 保存状態とエラー表示。
 - 将来的な履歴・差分ビュー。
 
+Markdown プレビューは自前パーサではなく、unified / remark / rehype エコシステムに対応した `react-markdown` を使います。GFM などの拡張は `remark-gfm` のような plugin で追加し、将来の wiki 形式リンクや独自リンク解決も plugin または component 差し替えで拡張できるようにします。
+
 推奨ルート:
 
 ```text
