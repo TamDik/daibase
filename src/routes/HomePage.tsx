@@ -23,7 +23,7 @@ import {
   writePage,
 } from "../api/tauriCommands";
 
-const defaultPagePath = "Pages/Main.md";
+const defaultPagePath = "Pages/Main";
 
 export function HomePage() {
   const [namespaces, setNamespaces] = useState<NamespaceSummary[]>([]);
@@ -32,24 +32,69 @@ export function HomePage() {
   const [contentTree, setContentTree] = useState<ContentTree>({ pages: [] });
   const [page, setPage] = useState<PageContent | null>(null);
   const [draft, setDraft] = useState("");
+  const [locationInput, setLocationInput] = useState(defaultPagePath);
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
   const [namespaceName, setNamespaceName] = useState("");
   const [rootPath, setRootPath] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
   const isDirty = page !== null && page.content !== draft;
+  const canGoBack = historyIndex > 0;
+  const canGoForward = historyIndex >= 0 && historyIndex < history.length - 1;
+
+  const openPage = useCallback(
+    async (
+      namespaceId: string,
+      path: string,
+      mode: "push" | "replace" | "history" = "push",
+    ) => {
+      if (isDirty && !window.confirm("未保存の変更を破棄して移動しますか？")) {
+        return;
+      }
+
+      setError(null);
+      setSavedMessage(null);
+      const nextPage = await readPage(namespaceId, normalizePagePath(path));
+      setPage(nextPage);
+      setDraft(nextPage.content);
+      setLocationInput(displayPagePath(nextPage.path));
+      setIsEditing(false);
+
+      if (mode === "history") {
+        return;
+      }
+
+      setHistory((current) => {
+        const base =
+          mode === "replace" ? current.slice(0, historyIndex) : current.slice(0, historyIndex + 1);
+        const last = base[base.length - 1];
+        const next = last === nextPage.path ? base : [...base, nextPage.path];
+        setHistoryIndex(next.length - 1);
+        return next;
+      });
+    },
+    [historyIndex, isDirty],
+  );
 
   const loadNamespace = useCallback(async (namespaceId: string) => {
     setError(null);
     setSavedMessage(null);
     const detail = await openNamespace(namespaceId);
+    const mainPage = await readPage(namespaceId, detail.namespace.default_page);
+
     setActiveNamespace(detail.namespace);
     setContentTree(detail.content);
-    const mainPage = await readPage(namespaceId, detail.namespace.default_page);
     setPage(mainPage);
     setDraft(mainPage.content);
+    setLocationInput(displayPagePath(mainPage.path));
+    setHistory([mainPage.path]);
+    setHistoryIndex(0);
+    setIsEditing(false);
   }, []);
 
   const loadNamespaces = useCallback(async () => {
@@ -65,6 +110,10 @@ export function HomePage() {
         setContentTree({ pages: [] });
         setPage(null);
         setDraft("");
+      setLocationInput(defaultPagePath);
+        setHistory([]);
+        setHistoryIndex(-1);
+        setIsEditing(false);
       }
     } catch (caught) {
       setError(errorMessage(caught));
@@ -122,15 +171,68 @@ export function HomePage() {
       return;
     }
 
-    setError(null);
-    setSavedMessage(null);
     try {
-      const nextPage = await readPage(activeNamespace.id, path);
-      setPage(nextPage);
-      setDraft(nextPage.content);
+      await openPage(activeNamespace.id, path);
     } catch (caught) {
       setError(errorMessage(caught));
     }
+  };
+
+  const handleLocationSubmit = async () => {
+    if (!activeNamespace) {
+      return;
+    }
+
+    try {
+      await openPage(activeNamespace.id, locationInput);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  };
+
+  const handleGoBack = async () => {
+    if (!activeNamespace || !canGoBack) {
+      return;
+    }
+
+    const nextIndex = historyIndex - 1;
+    const nextPath = history[nextIndex];
+    try {
+      await openPage(activeNamespace.id, nextPath, "history");
+      setHistoryIndex(nextIndex);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  };
+
+  const handleGoForward = async () => {
+    if (!activeNamespace || !canGoForward) {
+      return;
+    }
+
+    const nextIndex = historyIndex + 1;
+    const nextPath = history[nextIndex];
+    try {
+      await openPage(activeNamespace.id, nextPath, "history");
+      setHistoryIndex(nextIndex);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  };
+
+  const handleStartEditing = () => {
+    setDraft(page?.content ?? "");
+    setSavedMessage(null);
+    setIsEditing(true);
+  };
+
+  const handleCancelEditing = () => {
+    if (isDirty && !window.confirm("未保存の変更を破棄しますか？")) {
+      return;
+    }
+
+    setDraft(page?.content ?? "");
+    setIsEditing(false);
   };
 
   const handleSave = async () => {
@@ -146,6 +248,8 @@ export function HomePage() {
       const nextPage = await readPage(activeNamespace.id, page.path);
       setPage(nextPage);
       setDraft(nextPage.content);
+      setLocationInput(displayPagePath(nextPage.path));
+      setIsEditing(false);
       setSavedMessage(`保存しました: ${result.revision_id}`);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -154,7 +258,10 @@ export function HomePage() {
     }
   };
 
-  const preview = useMemo(() => renderPreview(draft), [draft]);
+  const preview = useMemo(
+    () => renderPreview(isEditing ? draft : (page?.content ?? "")),
+    [draft, isEditing, page?.content],
+  );
 
   return (
     <Box
@@ -169,20 +276,61 @@ export function HomePage() {
         sx={{
           borderBottom: "1px solid #d0d7de",
           bgcolor: "#ffffff",
-          px: 3,
-          py: 2,
+          px: 2,
+          py: 1.25,
         }}
       >
-        <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
-          Daibase
-        </Typography>
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+          <Typography variant="h6" component="h1" sx={{ fontWeight: 700 }}>
+            Daibase
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => void handleGoBack()}
+            disabled={!canGoBack}
+            sx={{ minWidth: 40 }}
+          >
+            &lt;
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => void handleGoForward()}
+            disabled={!canGoForward}
+            sx={{ minWidth: 40 }}
+          >
+            &gt;
+          </Button>
+          <TextField
+            aria-label="現在のページパス"
+            size="small"
+            value={locationInput}
+            onChange={(event) => setLocationInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                void handleLocationSubmit();
+              }
+            }}
+            disabled={!activeNamespace}
+            sx={{ flex: 1 }}
+          />
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => void handleLocationSubmit()}
+            disabled={!activeNamespace}
+          >
+            開く
+          </Button>
+        </Stack>
       </Box>
 
       <Box
         sx={{
           display: "grid",
           gridTemplateColumns: { xs: "1fr", md: "320px 1fr" },
-          minHeight: "calc(100vh - 65px)",
+          minHeight: "calc(100vh - 57px)",
         }}
       >
         <Box
@@ -294,7 +442,7 @@ export function HomePage() {
                       >
                         <ListItemText
                           primary={pageTitle(item.path)}
-                          secondary={item.path}
+                          secondary={displayPagePath(item.path)}
                         />
                       </ListItemButton>
                     ))}
@@ -320,7 +468,10 @@ export function HomePage() {
                 </Typography>
               </Paper>
             ) : (
-              <Stack spacing={2}>
+              <Paper
+                variant="outlined"
+                sx={{ borderRadius: 1, bgcolor: "#ffffff", overflow: "hidden" }}
+              >
                 <Box
                   sx={{
                     display: "flex",
@@ -328,6 +479,9 @@ export function HomePage() {
                     justifyContent: "space-between",
                     gap: 2,
                     flexWrap: "wrap",
+                    borderBottom: "1px solid #d0d7de",
+                    px: 2,
+                    py: 1.5,
                   }}
                 >
                   <Box>
@@ -335,66 +489,78 @@ export function HomePage() {
                       {pageTitle(page.path)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {page.path}
+                      {displayPagePath(page.path)}
                     </Typography>
                   </Box>
-                  <Button
-                    variant="contained"
-                    onClick={() => void handleSave()}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? "保存中" : isDirty ? "保存" : "リビジョン作成"}
-                  </Button>
+                  {isEditing ? (
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        variant="outlined"
+                        onClick={handleCancelEditing}
+                        disabled={isSaving}
+                      >
+                        キャンセル
+                      </Button>
+                      <Button
+                        variant="contained"
+                        onClick={() => void handleSave()}
+                        disabled={isSaving}
+                      >
+                        {isSaving ? "保存中" : "保存"}
+                      </Button>
+                    </Stack>
+                  ) : (
+                    <Button variant="contained" onClick={handleStartEditing}>
+                      編集
+                    </Button>
+                  )}
                 </Box>
 
-                <Box
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" },
-                    gap: 2,
-                  }}
-                >
-                  <TextField
-                    label="Markdown"
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    multiline
-                    minRows={24}
-                    fullWidth
-                    sx={{
-                      "& textarea": {
-                        fontFamily:
-                          'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-                        lineHeight: 1.6,
-                      },
-                    }}
-                  />
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      p: 2,
-                      borderRadius: 1,
-                      minHeight: 520,
-                      bgcolor: "#ffffff",
-                    }}
-                  >
-                    <Typography
-                      variant="subtitle2"
-                      color="text.secondary"
-                      sx={{ mb: 2 }}
-                    >
-                      プレビュー
-                    </Typography>
+                <Box sx={{ p: 3 }}>
+                  {isEditing ? (
+                    <TextField
+                      label="Markdown"
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                      multiline
+                      minRows={24}
+                      fullWidth
+                      sx={{
+                        "& textarea": {
+                          fontFamily:
+                            'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+                          lineHeight: 1.6,
+                        },
+                      }}
+                    />
+                  ) : (
                     <Stack spacing={1.5}>{preview}</Stack>
-                  </Paper>
+                  )}
                 </Box>
-              </Stack>
+              </Paper>
             )}
           </Stack>
         </Box>
       </Box>
     </Box>
   );
+}
+
+function normalizePagePath(path: string) {
+  const trimmed = path.trim();
+  const withPagesPrefix = trimmed.startsWith("Pages/")
+    ? trimmed
+    : `Pages/${trimmed}`;
+
+  if (withPagesPrefix.endsWith(".md")) {
+    return withPagesPrefix;
+  }
+
+  return `${withPagesPrefix}.md`;
+}
+
+function displayPagePath(path: string) {
+  return path.replace(/\.md$/, "");
 }
 
 function pageTitle(path: string) {
