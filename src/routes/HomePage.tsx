@@ -20,6 +20,7 @@ import {
   type NamespaceSummary,
   type PageContent,
   createNamespace,
+  listContent,
   listNamespaces,
   openNamespace,
   readPage,
@@ -62,7 +63,8 @@ export function HomePage() {
 
       setError(null);
       setSavedMessage(null);
-      const nextPage = await readPage(namespaceId, normalizePagePath(path));
+      const normalizedPath = normalizePagePath(path);
+      const nextPage = await readPageOrVirtual(namespaceId, normalizedPath);
       setPage(nextPage);
       setDraft(nextPage.content);
       setLocationInput(displayPagePath(nextPage.path));
@@ -249,8 +251,10 @@ export function HomePage() {
     try {
       const result = await writePage(activeNamespace.id, page.path, draft);
       const nextPage = await readPage(activeNamespace.id, page.path);
+      const nextContent = await listContent(activeNamespace.id);
       setPage(nextPage);
       setDraft(nextPage.content);
+      setContentTree(nextContent);
       setLocationInput(displayPagePath(nextPage.path));
       setIsEditing(false);
       setSavedMessage(`保存しました: ${result.revision_id}`);
@@ -460,6 +464,9 @@ export function HomePage() {
           <Stack spacing={2}>
             {error && <Alert severity="error">{error}</Alert>}
             {savedMessage && <Alert severity="success">{savedMessage}</Alert>}
+            {page?.is_virtual && (
+              <Alert severity="info">このページはまだ作成されていません。</Alert>
+            )}
 
             {!activeNamespace || !page ? (
               <Paper variant="outlined" sx={{ p: 3, borderRadius: 1 }}>
@@ -576,6 +583,25 @@ function pageTitle(path: string) {
     .replace(/\.md$/, "")
     .split("/");
   return parts[parts.length - 1] ?? path;
+}
+
+async function readPageOrVirtual(namespaceId: string, path: string) {
+  try {
+    return await readPage(namespaceId, path);
+  } catch (caught) {
+    if (!isMissingPageError(caught)) {
+      throw caught;
+    }
+
+    return {
+      namespace_id: namespaceId,
+      file_id: "",
+      path,
+      content: "",
+      latest_revision_id: null,
+      is_virtual: true,
+    } satisfies PageContent;
+  }
 }
 
 function MarkdownPreview({
@@ -725,4 +751,8 @@ function errorMessage(error: unknown) {
   }
 
   return "エラーが発生しました。";
+}
+
+function isMissingPageError(error: unknown) {
+  return errorMessage(error).includes("ページが見つかりません");
 }

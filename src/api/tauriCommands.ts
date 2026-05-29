@@ -29,6 +29,7 @@ export type PageContent = {
   path: string;
   content: string;
   latest_revision_id: string | null;
+  is_virtual?: boolean;
 };
 
 export type SaveResult = {
