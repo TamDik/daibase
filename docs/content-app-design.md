@@ -33,6 +33,9 @@ Daibase は、ユーザーが選択したローカルフォルダ内の Markdown
 - `Main` の標準ファイル名は `Pages/Main.md` です。
 - Markdown ページはすべて `Pages/` 配下に保存します。
 - UI のロケーションバーやページ一覧では、`Page:Main` のように `Page:` 種別と名前をコロン区切りで表示します。
+- 他 namespace を明示する場合は `{namespace名}:Page:Main` のように、namespace 名、種別、名前をコロン区切りで表示します。namespace 名を省略した場合は、参照元と同じ namespace として解釈します。
+- ロケーションバーでは namespace 名を省略して入力できますが、画面遷移後の表示は常に `{namespace名}:Page:Main` のように namespace 名を含む完全なロケーションへ正規化します。
+- 特殊ページは `Special:Namespaces` や `{namespace名}:Special:AllPages` のように表します。
 - ページタイトルは Markdown ファイルのパスに対応します。
 - リンク先のファイルがまだ存在しない場合でも、ナビゲーション先として扱えます。
 

@@ -20,7 +20,6 @@ import {
   type NamespaceSummary,
   type PageContent,
   createNamespace,
-  listContent,
   listNamespaces,
   openNamespace,
   readPage,
@@ -28,15 +27,54 @@ import {
 } from "../api/tauriCommands";
 
 const defaultPageLocation = "Page:Main";
+const namespacesLocation = "Special:Namespaces";
+
+type PageView = {
+  kind: "page";
+  namespace: NamespaceSummary;
+  page: PageContent;
+};
+
+type SpecialView =
+  | {
+      kind: "namespaces";
+      location: string;
+    }
+  | {
+      kind: "allPages";
+      location: string;
+      namespace: NamespaceSummary;
+      content: ContentTree;
+    };
+
+type ResolvedLocation =
+  | {
+      kind: "page";
+      namespace: NamespaceSummary;
+      pagePath: string;
+      location: string;
+    }
+  | {
+      kind: "specialNamespaces";
+      location: string;
+    }
+  | {
+      kind: "specialAllPages";
+      namespace: NamespaceSummary;
+      location: string;
+    };
 
 export function HomePage() {
   const [namespaces, setNamespaces] = useState<NamespaceSummary[]>([]);
   const [activeNamespace, setActiveNamespace] =
     useState<NamespaceSummary | null>(null);
-  const [contentTree, setContentTree] = useState<ContentTree>({ pages: [] });
-  const [page, setPage] = useState<PageContent | null>(null);
+  const [pageView, setPageView] = useState<PageView | null>(null);
+  const [specialView, setSpecialView] = useState<SpecialView | null>({
+    kind: "namespaces",
+    location: namespacesLocation,
+  });
   const [draft, setDraft] = useState("");
-  const [locationInput, setLocationInput] = useState(defaultPageLocation);
+  const [locationInput, setLocationInput] = useState(namespacesLocation);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [namespaceName, setNamespaceName] = useState("");
@@ -47,15 +85,17 @@ export function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
+  const page = pageView?.page ?? null;
   const isDirty = page !== null && page.content !== draft;
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex >= 0 && historyIndex < history.length - 1;
 
-  const openPage = useCallback(
+  const navigate = useCallback(
     async (
-      namespaceId: string,
-      path: string,
+      rawLocation: string,
       mode: "push" | "replace" | "history" = "push",
+      namespaceCandidates = namespaces,
+      sourceNamespace = activeNamespace,
     ) => {
       if (isDirty && !window.confirm("未保存の変更を破棄して移動しますか？")) {
         return;
@@ -63,12 +103,52 @@ export function HomePage() {
 
       setError(null);
       setSavedMessage(null);
-      const normalizedPath = normalizePagePath(path);
-      const nextPage = await readPageOrVirtual(namespaceId, normalizedPath);
-      setPage(nextPage);
-      setDraft(nextPage.content);
-      setLocationInput(pathToPageLocation(nextPage.path));
-      setIsEditing(false);
+      const resolved = resolveLocation(
+        rawLocation,
+        namespaceCandidates,
+        sourceNamespace,
+      );
+      const nextLocation =
+        resolved.kind === "page"
+          ? pageLocation(resolved.pagePath, resolved.namespace)
+          : resolved.location;
+
+      if (resolved.kind === "specialNamespaces") {
+        setPageView(null);
+        setSpecialView({ kind: "namespaces", location: resolved.location });
+        setDraft("");
+        setLocationInput(resolved.location);
+        setIsEditing(false);
+      } else if (resolved.kind === "specialAllPages") {
+        const detail = await openNamespace(resolved.namespace.id);
+        setActiveNamespace(detail.namespace);
+        setPageView(null);
+        setSpecialView({
+          kind: "allPages",
+          location: resolved.location,
+          namespace: detail.namespace,
+          content: detail.content,
+        });
+        setDraft("");
+        setLocationInput(resolved.location);
+        setIsEditing(false);
+      } else {
+        const detail = await openNamespace(resolved.namespace.id);
+        const nextPage = await readPageOrVirtual(
+          detail.namespace.id,
+          resolved.pagePath,
+        );
+        setActiveNamespace(detail.namespace);
+        setPageView({
+          kind: "page",
+          namespace: detail.namespace,
+          page: nextPage,
+        });
+        setSpecialView(null);
+        setDraft(nextPage.content);
+        setLocationInput(nextLocation);
+        setIsEditing(false);
+      }
 
       if (mode === "history") {
         return;
@@ -76,60 +156,63 @@ export function HomePage() {
 
       setHistory((current) => {
         const base =
-          mode === "replace" ? current.slice(0, historyIndex) : current.slice(0, historyIndex + 1);
+          mode === "replace"
+            ? current.slice(0, historyIndex)
+            : current.slice(0, historyIndex + 1);
         const last = base[base.length - 1];
-        const next = last === nextPage.path ? base : [...base, nextPage.path];
+        const next = last === nextLocation ? base : [...base, nextLocation];
         setHistoryIndex(next.length - 1);
         return next;
       });
     },
-    [historyIndex, isDirty],
+    [activeNamespace, historyIndex, isDirty, namespaces],
   );
 
-  const loadNamespace = useCallback(async (namespaceId: string) => {
-    setError(null);
-    setSavedMessage(null);
-    const detail = await openNamespace(namespaceId);
-    const mainPage = await readPage(namespaceId, detail.namespace.default_page);
-
-    setActiveNamespace(detail.namespace);
-    setContentTree(detail.content);
-    setPage(mainPage);
-    setDraft(mainPage.content);
-    setLocationInput(pathToPageLocation(mainPage.path));
-    setHistory([mainPage.path]);
-    setHistoryIndex(0);
-    setIsEditing(false);
-  }, []);
-
-  const loadNamespaces = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await listNamespaces();
-      setNamespaces(result);
-      if (result.length > 0) {
-        await loadNamespace(result[0].id);
-      } else {
-        setActiveNamespace(null);
-        setContentTree({ pages: [] });
-        setPage(null);
-        setDraft("");
-        setLocationInput(defaultPageLocation);
-        setHistory([]);
-        setHistoryIndex(-1);
-        setIsEditing(false);
-      }
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [loadNamespace]);
-
   useEffect(() => {
-    void loadNamespaces();
-  }, [loadNamespaces]);
+    const loadInitialState = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await listNamespaces();
+        setNamespaces(result);
+        if (result.length > 0) {
+          const detail = await openNamespace(result[0].id);
+          const mainPage = await readPage(
+            detail.namespace.id,
+            detail.namespace.default_page,
+          );
+          const location = pageLocation(mainPage.path, detail.namespace);
+          setActiveNamespace(detail.namespace);
+          setPageView({
+            kind: "page",
+            namespace: detail.namespace,
+            page: mainPage,
+          });
+          setSpecialView(null);
+          setDraft(mainPage.content);
+          setLocationInput(location);
+          setHistory([location]);
+          setHistoryIndex(0);
+          setIsEditing(false);
+        } else {
+          setActiveNamespace(null);
+          setPageView(null);
+          setSpecialView({ kind: "namespaces", location: namespacesLocation });
+          setDraft("");
+          setLocationInput(namespacesLocation);
+          setHistory([namespacesLocation]);
+          setHistoryIndex(0);
+          setIsEditing(false);
+        }
+      } catch (caught) {
+        setError(errorMessage(caught));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void loadInitialState();
+  }, []);
 
   const handleCreateNamespace = async () => {
     setError(null);
@@ -140,7 +223,7 @@ export function HomePage() {
       setRootPath("");
       const nextNamespaces = await listNamespaces();
       setNamespaces(nextNamespaces);
-      await loadNamespace(namespace.id);
+      await navigate(defaultPageLocation, "push", nextNamespaces, namespace);
     } catch (caught) {
       setError(errorMessage(caught));
     }
@@ -163,47 +246,23 @@ export function HomePage() {
     }
   };
 
-  const handleOpenNamespace = async (namespaceId: string) => {
-    try {
-      await loadNamespace(namespaceId);
-    } catch (caught) {
-      setError(errorMessage(caught));
-    }
-  };
-
-  const handleOpenPage = async (path: string) => {
-    if (!activeNamespace) {
-      return;
-    }
-
-    try {
-      await openPage(activeNamespace.id, path);
-    } catch (caught) {
-      setError(errorMessage(caught));
-    }
-  };
-
   const handleLocationSubmit = async () => {
-    if (!activeNamespace) {
-      return;
-    }
-
     try {
-      await openPage(activeNamespace.id, locationInput);
+      await navigate(locationInput);
     } catch (caught) {
       setError(errorMessage(caught));
     }
   };
 
   const handleGoBack = async () => {
-    if (!activeNamespace || !canGoBack) {
+    if (!canGoBack) {
       return;
     }
 
     const nextIndex = historyIndex - 1;
-    const nextPath = history[nextIndex];
+    const nextLocation = history[nextIndex];
     try {
-      await openPage(activeNamespace.id, nextPath, "history");
+      await navigate(nextLocation, "history");
       setHistoryIndex(nextIndex);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -211,14 +270,14 @@ export function HomePage() {
   };
 
   const handleGoForward = async () => {
-    if (!activeNamespace || !canGoForward) {
+    if (!canGoForward) {
       return;
     }
 
     const nextIndex = historyIndex + 1;
-    const nextPath = history[nextIndex];
+    const nextLocation = history[nextIndex];
     try {
-      await openPage(activeNamespace.id, nextPath, "history");
+      await navigate(nextLocation, "history");
       setHistoryIndex(nextIndex);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -241,7 +300,7 @@ export function HomePage() {
   };
 
   const handleSave = async () => {
-    if (!activeNamespace || !page) {
+    if (!pageView) {
       return;
     }
 
@@ -249,13 +308,19 @@ export function HomePage() {
     setError(null);
     setSavedMessage(null);
     try {
-      const result = await writePage(activeNamespace.id, page.path, draft);
-      const nextPage = await readPage(activeNamespace.id, page.path);
-      const nextContent = await listContent(activeNamespace.id);
-      setPage(nextPage);
+      const result = await writePage(
+        pageView.namespace.id,
+        pageView.page.path,
+        draft,
+      );
+      const nextPage = await readPage(pageView.namespace.id, pageView.page.path);
+      setPageView({
+        kind: "page",
+        namespace: pageView.namespace,
+        page: nextPage,
+      });
       setDraft(nextPage.content);
-      setContentTree(nextContent);
-      setLocationInput(pathToPageLocation(nextPage.path));
+      setLocationInput(pageLocation(nextPage.path, pageView.namespace));
       setIsEditing(false);
       setSavedMessage(`保存しました: ${result.revision_id}`);
     } catch (caught) {
@@ -310,7 +375,7 @@ export function HomePage() {
             &gt;
           </Button>
           <TextField
-            aria-label="現在のページパス"
+            aria-label="現在のロケーション"
             size="small"
             value={locationInput}
             onChange={(event) => setLocationInput(event.target.value)}
@@ -319,260 +384,382 @@ export function HomePage() {
                 void handleLocationSubmit();
               }
             }}
-            disabled={!activeNamespace}
             sx={{ flex: 1 }}
           />
           <Button
             variant="outlined"
             size="small"
             onClick={() => void handleLocationSubmit()}
-            disabled={!activeNamespace}
           >
             開く
           </Button>
         </Stack>
       </Box>
 
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: { xs: "1fr", md: "320px 1fr" },
-          minHeight: "calc(100vh - 57px)",
-        }}
-      >
-        <Box
-          component="aside"
-          sx={{
-            borderRight: { md: "1px solid #d0d7de" },
-            bgcolor: "#ffffff",
-            p: 2,
-          }}
-        >
-          <Stack spacing={2}>
-            <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
-                ネームスペース
-              </Typography>
-              {isLoading ? (
-                <Typography variant="body2" color="text.secondary">
-                  読み込み中
-                </Typography>
-              ) : namespaces.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  まだ作成されていません。
-                </Typography>
-              ) : (
-                <List dense disablePadding>
-                  {namespaces.map((namespace) => (
-                    <ListItemButton
-                      key={namespace.id}
-                      selected={namespace.id === activeNamespace?.id}
-                      onClick={() => void handleOpenNamespace(namespace.id)}
-                      sx={{ borderRadius: 1 }}
-                    >
-                      <ListItemText
-                        primary={namespace.name}
-                        secondary={
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            noWrap
-                          >
-                            {namespace.root_path}
-                          </Typography>
-                        }
-                      />
-                    </ListItemButton>
-                  ))}
-                </List>
-              )}
-            </Box>
+      <Box component="main" sx={{ p: 3 }}>
+        <Stack spacing={2}>
+          {isLoading && <Alert severity="info">読み込み中</Alert>}
+          {error && <Alert severity="error">{error}</Alert>}
+          {savedMessage && <Alert severity="success">{savedMessage}</Alert>}
+          {page?.is_virtual && (
+            <Alert severity="info">このページはまだ作成されていません。</Alert>
+          )}
 
-            <Divider />
+          {specialView?.kind === "namespaces" && (
+            <NamespacesSpecialPage
+              namespaceName={namespaceName}
+              namespaces={namespaces}
+              rootPath={rootPath}
+              onCreateNamespace={handleCreateNamespace}
+              onNamespaceNameChange={setNamespaceName}
+              onOpenLocation={(location) => void navigate(location)}
+              onRootPathSelect={() => void handleSelectRootPath()}
+            />
+          )}
 
-            <Stack spacing={1.5}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                新規作成
-              </Typography>
-              <TextField
-                label="名前"
-                size="small"
-                value={namespaceName}
-                onChange={(event) => setNamespaceName(event.target.value)}
-              />
-              <Stack direction="row" spacing={1}>
-                <TextField
-                  label="保存先フォルダ"
-                  size="small"
-                  value={rootPath}
-                  placeholder="未選択"
-                  slotProps={{
-                    input: {
-                      readOnly: true,
-                    },
-                  }}
-                  sx={{ flex: 1 }}
-                />
-                <Button
-                  variant="outlined"
-                  onClick={() => void handleSelectRootPath()}
-                >
-                  選択
-                </Button>
-              </Stack>
-              <Button
-                variant="contained"
-                onClick={() => void handleCreateNamespace()}
-                disabled={!namespaceName.trim() || !rootPath.trim()}
-              >
-                作成
-              </Button>
-            </Stack>
+          {specialView?.kind === "allPages" && (
+            <AllPagesSpecialPage
+              content={specialView.content}
+              namespace={specialView.namespace}
+              onOpenLocation={(location) => void navigate(location)}
+            />
+          )}
 
-            {activeNamespace && (
-              <>
-                <Divider />
-                <Box>
-                  <Typography
-                    variant="subtitle2"
-                    sx={{ mb: 1, fontWeight: 700 }}
-                  >
-                    ページ
-                  </Typography>
-                  <List dense disablePadding>
-                    {contentTree.pages.map((item) => (
-                      <ListItemButton
-                        key={item.path}
-                        selected={item.path === page?.path}
-                        onClick={() => void handleOpenPage(item.path)}
-                        sx={{ borderRadius: 1 }}
-                      >
-                        <ListItemText
-                          primary={pageTitle(item.path)}
-                          secondary={pathToPageLocation(item.path)}
-                        />
-                      </ListItemButton>
-                    ))}
-                  </List>
-                </Box>
-              </>
-            )}
-          </Stack>
-        </Box>
-
-        <Box component="main" sx={{ p: 3 }}>
-          <Stack spacing={2}>
-            {error && <Alert severity="error">{error}</Alert>}
-            {savedMessage && <Alert severity="success">{savedMessage}</Alert>}
-            {page?.is_virtual && (
-              <Alert severity="info">このページはまだ作成されていません。</Alert>
-            )}
-
-            {!activeNamespace || !page ? (
-              <Paper variant="outlined" sx={{ p: 3, borderRadius: 1 }}>
-                <Typography variant="h6" sx={{ mb: 1 }}>
-                  ネームスペースを作成してください
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  最初のページは {defaultPageLocation} として作成されます。
-                </Typography>
-              </Paper>
-            ) : (
-              <Paper
-                variant="outlined"
-                sx={{ borderRadius: 1, bgcolor: "#ffffff", overflow: "hidden" }}
-              >
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 2,
-                    flexWrap: "wrap",
-                    borderBottom: "1px solid #d0d7de",
-                    px: 2,
-                    py: 1.5,
-                  }}
-                >
-                  <Box>
-                    <Typography variant="h5" component="h2">
-                      {pageTitle(page.path)}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {pathToPageLocation(page.path)}
-                    </Typography>
-                  </Box>
-                  {isEditing ? (
-                    <Stack direction="row" spacing={1}>
-                      <Button
-                        variant="outlined"
-                        onClick={handleCancelEditing}
-                        disabled={isSaving}
-                      >
-                        キャンセル
-                      </Button>
-                      <Button
-                        variant="contained"
-                        onClick={() => void handleSave()}
-                        disabled={isSaving}
-                      >
-                        {isSaving ? "保存中" : "保存"}
-                      </Button>
-                    </Stack>
-                  ) : (
-                    <Button variant="contained" onClick={handleStartEditing}>
-                      編集
-                    </Button>
-                  )}
-                </Box>
-
-                <Box sx={{ p: 3 }}>
-                  {isEditing ? (
-                    <TextField
-                      label="Markdown"
-                      value={draft}
-                      onChange={(event) => setDraft(event.target.value)}
-                      multiline
-                      minRows={24}
-                      fullWidth
-                      sx={{
-                        "& textarea": {
-                          fontFamily:
-                            'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-                          lineHeight: 1.6,
-                        },
-                      }}
-                    />
-                  ) : (
-                    <MarkdownPreview
-                      currentPath={page.path}
-                      markdown={previewContent}
-                      onOpenPage={handleOpenPage}
-                    />
-                  )}
-                </Box>
-              </Paper>
-            )}
-          </Stack>
-        </Box>
+          {pageView && (
+            <PageSurface
+              currentNamespace={pageView.namespace}
+              draft={draft}
+              isEditing={isEditing}
+              isSaving={isSaving}
+              page={pageView.page}
+              previewContent={previewContent}
+              onCancelEditing={handleCancelEditing}
+              onDraftChange={setDraft}
+              onOpenLocation={(location) => void navigate(location)}
+              onSave={() => void handleSave()}
+              onStartEditing={handleStartEditing}
+            />
+          )}
+        </Stack>
       </Box>
     </Box>
   );
 }
 
-function normalizePagePath(path: string) {
-  const trimmed = path.trim();
-  const pageName = trimmed.startsWith("Page:")
-    ? trimmed.slice("Page:".length)
-    : trimmed;
-  const withoutExtension = pageName.replace(/\.md$/, "");
-  const withPagesPrefix = `Pages/${withoutExtension}`;
+function NamespacesSpecialPage({
+  namespaces,
+  namespaceName,
+  rootPath,
+  onCreateNamespace,
+  onNamespaceNameChange,
+  onOpenLocation,
+  onRootPathSelect,
+}: {
+  namespaces: NamespaceSummary[];
+  namespaceName: string;
+  rootPath: string;
+  onCreateNamespace: () => void;
+  onNamespaceNameChange: (value: string) => void;
+  onOpenLocation: (location: string) => void;
+  onRootPathSelect: () => void;
+}) {
+  return (
+    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
+      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+        <Typography variant="h5" component="h2">
+          Namespaces
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Special:Namespaces
+        </Typography>
+      </Box>
+      <Stack spacing={3} sx={{ p: 3 }}>
+        <Box>
+          {namespaces.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              まだ作成されていません。
+            </Typography>
+          ) : (
+            <List dense disablePadding>
+              {namespaces.map((namespace) => (
+                <ListItemButton
+                  key={namespace.id}
+                  onClick={() => onOpenLocation(`${namespace.name}:Page:Main`)}
+                  sx={{ borderRadius: 1 }}
+                >
+                  <ListItemText
+                    primary={namespace.name}
+                    secondary={`${namespace.name}:Special:AllPages`}
+                  />
+                </ListItemButton>
+              ))}
+            </List>
+          )}
+        </Box>
 
-  return `${withPagesPrefix}.md`;
+        <Divider />
+
+        <Stack spacing={1.5} sx={{ maxWidth: 560 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+            新規作成
+          </Typography>
+          <TextField
+            label="名前"
+            size="small"
+            value={namespaceName}
+            onChange={(event) => onNamespaceNameChange(event.target.value)}
+          />
+          <Stack direction="row" spacing={1}>
+            <TextField
+              label="保存先フォルダ"
+              size="small"
+              value={rootPath}
+              placeholder="未選択"
+              slotProps={{
+                input: {
+                  readOnly: true,
+                },
+              }}
+              sx={{ flex: 1 }}
+            />
+            <Button variant="outlined" onClick={onRootPathSelect}>
+              選択
+            </Button>
+          </Stack>
+          <Button
+            variant="contained"
+            onClick={onCreateNamespace}
+            disabled={!namespaceName.trim() || !rootPath.trim()}
+          >
+            作成
+          </Button>
+        </Stack>
+      </Stack>
+    </Paper>
+  );
 }
 
-function pathToPageLocation(path: string) {
-  return `Page:${path.replace(/^Pages\//, "").replace(/\.md$/, "")}`;
+function AllPagesSpecialPage({
+  namespace,
+  content,
+  onOpenLocation,
+}: {
+  namespace: NamespaceSummary;
+  content: ContentTree;
+  onOpenLocation: (location: string) => void;
+}) {
+  return (
+    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
+      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+        <Typography variant="h5" component="h2">
+          All Pages
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {namespace.name}:Special:AllPages
+        </Typography>
+      </Box>
+      <Box sx={{ p: 3 }}>
+        {content.pages.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            ページはまだありません。
+          </Typography>
+        ) : (
+          <List dense disablePadding>
+            {content.pages.map((item) => (
+              <ListItemButton
+                key={item.path}
+                onClick={() => onOpenLocation(pageLocation(item.path, namespace))}
+                sx={{ borderRadius: 1 }}
+              >
+                <ListItemText
+                  primary={pageTitle(item.path)}
+                  secondary={pageLocation(item.path, namespace)}
+                />
+              </ListItemButton>
+            ))}
+          </List>
+        )}
+      </Box>
+    </Paper>
+  );
+}
+
+function PageSurface({
+  currentNamespace,
+  draft,
+  isEditing,
+  isSaving,
+  page,
+  previewContent,
+  onCancelEditing,
+  onDraftChange,
+  onOpenLocation,
+  onSave,
+  onStartEditing,
+}: {
+  currentNamespace: NamespaceSummary;
+  draft: string;
+  isEditing: boolean;
+  isSaving: boolean;
+  page: PageContent;
+  previewContent: string;
+  onCancelEditing: () => void;
+  onDraftChange: (value: string) => void;
+  onOpenLocation: (location: string) => void;
+  onSave: () => void;
+  onStartEditing: () => void;
+}) {
+  return (
+    <Paper
+      variant="outlined"
+      sx={{ borderRadius: 1, bgcolor: "#ffffff", overflow: "hidden" }}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 2,
+          flexWrap: "wrap",
+          borderBottom: "1px solid #d0d7de",
+          px: 2,
+          py: 1.5,
+        }}
+      >
+        <Box>
+          <Typography variant="h5" component="h2">
+            {pageTitle(page.path)}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {pageLocation(page.path, currentNamespace)}
+          </Typography>
+        </Box>
+        {isEditing ? (
+          <Stack direction="row" spacing={1}>
+            <Button variant="outlined" onClick={onCancelEditing} disabled={isSaving}>
+              キャンセル
+            </Button>
+            <Button variant="contained" onClick={onSave} disabled={isSaving}>
+              {isSaving ? "保存中" : "保存"}
+            </Button>
+          </Stack>
+        ) : (
+          <Button variant="contained" onClick={onStartEditing}>
+            編集
+          </Button>
+        )}
+      </Box>
+
+      <Box sx={{ p: 3 }}>
+        {isEditing ? (
+          <TextField
+            label="Markdown"
+            value={draft}
+            onChange={(event) => onDraftChange(event.target.value)}
+            multiline
+            minRows={24}
+            fullWidth
+            sx={{
+              "& textarea": {
+                fontFamily:
+                  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+                lineHeight: 1.6,
+              },
+            }}
+          />
+        ) : (
+          <MarkdownPreview
+            currentNamespace={currentNamespace}
+            currentPath={page.path}
+            markdown={previewContent}
+            onOpenLocation={onOpenLocation}
+          />
+        )}
+      </Box>
+    </Paper>
+  );
+}
+
+function resolveLocation(
+  rawLocation: string,
+  namespaces: NamespaceSummary[],
+  sourceNamespace: NamespaceSummary | null,
+): ResolvedLocation {
+  const location = rawLocation.trim();
+  if (location === "Special:Namespaces") {
+    return {
+      kind: "specialNamespaces",
+      location: namespacesLocation,
+    };
+  }
+
+  const parts = location.split(":");
+  if (parts.length < 2) {
+    return {
+      kind: "page",
+      namespace: requireNamespace(sourceNamespace),
+      pagePath: normalizePagePath(location),
+      location: pageLocationFromName(location, requireNamespace(sourceNamespace)),
+    };
+  }
+
+  const first = parts[0];
+  const second = parts[1];
+  const hasNamespace = first !== "Page" && first !== "Special";
+  const namespace = hasNamespace
+    ? findNamespaceByName(namespaces, first)
+    : sourceNamespace;
+  const kind = hasNamespace ? second : first;
+  const name = parts.slice(hasNamespace ? 2 : 1).join(":");
+
+  if (kind === "Special" && name === "Namespaces") {
+    return {
+      kind: "specialNamespaces",
+      location: namespacesLocation,
+    };
+  }
+
+  if (kind === "Special" && name === "AllPages") {
+    const resolvedNamespace = requireNamespace(namespace);
+    return {
+      kind: "specialAllPages",
+      namespace: resolvedNamespace,
+      location: `${resolvedNamespace.name}:Special:AllPages`,
+    };
+  }
+
+  if (kind === "Page") {
+    const resolvedNamespace = requireNamespace(namespace);
+    return {
+      kind: "page",
+      namespace: resolvedNamespace,
+      pagePath: normalizePagePath(name),
+      location: pageLocationFromName(name, resolvedNamespace),
+    };
+  }
+
+  throw new Error(`未対応のロケーションです: ${location}`);
+}
+
+function normalizePagePath(pageName: string) {
+  const withoutPrefix = pageName.startsWith("Page:")
+    ? pageName.slice("Page:".length)
+    : pageName;
+  const withoutExtension = withoutPrefix.trim().replace(/\.md$/, "");
+  return `Pages/${withoutExtension}.md`;
+}
+
+function pageLocation(path: string, namespace: NamespaceSummary) {
+  const name = path.replace(/^Pages\//, "").replace(/\.md$/, "");
+  return pageLocationFromName(name, namespace);
+}
+
+function pageLocationFromName(
+  pageName: string,
+  namespace: NamespaceSummary,
+) {
+  const normalizedName = pageName.replace(/^Pages\//, "").replace(/\.md$/, "");
+  return `${namespace.name}:Page:${normalizedName}`;
 }
 
 function pageTitle(path: string) {
@@ -603,13 +790,15 @@ async function readPageOrVirtual(namespaceId: string, path: string) {
 }
 
 function MarkdownPreview({
+  currentNamespace,
   currentPath,
   markdown,
-  onOpenPage,
+  onOpenLocation,
 }: {
+  currentNamespace: NamespaceSummary;
   currentPath: string;
   markdown: string;
-  onOpenPage: (path: string) => Promise<void>;
+  onOpenLocation: (location: string) => void;
 }) {
   return (
     <Box
@@ -652,7 +841,13 @@ function MarkdownPreview({
                   }
 
                   event.preventDefault();
-                  void onOpenPage(resolveMarkdownLink(currentPath, linkTarget));
+                  onOpenLocation(
+                    resolveMarkdownLink(
+                      currentNamespace,
+                      currentPath,
+                      linkTarget,
+                    ),
+                  );
                 }}
               >
                 {children}
@@ -709,15 +904,25 @@ function MarkdownPreview({
   );
 }
 
-function resolveMarkdownLink(currentPath: string, target: string) {
+function resolveMarkdownLink(
+  currentNamespace: NamespaceSummary,
+  currentPath: string,
+  target: string,
+) {
   const [pathWithoutFragment] = target.split("#");
   const pathWithoutQuery = pathWithoutFragment.split("?")[0];
-  if (pathWithoutQuery.startsWith("Page:")) {
-    return normalizePagePath(pathWithoutQuery);
+  const parts = pathWithoutQuery.split(":");
+
+  if (
+    parts.length >= 2 &&
+    (parts[0] === "Page" || parts[0] === "Special" || parts[1] === "Page" || parts[1] === "Special")
+  ) {
+    return pathWithoutQuery;
   }
 
-  const currentParts = pathToPageLocation(currentPath)
-    .slice("Page:".length)
+  const currentParts = currentPath
+    .replace(/^Pages\//, "")
+    .replace(/\.md$/, "")
     .split("/");
   currentParts.pop();
   const resolvedParts = [...currentParts, pathWithoutQuery].flatMap((part) =>
@@ -738,7 +943,24 @@ function resolveMarkdownLink(currentPath: string, target: string) {
     normalizedParts.push(part);
   }
 
-  return normalizePagePath(normalizedParts.join("/"));
+  return pageLocationFromName(normalizedParts.join("/"), currentNamespace);
+}
+
+function requireNamespace(namespace: NamespaceSummary | null) {
+  if (!namespace) {
+    throw new Error("ネームスペースを選択してください。");
+  }
+
+  return namespace;
+}
+
+function findNamespaceByName(namespaces: NamespaceSummary[], name: string) {
+  const namespace = namespaces.find((item) => item.name === name);
+  if (!namespace) {
+    throw new Error(`ネームスペースが見つかりません: ${name}`);
+  }
+
+  return namespace;
 }
 
 function errorMessage(error: unknown) {
