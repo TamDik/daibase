@@ -19,6 +19,7 @@ import {
   savePage,
 } from "../api/tauriCommands";
 import { AppHeader } from "../components/AppHeader";
+import { PageSidebar } from "../components/PageSidebar";
 import { PageSurface } from "../components/PageSurface";
 import {
   PagesSpecialPage,
@@ -54,6 +55,7 @@ type SpecialView =
 export function HomePage() {
   const [namespaces, setNamespaces] = useState<NamespaceSummary[]>([]);
   const [activeNamespace, setActiveNamespace] = useState<NamespaceSummary | null>(null);
+  const [sidebarContent, setSidebarContent] = useState<ContentTree | null>(null);
   const [pageView, setPageView] = useState<PageView | null>(null);
   const [specialView, setSpecialView] = useState<SpecialView | null>({
     kind: "namespaces",
@@ -81,6 +83,8 @@ export function HomePage() {
 
     if (opened.kind === "specialNamespaces") {
       setNamespaces(opened.namespaces);
+      setActiveNamespace(null);
+      setSidebarContent(null);
       setPageView(null);
       setSpecialView({ kind: "namespaces", location: opened.location });
       setDraft("");
@@ -91,6 +95,7 @@ export function HomePage() {
 
     if (opened.kind === "specialPages") {
       setActiveNamespace(opened.namespace);
+      setSidebarContent(opened.content);
       setPageView(null);
       setSpecialView({
         kind: "specialPages",
@@ -106,6 +111,7 @@ export function HomePage() {
 
     if (opened.kind === "specialPagesList") {
       setActiveNamespace(opened.namespace);
+      setSidebarContent(opened.content);
       setPageView(null);
       setSpecialView({
         kind: "pages",
@@ -120,6 +126,7 @@ export function HomePage() {
     }
 
     setActiveNamespace(opened.namespace);
+    setSidebarContent(opened.content);
     setPageView({
       kind: "page",
       namespace: opened.namespace,
@@ -283,6 +290,7 @@ export function HomePage() {
         page: saved.page,
       });
       setActiveNamespace(saved.namespace);
+      setSidebarContent(saved.content);
       setDraft(saved.page.content);
       setLocationInput(saved.location);
       setIsEditing(false);
@@ -317,58 +325,74 @@ export function HomePage() {
         onLocationSubmit={() => void handleLocationSubmit()}
       />
 
-      <Box component="main" sx={{ p: 3 }}>
-        <Stack spacing={2}>
-          {isLoading && <Alert severity="info">読み込み中</Alert>}
-          {error && <Alert severity="error">{error}</Alert>}
-          {page?.is_virtual && <Alert severity="info">このページはまだ作成されていません。</Alert>}
+      <Box
+        component="main"
+        sx={{
+          alignItems: "flex-start",
+          display: "flex",
+          p: 0,
+        }}
+      >
+        <PageSidebar
+          content={sidebarContent}
+          currentLocation={locationInput}
+          namespace={activeNamespace}
+          onOpenLocation={(location) => void navigate(location)}
+        />
 
-          {specialView?.kind === "namespaces" && (
-            <NamespacesSpecialPage
-              namespaceName={namespaceName}
-              namespaces={namespaces}
-              rootPath={rootPath}
-              onCreateNamespace={handleCreateNamespace}
-              onNamespaceNameChange={setNamespaceName}
-              onOpenLocation={(location) => void navigate(location)}
-              onRootPathSelect={() => void handleSelectRootPath()}
-            />
-          )}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Stack spacing={2}>
+            {isLoading && <Alert severity="info">読み込み中</Alert>}
+            {error && <Alert severity="error">{error}</Alert>}
+            {page?.is_virtual && <Alert severity="info">このページはまだ作成されていません。</Alert>}
 
-          {specialView?.kind === "specialPages" && (
-            <SpecialPagesIndex
-              location={specialView.location}
-              pages={specialView.pages}
-              onOpenLocation={(location) => void navigate(location)}
-            />
-          )}
+            {specialView?.kind === "namespaces" && (
+              <NamespacesSpecialPage
+                namespaceName={namespaceName}
+                namespaces={namespaces}
+                rootPath={rootPath}
+                onCreateNamespace={handleCreateNamespace}
+                onNamespaceNameChange={setNamespaceName}
+                onOpenLocation={(location) => void navigate(location)}
+                onRootPathSelect={() => void handleSelectRootPath()}
+              />
+            )}
 
-          {specialView?.kind === "pages" && (
-            <PagesSpecialPage
-              content={specialView.content}
-              namespace={specialView.namespace}
-              onOpenLocation={(location) => void navigate(location)}
-            />
-          )}
+            {specialView?.kind === "specialPages" && (
+              <SpecialPagesIndex
+                location={specialView.location}
+                pages={specialView.pages}
+                onOpenLocation={(location) => void navigate(location)}
+              />
+            )}
 
-          {pageView && (
-            <PageSurface
-              draft={draft}
-              isEditing={isEditing}
-              isSaving={isSaving}
-              page={pageView.page}
-              previewContent={previewContent}
-              onCancelEditing={handleCancelEditing}
-              onDraftChange={setDraft}
-              onOpenLocation={(location) => void navigate(location)}
-              onResolveMarkdownLink={(target) =>
-                resolveMarkdownLink(pageView.namespace.id, pageView.page.path, target)
-              }
-              onSave={() => void handleSave()}
-              onStartEditing={handleStartEditing}
-            />
-          )}
-        </Stack>
+            {specialView?.kind === "pages" && (
+              <PagesSpecialPage
+                content={specialView.content}
+                namespace={specialView.namespace}
+                onOpenLocation={(location) => void navigate(location)}
+              />
+            )}
+
+            {pageView && (
+              <PageSurface
+                draft={draft}
+                isEditing={isEditing}
+                isSaving={isSaving}
+                page={pageView.page}
+                previewContent={previewContent}
+                onCancelEditing={handleCancelEditing}
+                onDraftChange={setDraft}
+                onOpenLocation={(location) => void navigate(location)}
+                onResolveMarkdownLink={(target) =>
+                  resolveMarkdownLink(pageView.namespace.id, pageView.page.path, target)
+                }
+                onSave={() => void handleSave()}
+                onStartEditing={handleStartEditing}
+              />
+            )}
+          </Stack>
+        </Box>
       </Box>
       <Snackbar
         open={savedMessage !== null}

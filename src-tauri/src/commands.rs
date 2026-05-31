@@ -59,6 +59,7 @@ pub fn save_page(
     Ok(SavePageResult {
         location,
         namespace: detail.namespace,
+        content: detail.content,
         page,
         save,
     })
@@ -152,6 +153,7 @@ pub fn open_location(
             Ok(OpenLocationResult::Page {
                 location,
                 namespace: detail.namespace,
+                content: detail.content,
                 page,
             })
         }
@@ -166,6 +168,7 @@ pub fn open_location(
             location,
         } => Ok(OpenLocationResult::SpecialPages {
             location,
+            content: crate::namespace::open_namespace(&app, namespace.id.clone())?.content,
             pages: special_pages_for_namespace(&namespace),
             namespace,
         }),

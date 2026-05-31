@@ -1,4 +1,11 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  waitForElementToBeRemoved,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -28,12 +35,28 @@ const contentTree: ContentTree = {
       path: "Pages/Main.md",
       title: "Main",
       location: "Work:Page:Main",
+      display_path: ["Main"],
     },
     {
       file_id: "file-guide",
       path: "Pages/Guide/Intro.md",
       title: "Intro",
       location: "Work:Page:Guide/Intro",
+      display_path: ["Guide", "Intro"],
+    },
+    {
+      file_id: "file-aaa",
+      path: "Pages/aaa.md",
+      title: "aaa",
+      location: "Work:Page:aaa",
+      display_path: ["aaa"],
+    },
+    {
+      file_id: "file-aaa-bbb",
+      path: "Pages/aaa/bbb.md",
+      title: "bbb",
+      location: "Work:Page:aaa/bbb",
+      display_path: ["aaa", "bbb"],
     },
   ],
 };
@@ -55,6 +78,7 @@ describe("HomePage", () => {
       kind: "page",
       namespace: workNamespace,
       location: "Work:Page:Main",
+      content: contentTree,
       page: page("Pages/Main.md", "# Main\n\n[Draft](Draft)"),
     });
     vi.mocked(api.openLocation).mockImplementation(async (location, sourceNamespaceId) => {
@@ -71,6 +95,7 @@ describe("HomePage", () => {
           kind: "specialPages",
           namespace,
           location: "Work:Special:SpecialPages",
+          content: contentTree,
           pages: [
             {
               title: "Special Pages",
@@ -104,6 +129,7 @@ describe("HomePage", () => {
         kind: "page",
         namespace,
         location: `Work:Page:${pageName}`,
+        content: contentTree,
         page:
           path === "Pages/Main.md"
             ? page(path, "# Main\n\n[Draft](Draft)")
@@ -155,6 +181,28 @@ describe("HomePage", () => {
     expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
   });
 
+  it("サイドバーにページを階層構造で表示してクリックで遷移する", async () => {
+    const user = userEvent.setup();
+    render(<HomePage />);
+
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    expect(pageList).toHaveTextContent("Main");
+    expect(pageList).toHaveTextContent("Guide");
+    expect(pageList).toHaveTextContent("Intro");
+    expect(within(pageList).getAllByText("aaa")).toHaveLength(1);
+    expect(pageList).toHaveTextContent("bbb");
+
+    const aaaItem = screen.getByRole("treeitem", { name: "aaa bbb" });
+    await user.click(within(aaaItem).getByTestId("TreeViewCollapseIconIcon"));
+    await waitForElementToBeRemoved(() => within(pageList).queryByText("bbb"));
+    await user.click(within(aaaItem).getByTestId("TreeViewExpandIconIcon"));
+    expect(within(pageList).getByText("bbb")).toBeInTheDocument();
+
+    await user.click(within(pageList).getByText("Intro"));
+
+    expect(await screen.findByDisplayValue("Work:Page:Guide/Intro")).toBeInTheDocument();
+  });
+
   it("Special:Pages を現在の namespace で表示する", async () => {
     const user = userEvent.setup();
     render(<HomePage />);
@@ -182,7 +230,7 @@ describe("HomePage", () => {
     expect(screen.getByRole("heading", { name: "Special Pages" })).toBeInTheDocument();
     expect(screen.getByText(/全ての Special ページを表示します。/)).toBeInTheDocument();
     expect(screen.getByText(/登録済み namespace の確認と新規作成を行います。/)).toBeInTheDocument();
-    expect(screen.getByText("Pages")).toBeInTheDocument();
+    expect(screen.getAllByText("Pages").length).toBeGreaterThan(0);
     expect(screen.getByText("namespace 内の全ページを表示します。")).toBeInTheDocument();
     expect(screen.queryByText(/Work namespace/)).not.toBeInTheDocument();
   });
@@ -192,6 +240,7 @@ describe("HomePage", () => {
     vi.mocked(api.savePage).mockResolvedValue({
       namespace: workNamespace,
       location: "Work:Page:Main",
+      content: contentTree,
       page: page("Pages/Main.md", "# Updated"),
       save: {
         namespace_id: workNamespace.id,

@@ -1,6 +1,5 @@
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
@@ -34,7 +33,7 @@ export function PageSurface({
   onStartEditing: () => void;
 }) {
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff", overflow: "hidden" }}>
+    <Box sx={{ bgcolor: "#ffffff", minHeight: "calc(100vh - 57px)", overflow: "hidden" }}>
       <Box
         sx={{
           display: "flex",
@@ -71,7 +70,7 @@ export function PageSurface({
         )}
       </Box>
 
-      <Box sx={{ p: 3 }}>
+      <Box>
         {isEditing ? (
           <TextField
             label="Markdown"
@@ -96,6 +95,6 @@ export function PageSurface({
           />
         )}
       </Box>
-    </Paper>
+    </Box>
   );
 }

@@ -77,6 +77,7 @@ pub struct SaveResult {
 pub struct SavePageResult {
     pub location: String,
     pub namespace: NamespaceSummary,
+    pub content: ContentTree,
     pub page: PageContent,
     pub save: SaveResult,
 }
@@ -92,6 +93,7 @@ pub struct FileSummary {
     pub path: String,
     pub title: String,
     pub location: String,
+    pub display_path: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -107,6 +109,7 @@ pub enum OpenLocationResult {
     Page {
         location: String,
         namespace: NamespaceSummary,
+        content: ContentTree,
         page: PageContent,
     },
     SpecialNamespaces {
@@ -116,6 +119,7 @@ pub enum OpenLocationResult {
     SpecialPages {
         location: String,
         namespace: NamespaceSummary,
+        content: ContentTree,
         pages: Vec<SpecialPageSummary>,
     },
     SpecialPagesList {

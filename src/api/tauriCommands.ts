@@ -16,6 +16,7 @@ export type FileSummary = {
   path: string;
   title: string;
   location: string;
+  display_path: string[];
 };
 
 export type ContentTree = {
@@ -50,6 +51,7 @@ export type SaveResult = {
 export type SavePageResult = {
   location: string;
   namespace: NamespaceSummary;
+  content: ContentTree;
   page: PageContent;
   save: SaveResult;
 };
@@ -87,6 +89,7 @@ export type OpenLocationResult =
       kind: "page";
       location: string;
       namespace: NamespaceSummary;
+      content: ContentTree;
       page: PageContent;
     }
   | {
@@ -98,6 +101,7 @@ export type OpenLocationResult =
       kind: "specialPages";
       location: string;
       namespace: NamespaceSummary;
+      content: ContentTree;
       pages: SpecialPageSummary[];
     }
   | {

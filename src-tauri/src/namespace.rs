@@ -221,6 +221,7 @@ fn collect_markdown_pages(
             file_id,
             title: page_title(&relative_path),
             location: page_location(&relative_path, namespace),
+            display_path: page_display_path(&relative_path),
             path: relative_path,
         });
     }
@@ -302,6 +303,14 @@ fn page_title(path: &str) -> String {
         .next_back()
         .unwrap_or(path)
         .to_string()
+}
+
+fn page_display_path(path: &str) -> Vec<String> {
+    display_page_name(path)
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .map(ToString::to_string)
+        .collect()
 }
 
 fn write_json_atomic<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), String> {
