@@ -10,7 +10,6 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
 import type { ContentTree, NamespaceSummary, SpecialPageSummary } from "../api/tauriCommands";
-import { pageLocation, pageTitle } from "../lib/location";
 
 export function SpecialPagesIndex({
   location,
@@ -86,12 +85,12 @@ export function NamespacesSpecialPage({
               {namespaces.map((namespace) => (
                 <ListItemButton
                   key={namespace.id}
-                  onClick={() => onOpenLocation(`${namespace.name}:Page:Main`)}
+                  onClick={() => onOpenLocation(namespace.default_location)}
                   sx={{ borderRadius: 1 }}
                 >
                   <ListItemText
                     primary={namespace.name}
-                    secondary={`${namespace.name}:Special:Pages`}
+                    secondary={namespace.pages_location}
                   />
                 </ListItemButton>
               ))}
@@ -170,13 +169,10 @@ export function PagesSpecialPage({
             {content.pages.map((item) => (
               <ListItemButton
                 key={item.path}
-                onClick={() => onOpenLocation(pageLocation(item.path, namespace))}
+                onClick={() => onOpenLocation(item.location)}
                 sx={{ borderRadius: 1 }}
               >
-                <ListItemText
-                  primary={pageTitle(item.path)}
-                  secondary={pageLocation(item.path, namespace)}
-                />
+                <ListItemText primary={item.title} secondary={item.location} />
               </ListItemButton>
             ))}
           </List>

@@ -1,7 +1,7 @@
 use crate::location::ResolvedLocation;
 use crate::models::{
-    ContentTree, NamespaceDetail, NamespaceSummary, OpenLocationResult, PageContent, SaveResult,
-    SpecialPageSummary,
+    ContentTree, NamespaceDetail, NamespaceSummary, OpenLocationResult, PageContent,
+    SavePageResult, SaveResult, SpecialPageSummary,
 };
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -42,6 +42,26 @@ pub fn write_page(
     content: String,
 ) -> Result<SaveResult, String> {
     crate::namespace::write_page(&app, namespace_id, path, content)
+}
+
+#[tauri::command]
+pub fn save_page(
+    app: AppHandle,
+    namespace_id: String,
+    path: String,
+    content: String,
+) -> Result<SavePageResult, String> {
+    let save = crate::namespace::write_page(&app, namespace_id.clone(), path.clone(), content)?;
+    let detail = crate::namespace::open_namespace(&app, namespace_id)?;
+    let page = crate::namespace::read_page(&app, detail.namespace.id.clone(), path)?;
+    let location = crate::namespace::page_location(&page.path, &detail.namespace);
+
+    Ok(SavePageResult {
+        location,
+        namespace: detail.namespace,
+        page,
+        save,
+    })
 }
 
 #[tauri::command]
@@ -87,6 +107,20 @@ pub fn resolve_markdown_link(
         &current_path,
         &target,
     ))
+}
+
+#[tauri::command]
+pub fn open_initial_location(app: AppHandle) -> Result<OpenLocationResult, String> {
+    match crate::namespace::initial_namespace(&app)? {
+        Some(namespace) => {
+            let location = crate::namespace::page_location(&namespace.default_page, &namespace);
+            open_location(app, location, Some(namespace.id))
+        }
+        None => Ok(OpenLocationResult::SpecialNamespaces {
+            location: crate::location::NAMESPACES_LOCATION.to_string(),
+            namespaces: Vec::new(),
+        }),
+    }
 }
 
 #[tauri::command]
@@ -160,6 +194,16 @@ fn read_page_or_virtual(
             namespace_id: namespace.id.clone(),
             file_id: String::new(),
             path: path.to_string(),
+            title: path
+                .strip_prefix("Pages/")
+                .unwrap_or(path)
+                .strip_suffix(".md")
+                .unwrap_or(path)
+                .split('/')
+                .next_back()
+                .unwrap_or(path)
+                .to_string(),
+            location: crate::namespace::page_location(path, namespace),
             content: String::new(),
             latest_revision_id: None,
             is_virtual: true,

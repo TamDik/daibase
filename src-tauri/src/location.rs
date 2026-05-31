@@ -352,6 +352,8 @@ mod tests {
             name: name.to_string(),
             root_path: PathBuf::from(format!("/tmp/{name}")),
             default_page: "Pages/Main.md".to_string(),
+            default_location: format!("{name}:Page:Main"),
+            pages_location: format!("{name}:Special:Pages"),
             created_at: "2026-01-01T00:00:00Z".to_string(),
             updated_at: "2026-01-01T00:00:00Z".to_string(),
         }

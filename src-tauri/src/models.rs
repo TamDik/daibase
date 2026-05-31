@@ -11,6 +11,10 @@ pub struct NamespaceSummary {
     pub name: String,
     pub root_path: PathBuf,
     pub default_page: String,
+    #[serde(default)]
+    pub default_location: String,
+    #[serde(default)]
+    pub pages_location: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -52,6 +56,8 @@ pub struct PageContent {
     pub namespace_id: String,
     pub file_id: String,
     pub path: String,
+    pub title: String,
+    pub location: String,
     pub content: String,
     pub latest_revision_id: Option<String>,
     pub is_virtual: bool,
@@ -67,6 +73,14 @@ pub struct SaveResult {
     pub saved_at: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct SavePageResult {
+    pub location: String,
+    pub namespace: NamespaceSummary,
+    pub page: PageContent,
+    pub save: SaveResult,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ContentTree {
     pub pages: Vec<FileSummary>,
@@ -76,6 +90,8 @@ pub struct ContentTree {
 pub struct FileSummary {
     pub file_id: String,
     pub path: String,
+    pub title: String,
+    pub location: String,
 }
 
 #[derive(Debug, Serialize)]

@@ -8,15 +8,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type ContentTree,
   type NamespaceSummary,
+  type OpenLocationResult,
   type PageContent,
   type SpecialPageSummary,
   createNamespace,
   listNamespaces,
+  openInitialLocation,
   openLocation,
-  openNamespace,
-  readPage,
   resolveMarkdownLink,
-  writePage,
+  savePage,
 } from "../api/tauriCommands";
 import { AppHeader } from "../components/AppHeader";
 import { PageSurface } from "../components/PageSurface";
@@ -25,7 +25,7 @@ import {
   NamespacesSpecialPage,
   SpecialPagesIndex,
 } from "../components/SpecialPages";
-import { defaultPageLocation, namespacesLocation, pageLocation } from "../lib/location";
+import { defaultPageLocation, namespacesLocation } from "../lib/location";
 
 type PageView = {
   kind: "page";
@@ -76,6 +76,62 @@ export function HomePage() {
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex >= 0 && historyIndex < history.length - 1;
 
+  const applyOpenedLocation = useCallback((opened: OpenLocationResult) => {
+    const nextLocation = opened.location;
+
+    if (opened.kind === "specialNamespaces") {
+      setNamespaces(opened.namespaces);
+      setPageView(null);
+      setSpecialView({ kind: "namespaces", location: opened.location });
+      setDraft("");
+      setLocationInput(opened.location);
+      setIsEditing(false);
+      return nextLocation;
+    }
+
+    if (opened.kind === "specialPages") {
+      setActiveNamespace(opened.namespace);
+      setPageView(null);
+      setSpecialView({
+        kind: "specialPages",
+        location: opened.location,
+        namespace: opened.namespace,
+        pages: opened.pages,
+      });
+      setDraft("");
+      setLocationInput(opened.location);
+      setIsEditing(false);
+      return nextLocation;
+    }
+
+    if (opened.kind === "specialPagesList") {
+      setActiveNamespace(opened.namespace);
+      setPageView(null);
+      setSpecialView({
+        kind: "pages",
+        location: opened.location,
+        namespace: opened.namespace,
+        content: opened.content,
+      });
+      setDraft("");
+      setLocationInput(opened.location);
+      setIsEditing(false);
+      return nextLocation;
+    }
+
+    setActiveNamespace(opened.namespace);
+    setPageView({
+      kind: "page",
+      namespace: opened.namespace,
+      page: opened.page,
+    });
+    setSpecialView(null);
+    setDraft(opened.page.content);
+    setLocationInput(nextLocation);
+    setIsEditing(false);
+    return nextLocation;
+  }, []);
+
   const navigate = useCallback(
     async (
       rawLocation: string,
@@ -89,51 +145,7 @@ export function HomePage() {
       setError(null);
       setSavedMessage(null);
       const opened = await openLocation(rawLocation, sourceNamespace?.id ?? null);
-      const nextLocation = opened.location;
-
-      if (opened.kind === "specialNamespaces") {
-        setNamespaces(opened.namespaces);
-        setPageView(null);
-        setSpecialView({ kind: "namespaces", location: opened.location });
-        setDraft("");
-        setLocationInput(opened.location);
-        setIsEditing(false);
-      } else if (opened.kind === "specialPages") {
-        setActiveNamespace(opened.namespace);
-        setPageView(null);
-        setSpecialView({
-          kind: "specialPages",
-          location: opened.location,
-          namespace: opened.namespace,
-          pages: opened.pages,
-        });
-        setDraft("");
-        setLocationInput(opened.location);
-        setIsEditing(false);
-      } else if (opened.kind === "specialPagesList") {
-        setActiveNamespace(opened.namespace);
-        setPageView(null);
-        setSpecialView({
-          kind: "pages",
-          location: opened.location,
-          namespace: opened.namespace,
-          content: opened.content,
-        });
-        setDraft("");
-        setLocationInput(opened.location);
-        setIsEditing(false);
-      } else {
-        setActiveNamespace(opened.namespace);
-        setPageView({
-          kind: "page",
-          namespace: opened.namespace,
-          page: opened.page,
-        });
-        setSpecialView(null);
-        setDraft(opened.page.content);
-        setLocationInput(nextLocation);
-        setIsEditing(false);
-      }
+      const nextLocation = applyOpenedLocation(opened);
 
       if (mode === "history") {
         return;
@@ -148,7 +160,7 @@ export function HomePage() {
         return next;
       });
     },
-    [activeNamespace, historyIndex, isDirty],
+    [activeNamespace, applyOpenedLocation, historyIndex, isDirty],
   );
 
   useEffect(() => {
@@ -156,34 +168,10 @@ export function HomePage() {
       setIsLoading(true);
       setError(null);
       try {
-        const result = await listNamespaces();
-        setNamespaces(result);
-        if (result.length > 0) {
-          const detail = await openNamespace(result[0].id);
-          const mainPage = await readPage(detail.namespace.id, detail.namespace.default_page);
-          const location = pageLocation(mainPage.path, detail.namespace);
-          setActiveNamespace(detail.namespace);
-          setPageView({
-            kind: "page",
-            namespace: detail.namespace,
-            page: mainPage,
-          });
-          setSpecialView(null);
-          setDraft(mainPage.content);
-          setLocationInput(location);
-          setHistory([location]);
-          setHistoryIndex(0);
-          setIsEditing(false);
-        } else {
-          setActiveNamespace(null);
-          setPageView(null);
-          setSpecialView({ kind: "namespaces", location: namespacesLocation });
-          setDraft("");
-          setLocationInput(namespacesLocation);
-          setHistory([namespacesLocation]);
-          setHistoryIndex(0);
-          setIsEditing(false);
-        }
+        const opened = await openInitialLocation();
+        const location = applyOpenedLocation(opened);
+        setHistory([location]);
+        setHistoryIndex(0);
       } catch (caught) {
         setError(errorMessage(caught));
       } finally {
@@ -192,7 +180,7 @@ export function HomePage() {
     };
 
     void loadInitialState();
-  }, []);
+  }, [applyOpenedLocation]);
 
   const handleCreateNamespace = async () => {
     setError(null);
@@ -288,15 +276,15 @@ export function HomePage() {
     setError(null);
     setSavedMessage(null);
     try {
-      await writePage(pageView.namespace.id, pageView.page.path, draft);
-      const nextPage = await readPage(pageView.namespace.id, pageView.page.path);
+      const saved = await savePage(pageView.namespace.id, pageView.page.path, draft);
       setPageView({
         kind: "page",
-        namespace: pageView.namespace,
-        page: nextPage,
+        namespace: saved.namespace,
+        page: saved.page,
       });
-      setDraft(nextPage.content);
-      setLocationInput(pageLocation(nextPage.path, pageView.namespace));
+      setActiveNamespace(saved.namespace);
+      setDraft(saved.page.content);
+      setLocationInput(saved.location);
       setIsEditing(false);
       setSavedMessage("保存しました");
     } catch (caught) {
@@ -365,7 +353,6 @@ export function HomePage() {
 
           {pageView && (
             <PageSurface
-              currentNamespace={pageView.namespace}
               draft={draft}
               isEditing={isEditing}
               isSaving={isSaving}

@@ -5,6 +5,8 @@ export type NamespaceSummary = {
   name: string;
   root_path: string;
   default_page: string;
+  default_location: string;
+  pages_location: string;
   created_at: string;
   updated_at: string;
 };
@@ -12,6 +14,8 @@ export type NamespaceSummary = {
 export type FileSummary = {
   file_id: string;
   path: string;
+  title: string;
+  location: string;
 };
 
 export type ContentTree = {
@@ -27,6 +31,8 @@ export type PageContent = {
   namespace_id: string;
   file_id: string;
   path: string;
+  title: string;
+  location: string;
   content: string;
   latest_revision_id: string | null;
   is_virtual?: boolean;
@@ -39,6 +45,13 @@ export type SaveResult = {
   revision_id: string;
   object_id: string;
   saved_at: string;
+};
+
+export type SavePageResult = {
+  location: string;
+  namespace: NamespaceSummary;
+  page: PageContent;
+  save: SaveResult;
 };
 
 export type SpecialPageSummary = {
@@ -126,6 +139,14 @@ export function writePage(namespaceId: string, path: string, content: string) {
   });
 }
 
+export function savePage(namespaceId: string, path: string, content: string) {
+  return invoke<SavePageResult>("save_page", {
+    namespaceId,
+    path,
+    content,
+  });
+}
+
 export function listContent(namespaceId: string) {
   return invoke<ContentTree>("list_content", {
     namespaceId,
@@ -137,6 +158,10 @@ export function openLocation(location: string, sourceNamespaceId: string | null)
     location,
     sourceNamespaceId,
   });
+}
+
+export function openInitialLocation() {
+  return invoke<OpenLocationResult>("open_initial_location");
 }
 
 export function resolveLocation(location: string, sourceNamespaceId: string | null) {

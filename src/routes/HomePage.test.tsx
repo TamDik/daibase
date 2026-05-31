@@ -12,11 +12,10 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 vi.mock("../api/tauriCommands", () => ({
   createNamespace: vi.fn(),
   listNamespaces: vi.fn(),
+  openInitialLocation: vi.fn(),
   openLocation: vi.fn(),
-  openNamespace: vi.fn(),
-  readPage: vi.fn(),
   resolveMarkdownLink: vi.fn(),
-  writePage: vi.fn(),
+  savePage: vi.fn(),
 }));
 
 const api = await import("../api/tauriCommands");
@@ -24,8 +23,18 @@ const api = await import("../api/tauriCommands");
 const workNamespace = namespace("ns-work", "Work");
 const contentTree: ContentTree = {
   pages: [
-    { file_id: "file-main", path: "Pages/Main.md" },
-    { file_id: "file-guide", path: "Pages/Guide/Intro.md" },
+    {
+      file_id: "file-main",
+      path: "Pages/Main.md",
+      title: "Main",
+      location: "Work:Page:Main",
+    },
+    {
+      file_id: "file-guide",
+      path: "Pages/Guide/Intro.md",
+      title: "Intro",
+      location: "Work:Page:Guide/Intro",
+    },
   ],
 };
 
@@ -36,23 +45,17 @@ describe("HomePage", () => {
 
   beforeEach(() => {
     vi.mocked(api.listNamespaces).mockReset();
+    vi.mocked(api.openInitialLocation).mockReset();
     vi.mocked(api.openLocation).mockReset();
-    vi.mocked(api.openNamespace).mockReset();
-    vi.mocked(api.readPage).mockReset();
     vi.mocked(api.resolveMarkdownLink).mockReset();
-    vi.mocked(api.writePage).mockReset();
+    vi.mocked(api.savePage).mockReset();
 
     vi.mocked(api.listNamespaces).mockResolvedValue([workNamespace]);
-    vi.mocked(api.openNamespace).mockResolvedValue({
+    vi.mocked(api.openInitialLocation).mockResolvedValue({
+      kind: "page",
       namespace: workNamespace,
-      content: contentTree,
-    });
-    vi.mocked(api.readPage).mockImplementation(async (_namespaceId, path) => {
-      if (path === "Pages/Main.md") {
-        return page(path, "# Main\n\n[Draft](Draft)");
-      }
-
-      throw new Error("ページが見つかりません");
+      location: "Work:Page:Main",
+      page: page("Pages/Main.md", "# Main\n\n[Draft](Draft)"),
     });
     vi.mocked(api.openLocation).mockImplementation(async (location, sourceNamespaceId) => {
       const namespace = sourceNamespaceId === workNamespace.id ? workNamespace : workNamespace;
@@ -108,6 +111,8 @@ describe("HomePage", () => {
                 namespace_id: namespace.id,
                 file_id: "",
                 path,
+                title: lastPathPart(pageName),
+                location: `Work:Page:${pageName}`,
                 content: "",
                 latest_revision_id: null,
                 is_virtual: true,
@@ -184,17 +189,19 @@ describe("HomePage", () => {
 
   it("保存完了メッセージはページ内 Alert ではなく Snackbar として表示する", async () => {
     const user = userEvent.setup();
-    vi.mocked(api.writePage).mockResolvedValue({
-      namespace_id: workNamespace.id,
-      file_id: "file-main",
-      path: "Pages/Main.md",
-      revision_id: "rev_saved",
-      object_id: "sha256:saved",
-      saved_at: "2026-01-01T00:00:00Z",
+    vi.mocked(api.savePage).mockResolvedValue({
+      namespace: workNamespace,
+      location: "Work:Page:Main",
+      page: page("Pages/Main.md", "# Updated"),
+      save: {
+        namespace_id: workNamespace.id,
+        file_id: "file-main",
+        path: "Pages/Main.md",
+        revision_id: "rev_saved",
+        object_id: "sha256:saved",
+        saved_at: "2026-01-01T00:00:00Z",
+      },
     });
-    vi.mocked(api.readPage)
-      .mockResolvedValueOnce(page("Pages/Main.md", "# Main\n\n[Draft](Draft)"))
-      .mockResolvedValueOnce(page("Pages/Main.md", "# Updated"));
 
     render(<HomePage />);
 
@@ -217,6 +224,8 @@ function namespace(id: string, name: string): NamespaceSummary {
     name,
     root_path: `/tmp/${name}`,
     default_page: "Pages/Main.md",
+    default_location: `${name}:Page:Main`,
+    pages_location: `${name}:Special:Pages`,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   };
@@ -227,7 +236,15 @@ function page(path: string, content: string): PageContent {
     namespace_id: workNamespace.id,
     file_id: `file-${path}`,
     path,
+    title: lastPathPart(path.replace(/^Pages\//, "").replace(/\.md$/, "")),
+    location: `Work:Page:${path.replace(/^Pages\//, "").replace(/\.md$/, "")}`,
     content,
     latest_revision_id: "rev_01",
+    is_virtual: false,
   };
+}
+
+function lastPathPart(path: string) {
+  const parts = path.split("/");
+  return parts[parts.length - 1] ?? path;
 }

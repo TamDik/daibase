@@ -5,12 +5,10 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
-import type { NamespaceSummary, PageContent } from "../api/tauriCommands";
-import { pageLocation, pageTitle } from "../lib/location";
+import type { PageContent } from "../api/tauriCommands";
 import { MarkdownPreview } from "./MarkdownPreview";
 
 export function PageSurface({
-  currentNamespace,
   draft,
   isEditing,
   isSaving,
@@ -23,7 +21,6 @@ export function PageSurface({
   onSave,
   onStartEditing,
 }: {
-  currentNamespace: NamespaceSummary;
   draft: string;
   isEditing: boolean;
   isSaving: boolean;
@@ -52,10 +49,10 @@ export function PageSurface({
       >
         <Box>
           <Typography variant="h5" component="h2">
-            {pageTitle(page.path)}
+            {page.title}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {pageLocation(page.path, currentNamespace)}
+            {page.location}
           </Typography>
         </Box>
         {isEditing ? (

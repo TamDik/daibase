@@ -19,6 +19,22 @@ pub fn list_namespaces(app: &AppHandle) -> Result<Vec<NamespaceSummary>, String>
     Ok(read_registry(app)?.namespaces)
 }
 
+pub fn initial_namespace(app: &AppHandle) -> Result<Option<NamespaceSummary>, String> {
+    let registry = read_registry(app)?;
+    let namespace = registry
+        .last_active_namespace_id
+        .as_deref()
+        .and_then(|namespace_id| {
+            registry
+                .namespaces
+                .iter()
+                .find(|namespace| namespace.id == namespace_id)
+        })
+        .or_else(|| registry.namespaces.first())
+        .cloned();
+    Ok(namespace)
+}
+
 pub fn create_namespace(
     app: &AppHandle,
     name: String,
@@ -37,6 +53,8 @@ pub fn create_namespace(
         name: name.trim().to_string(),
         root_path,
         default_page: DEFAULT_PAGE_PATH.to_string(),
+        default_location: format!("{}:Page:Main", name.trim()),
+        pages_location: format!("{}:Special:Pages", name.trim()),
         created_at: now.clone(),
         updated_at: now.clone(),
     };
@@ -110,10 +128,15 @@ pub fn read_page(
         .ok_or_else(|| "ページの履歴 ID が見つかりません。".to_string())?;
     let latest_revision_id = latest_revision_id(&namespace.root_path, &file_id)?;
 
+    let title = page_title(&normalized_path);
+    let location = page_location(&normalized_path, &namespace);
+
     Ok(crate::models::PageContent {
         namespace_id,
         file_id,
         path: normalized_path,
+        title,
+        location,
         content,
         latest_revision_id,
         is_virtual: false,
@@ -152,6 +175,7 @@ fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTre
     let mut pages = Vec::new();
     let path_index = read_path_index(&namespace.root_path)?;
     collect_markdown_pages(
+        namespace,
         &namespace.root_path,
         &namespace.root_path.join("Pages"),
         &path_index.entries,
@@ -162,6 +186,7 @@ fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTre
 }
 
 fn collect_markdown_pages(
+    namespace: &NamespaceSummary,
     root: &Path,
     current: &Path,
     path_index: &std::collections::BTreeMap<String, String>,
@@ -175,7 +200,7 @@ fn collect_markdown_pages(
         let entry = entry.map_err(to_error)?;
         let path = entry.path();
         if path.is_dir() {
-            collect_markdown_pages(root, &path, path_index, pages)?;
+            collect_markdown_pages(namespace, root, &path, path_index, pages)?;
             continue;
         }
 
@@ -194,6 +219,8 @@ fn collect_markdown_pages(
             .unwrap_or_else(|| "".to_string());
         pages.push(FileSummary {
             file_id,
+            title: page_title(&relative_path),
+            location: page_location(&relative_path, namespace),
             path: relative_path,
         });
     }
@@ -216,7 +243,11 @@ fn read_registry(app: &AppHandle) -> Result<NamespaceRegistry, String> {
     }
 
     let content = fs::read_to_string(path).map_err(to_error)?;
-    serde_json::from_str(&content).map_err(to_error)
+    let mut registry: NamespaceRegistry = serde_json::from_str(&content).map_err(to_error)?;
+    for namespace in &mut registry.namespaces {
+        fill_namespace_locations(namespace);
+    }
+    Ok(registry)
 }
 
 fn write_registry(app: &AppHandle, registry: &NamespaceRegistry) -> Result<(), String> {
@@ -248,6 +279,27 @@ fn display_page_name(path: &str) -> String {
     path.strip_prefix("Pages/")
         .unwrap_or(path)
         .strip_suffix(".md")
+        .unwrap_or(path)
+        .to_string()
+}
+
+pub fn page_location(path: &str, namespace: &NamespaceSummary) -> String {
+    format!("{}:Page:{}", namespace.name, display_page_name(path))
+}
+
+fn fill_namespace_locations(namespace: &mut NamespaceSummary) {
+    if namespace.default_location.is_empty() {
+        namespace.default_location = page_location(&namespace.default_page, namespace);
+    }
+    if namespace.pages_location.is_empty() {
+        namespace.pages_location = format!("{}:Special:Pages", namespace.name);
+    }
+}
+
+fn page_title(path: &str) -> String {
+    display_page_name(path)
+        .split('/')
+        .next_back()
         .unwrap_or(path)
         .to_string()
 }
