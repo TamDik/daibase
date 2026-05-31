@@ -8,6 +8,7 @@ import type { TreeItemProps } from "@mui/x-tree-view/TreeItem";
 import { useMemo } from "react";
 
 import type { ContentTree, FileSummary, NamespaceSummary } from "../api/tauriCommands";
+import { ResizableSidebar } from "./ResizableSidebar";
 
 type PageTreeItem = {
   id: string;
@@ -33,17 +34,7 @@ export function PageSidebar({
   const selectedItem = pageLocations.has(currentLocation) ? currentLocation : null;
 
   return (
-    <Box
-      component="aside"
-      sx={{
-        alignSelf: "stretch",
-        bgcolor: "#ffffff",
-        borderRight: "1px solid #d0d7de",
-        flex: "0 0 280px",
-        minWidth: 0,
-        overflow: "hidden",
-      }}
-    >
+    <ResizableSidebar>
       <Box sx={{ px: 2, py: 1.5 }}>
         <Typography component="div" variant="subtitle2" sx={{ fontWeight: 700 }}>
           Pages
@@ -85,7 +76,7 @@ export function PageSidebar({
           />
         )}
       </Box>
-    </Box>
+    </ResizableSidebar>
   );
 }
 

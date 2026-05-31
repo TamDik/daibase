@@ -1,5 +1,6 @@
 import {
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -214,6 +215,21 @@ describe("HomePage", () => {
     await user.click(within(pageList).getByText("Intro"));
 
     expect(await screen.findByDisplayValue("Work:Page:Guide/Intro")).toBeInTheDocument();
+  });
+
+  it("サイドバーの幅をドラッグで変更できる", async () => {
+    render(<HomePage />);
+
+    await screen.findByRole("tree", { name: "ページ一覧" });
+    const resizeHandle = screen.getByRole("separator", { name: "サイドバーの幅" });
+
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "280");
+
+    fireEvent.pointerDown(resizeHandle, { clientX: 280 });
+    fireEvent.pointerMove(window, { clientX: 360 });
+    fireEvent.pointerUp(window);
+
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "360");
   });
 
   it("Special:Pages を現在の namespace で表示する", async () => {
