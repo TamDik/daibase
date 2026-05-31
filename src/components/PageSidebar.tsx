@@ -1,6 +1,10 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import { RichTreeView } from "@mui/x-tree-view/RichTreeView";
+import { TreeItem } from "@mui/x-tree-view/TreeItem";
+import type { TreeItemProps } from "@mui/x-tree-view/TreeItem";
 import { useMemo } from "react";
 
 import type { ContentTree, FileSummary, NamespaceSummary } from "../api/tauriCommands";
@@ -58,6 +62,7 @@ export function PageSidebar({
             itemChildrenIndentation={18}
             items={treeItems}
             selectedItems={selectedItem}
+            slots={{ item: PageTreeViewItem }}
             onItemClick={(_, itemId) => {
               const location = itemLocations.get(itemId);
               if (location) {
@@ -81,6 +86,46 @@ export function PageSidebar({
         )}
       </Box>
     </Box>
+  );
+}
+
+function PageTreeViewItem(props: TreeItemProps) {
+  const isFolderOnly = props.itemId.startsWith("folder:");
+  return (
+    <TreeItem
+      {...props}
+      label={
+        <Box
+          component="span"
+          sx={{
+            alignItems: "center",
+            display: "inline-flex",
+            gap: 0.75,
+            minWidth: 0,
+          }}
+        >
+          <Box
+            aria-hidden
+            component="span"
+            sx={{
+              color: isFolderOnly ? "#9a6700" : "text.secondary",
+              flex: "0 0 auto",
+              height: 16,
+              width: 16,
+              "& svg": {
+                display: "block",
+                fontSize: 16,
+              },
+            }}
+          >
+            {isFolderOnly ? <FolderOutlinedIcon /> : <ArticleOutlinedIcon />}
+          </Box>
+          <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+            {props.label}
+          </Box>
+        </Box>
+      }
+    />
   );
 }
 
