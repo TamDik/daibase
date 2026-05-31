@@ -9,6 +9,7 @@ import { MarkdownPreview } from "./MarkdownPreview";
 
 export function PageSurface({
   draft,
+  existingPageLocations,
   isEditing,
   isSaving,
   page,
@@ -21,6 +22,7 @@ export function PageSurface({
   onStartEditing,
 }: {
   draft: string;
+  existingPageLocations: ReadonlySet<string>;
   isEditing: boolean;
   isSaving: boolean;
   page: PageContent;
@@ -89,6 +91,7 @@ export function PageSurface({
           />
         ) : (
           <MarkdownPreview
+            existingPageLocations={existingPageLocations}
             markdown={previewContent}
             onOpenLocation={onOpenLocation}
             onResolveMarkdownLink={onResolveMarkdownLink}

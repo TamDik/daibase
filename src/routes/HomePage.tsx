@@ -77,6 +77,10 @@ export function HomePage() {
   const isDirty = page !== null && page.content !== draft;
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex >= 0 && historyIndex < history.length - 1;
+  const existingPageLocations = useMemo(
+    () => new Set(sidebarContent?.pages.map((item) => item.location) ?? []),
+    [sidebarContent],
+  );
 
   const applyOpenedLocation = useCallback((opened: OpenLocationResult) => {
     const nextLocation = opened.location;
@@ -306,6 +310,16 @@ export function HomePage() {
     () => (isEditing ? draft : (page?.content ?? "")),
     [draft, isEditing, page?.content],
   );
+  const handleResolvePageMarkdownLink = useCallback(
+    (target: string) => {
+      if (!pageView) {
+        return Promise.resolve(target);
+      }
+
+      return resolveMarkdownLink(pageView.namespace.id, pageView.page.path, target);
+    },
+    [pageView],
+  );
 
   return (
     <Box
@@ -377,6 +391,7 @@ export function HomePage() {
             {pageView && (
               <PageSurface
                 draft={draft}
+                existingPageLocations={existingPageLocations}
                 isEditing={isEditing}
                 isSaving={isSaving}
                 page={pageView.page}
@@ -384,9 +399,7 @@ export function HomePage() {
                 onCancelEditing={handleCancelEditing}
                 onDraftChange={setDraft}
                 onOpenLocation={(location) => void navigate(location)}
-                onResolveMarkdownLink={(target) =>
-                  resolveMarkdownLink(pageView.namespace.id, pageView.page.path, target)
-                }
+                onResolveMarkdownLink={handleResolvePageMarkdownLink}
                 onSave={() => void handleSave()}
                 onStartEditing={handleStartEditing}
               />

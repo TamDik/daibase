@@ -79,7 +79,7 @@ describe("HomePage", () => {
       namespace: workNamespace,
       location: "Work:Page:Main",
       content: contentTree,
-      page: page("Pages/Main.md", "# Main\n\n[Draft](Draft)"),
+      page: page("Pages/Main.md", "# Main\n\n[Draft](Draft)\n\n[Intro](Guide/Intro)"),
     });
     vi.mocked(api.openLocation).mockImplementation(async (location, sourceNamespaceId) => {
       const namespace = sourceNamespaceId === workNamespace.id ? workNamespace : workNamespace;
@@ -132,7 +132,7 @@ describe("HomePage", () => {
         content: contentTree,
         page:
           path === "Pages/Main.md"
-            ? page(path, "# Main\n\n[Draft](Draft)")
+            ? page(path, "# Main\n\n[Draft](Draft)\n\n[Intro](Guide/Intro)")
             : {
                 namespace_id: namespace.id,
                 file_id: "",
@@ -179,6 +179,19 @@ describe("HomePage", () => {
 
     expect(await screen.findByDisplayValue("Work:Page:Draft")).toBeInTheDocument();
     expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
+  });
+
+  it("内部リンクが既存ページか未作成ページかを表示で区別する", async () => {
+    render(<HomePage />);
+
+    const missingLink = await screen.findByRole("link", { name: "Draft" });
+    const existingLink = await screen.findByRole("link", { name: "Intro" });
+
+    await waitFor(() => {
+      expect(missingLink).toHaveAttribute("data-page-exists", "false");
+      expect(existingLink).toHaveAttribute("data-page-exists", "true");
+    });
+    expect(missingLink).toHaveStyle({ textDecorationStyle: "dashed" });
   });
 
   it("サイドバーにページを階層構造で表示してクリックで遷移する", async () => {

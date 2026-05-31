@@ -1,14 +1,18 @@
 import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
+import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 export function MarkdownPreview({
+  existingPageLocations,
   markdown,
   onOpenLocation,
   onResolveMarkdownLink,
 }: {
+  existingPageLocations: ReadonlySet<string>;
   markdown: string;
   onOpenLocation: (location: string) => void;
   onResolveMarkdownLink: (target: string) => Promise<string>;
@@ -43,22 +47,15 @@ export function MarkdownPreview({
         remarkPlugins={[remarkGfm]}
         components={{
           a({ href, children }) {
-            const linkTarget = href ?? "";
-            const isExternal = /^https?:\/\//.test(linkTarget);
             return (
-              <Link
-                href={isExternal ? linkTarget : "#"}
-                onClick={(event) => {
-                  if (isExternal) {
-                    return;
-                  }
-
-                  event.preventDefault();
-                  void onResolveMarkdownLink(linkTarget).then(onOpenLocation);
-                }}
+              <MarkdownLink
+                existingPageLocations={existingPageLocations}
+                href={href}
+                onOpenLocation={onOpenLocation}
+                onResolveMarkdownLink={onResolveMarkdownLink}
               >
                 {children}
-              </Link>
+              </MarkdownLink>
             );
           },
           h1({ children }) {
@@ -108,5 +105,73 @@ export function MarkdownPreview({
         {markdown}
       </ReactMarkdown>
     </Box>
+  );
+}
+
+function MarkdownLink({
+  children,
+  existingPageLocations,
+  href,
+  onOpenLocation,
+  onResolveMarkdownLink,
+}: {
+  children: ReactNode;
+  existingPageLocations: ReadonlySet<string>;
+  href?: string;
+  onOpenLocation: (location: string) => void;
+  onResolveMarkdownLink: (target: string) => Promise<string>;
+}) {
+  const linkTarget = href ?? "";
+  const isExternal = /^https?:\/\//.test(linkTarget);
+  const [resolvedLocation, setResolvedLocation] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isExternal || !linkTarget) {
+      setResolvedLocation(null);
+      return;
+    }
+
+    let isActive = true;
+    setResolvedLocation(null);
+    void onResolveMarkdownLink(linkTarget).then((location) => {
+      if (isActive) {
+        setResolvedLocation(location);
+      }
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [isExternal, linkTarget, onResolveMarkdownLink]);
+
+  const exists = resolvedLocation === null ? null : existingPageLocations.has(resolvedLocation);
+
+  return (
+    <Link
+      color={isExternal || exists !== false ? "primary" : "error"}
+      data-page-exists={
+        isExternal ? undefined : exists === null ? "unknown" : exists ? "true" : "false"
+      }
+      href={isExternal ? linkTarget : "#"}
+      title={isExternal || exists !== false ? undefined : "このページはまだ作成されていません。"}
+      sx={{
+        textDecorationStyle: exists === false ? "dashed" : "solid",
+      }}
+      onClick={(event) => {
+        if (isExternal) {
+          return;
+        }
+
+        event.preventDefault();
+        if (resolvedLocation) {
+          onOpenLocation(resolvedLocation);
+          return;
+        }
+
+        void onResolveMarkdownLink(linkTarget).then(onOpenLocation);
+      }}
+    >
+      {children}
+    </Link>
   );
 }
