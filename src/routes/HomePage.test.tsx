@@ -155,7 +155,8 @@ describe("HomePage", () => {
     render(<HomePage />);
 
     expect(await screen.findByDisplayValue("Work:Page:Main")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: "Main" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Main" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "Main" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Draft" })).toBeInTheDocument();
   });
 

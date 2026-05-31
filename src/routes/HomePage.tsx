@@ -394,7 +394,6 @@ export function HomePage() {
                 existingPageLocations={existingPageLocations}
                 isEditing={isEditing}
                 isSaving={isSaving}
-                page={pageView.page}
                 previewContent={previewContent}
                 onCancelEditing={handleCancelEditing}
                 onDraftChange={setDraft}

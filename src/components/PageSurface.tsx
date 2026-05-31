@@ -2,9 +2,7 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
-import Typography from "@mui/material/Typography";
 
-import type { PageContent } from "../api/tauriCommands";
 import { MarkdownPreview } from "./MarkdownPreview";
 
 export function PageSurface({
@@ -12,7 +10,6 @@ export function PageSurface({
   existingPageLocations,
   isEditing,
   isSaving,
-  page,
   previewContent,
   onCancelEditing,
   onDraftChange,
@@ -25,7 +22,6 @@ export function PageSurface({
   existingPageLocations: ReadonlySet<string>;
   isEditing: boolean;
   isSaving: boolean;
-  page: PageContent;
   previewContent: string;
   onCancelEditing: () => void;
   onDraftChange: (value: string) => void;
@@ -40,33 +36,25 @@ export function PageSurface({
         sx={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
+          justifyContent: "flex-end",
           gap: 2,
           flexWrap: "wrap",
           borderBottom: "1px solid #d0d7de",
           px: 2,
-          py: 1.5,
+          py: 0.75,
         }}
       >
-        <Box>
-          <Typography variant="h5" component="h2">
-            {page.title}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {page.location}
-          </Typography>
-        </Box>
         {isEditing ? (
-          <Stack direction="row" spacing={1}>
-            <Button variant="outlined" onClick={onCancelEditing} disabled={isSaving}>
+          <Stack direction="row" spacing={0.5}>
+            <Button variant="text" size="small" onClick={onCancelEditing} disabled={isSaving}>
               キャンセル
             </Button>
-            <Button variant="contained" onClick={onSave} disabled={isSaving}>
+            <Button variant="text" size="small" onClick={onSave} disabled={isSaving}>
               {isSaving ? "保存中" : "保存"}
             </Button>
           </Stack>
         ) : (
-          <Button variant="contained" onClick={onStartEditing}>
+          <Button variant="text" size="small" onClick={onStartEditing}>
             編集
           </Button>
         )}
