@@ -170,6 +170,13 @@ pub struct FileHistoryEntry {
     pub path: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct PageHistorySnapshot {
+    pub entry: FileHistoryEntry,
+    pub content: String,
+    pub previous_content: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Revision {
     pub schema_version: u32,

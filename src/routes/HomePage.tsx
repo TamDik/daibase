@@ -11,12 +11,14 @@ import {
   type NamespaceSummary,
   type OpenLocationResult,
   type PageContent,
+  type PageHistorySnapshot,
   type SpecialPageSummary,
   createNamespace,
   listPageHistory,
   listNamespaces,
   openInitialLocation,
   openLocation,
+  readPageHistorySnapshot,
   resolveMarkdownLink,
   savePage,
 } from "../api/tauriCommands";
@@ -75,6 +77,10 @@ export function HomePage() {
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<FileHistoryEntry[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [selectedHistoryRevisionId, setSelectedHistoryRevisionId] = useState<string | null>(null);
+  const [historySnapshot, setHistorySnapshot] = useState<PageHistorySnapshot | null>(null);
+  const [historySnapshotError, setHistorySnapshotError] = useState<string | null>(null);
+  const [isHistorySnapshotLoading, setIsHistorySnapshotLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
@@ -147,6 +153,9 @@ export function HomePage() {
     setPageMode("view");
     setHistoryEntries([]);
     setHistoryError(null);
+    setSelectedHistoryRevisionId(null);
+    setHistorySnapshot(null);
+    setHistorySnapshotError(null);
     return nextLocation;
   }, []);
 
@@ -309,6 +318,9 @@ export function HomePage() {
       if (pageMode === "history") {
         const entries = await listPageHistory(saved.namespace.id, saved.page.path);
         setHistoryEntries(entries);
+        setSelectedHistoryRevisionId(null);
+        setHistorySnapshot(null);
+        setHistorySnapshotError(null);
       }
     } catch (caught) {
       setError(errorMessage(caught));
@@ -352,6 +364,29 @@ export function HomePage() {
       setHistoryError(errorMessage(caught));
     } finally {
       setIsHistoryLoading(false);
+    }
+  };
+
+  const handleSelectHistoryEntry = async (entry: FileHistoryEntry) => {
+    if (!pageView) {
+      return;
+    }
+
+    setSelectedHistoryRevisionId(entry.revision_id);
+    setHistorySnapshot(null);
+    setHistorySnapshotError(null);
+    setIsHistorySnapshotLoading(true);
+    try {
+      const snapshot = await readPageHistorySnapshot(
+        pageView.namespace.id,
+        pageView.page.path,
+        entry.revision_id,
+      );
+      setHistorySnapshot(snapshot);
+    } catch (caught) {
+      setHistorySnapshotError(errorMessage(caught));
+    } finally {
+      setIsHistorySnapshotLoading(false);
     }
   };
 
@@ -457,7 +492,10 @@ export function HomePage() {
                 existingPageLocations={existingPageLocations}
                 historyEntries={historyEntries}
                 historyError={historyError}
+                historySnapshot={historySnapshot}
+                historySnapshotError={historySnapshotError}
                 isHistoryLoading={isHistoryLoading}
+                isHistorySnapshotLoading={isHistorySnapshotLoading}
                 isSaving={isSaving}
                 isVirtual={pageView.page.is_virtual ?? false}
                 mode={pageMode}
@@ -468,6 +506,8 @@ export function HomePage() {
                 onOpenLocation={(location) => void navigate(location)}
                 onResolveMarkdownLink={handleResolvePageMarkdownLink}
                 onSave={() => void handleSave()}
+                onSelectHistoryEntry={(entry) => void handleSelectHistoryEntry(entry)}
+                selectedHistoryRevisionId={selectedHistoryRevisionId}
               />
             )}
           </Stack>

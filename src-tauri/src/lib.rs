@@ -18,6 +18,7 @@ pub fn run() {
             commands::save_page,
             commands::list_content,
             commands::list_page_history,
+            commands::read_page_history_snapshot,
             commands::open_initial_location,
             commands::open_location,
             commands::resolve_location,

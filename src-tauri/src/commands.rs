@@ -1,7 +1,7 @@
 use crate::location::ResolvedLocation;
 use crate::models::{
     ContentTree, FileHistoryEntry, NamespaceDetail, NamespaceSummary, OpenLocationResult,
-    PageContent, SavePageResult, SaveResult, SpecialPageSummary,
+    PageContent, PageHistorySnapshot, SavePageResult, SaveResult, SpecialPageSummary,
 };
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -77,6 +77,16 @@ pub fn list_page_history(
     path: String,
 ) -> Result<Vec<FileHistoryEntry>, String> {
     crate::namespace::list_page_history(&app, namespace_id, path)
+}
+
+#[tauri::command]
+pub fn read_page_history_snapshot(
+    app: AppHandle,
+    namespace_id: String,
+    path: String,
+    revision_id: String,
+) -> Result<PageHistorySnapshot, String> {
+    crate::namespace::read_page_history_snapshot(&app, namespace_id, path, revision_id)
 }
 
 #[tauri::command]

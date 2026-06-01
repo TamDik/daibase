@@ -1,11 +1,12 @@
 use crate::models::{
     ContentTree, FileHistoryEntry, FileSummary, FolderSummary, NamespaceDetail, NamespaceMetadata,
-    NamespaceRegistry, NamespaceSummary, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
+    NamespaceRegistry, NamespaceSummary, PageHistorySnapshot, DEFAULT_MAIN_CONTENT,
+    DEFAULT_PAGE_PATH,
 };
 use crate::paths::resolve_namespace_path;
 use crate::versioning::{
     ensure_version_dirs, file_id_for_path, latest_revision_id, read_file_history, read_path_index,
-    record_file_revision,
+    read_text_object, record_file_revision,
 };
 use chrono::Utc;
 use std::fs;
@@ -185,6 +186,37 @@ pub fn list_page_history(
     };
 
     Ok(history.revisions.into_iter().rev().collect())
+}
+
+pub fn read_page_history_snapshot(
+    app: &AppHandle,
+    namespace_id: String,
+    path: String,
+    revision_id: String,
+) -> Result<PageHistorySnapshot, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let normalized_path = crate::paths::validate_page_path(&path)?;
+    let file_id = file_id_for_path(&namespace.root_path, &normalized_path)?
+        .ok_or_else(|| "ページの履歴 ID が見つかりません。".to_string())?;
+    let history = read_file_history(&namespace.root_path, &file_id)?
+        .ok_or_else(|| "ページの履歴が見つかりません。".to_string())?;
+    let revision_index = history
+        .revisions
+        .iter()
+        .position(|entry| entry.revision_id == revision_id)
+        .ok_or_else(|| "指定された revision が履歴内に見つかりません。".to_string())?;
+    let entry = history.revisions[revision_index].clone();
+    let previous_content = revision_index
+        .checked_sub(1)
+        .map(|index| read_text_object(&namespace.root_path, &history.revisions[index].object_id))
+        .transpose()?;
+    let content = read_text_object(&namespace.root_path, &entry.object_id)?;
+
+    Ok(PageHistorySnapshot {
+        entry,
+        content,
+        previous_content,
+    })
 }
 
 fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTree, String> {

@@ -72,6 +72,12 @@ export type FileHistoryEntry = {
   path: string;
 };
 
+export type PageHistorySnapshot = {
+  entry: FileHistoryEntry;
+  content: string;
+  previous_content: string | null;
+};
+
 export type SpecialPageSummary = {
   title: string;
   description: string;
@@ -177,6 +183,14 @@ export function listPageHistory(namespaceId: string, path: string) {
   return invoke<FileHistoryEntry[]>("list_page_history", {
     namespaceId,
     path,
+  });
+}
+
+export function readPageHistorySnapshot(namespaceId: string, path: string, revisionId: string) {
+  return invoke<PageHistorySnapshot>("read_page_history_snapshot", {
+    namespaceId,
+    path,
+    revisionId,
   });
 }
 

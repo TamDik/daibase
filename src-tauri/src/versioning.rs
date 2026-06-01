@@ -113,6 +113,21 @@ pub fn read_file_history(root: &Path, file_id: &str) -> Result<Option<FileHistor
     serde_json::from_str(&content).map(Some).map_err(to_error)
 }
 
+pub fn read_text_object(root: &Path, object_id: &str) -> Result<String, String> {
+    let hex = object_id
+        .strip_prefix("sha256:")
+        .ok_or_else(|| "未対応の object ID です。".to_string())?;
+    if hex.len() != 64 || !hex.chars().all(|character| character.is_ascii_hexdigit()) {
+        return Err("object ID が不正です。".to_string());
+    }
+
+    let object_path = root
+        .join(".daibase/versions/objects")
+        .join(&hex[0..2])
+        .join(hex);
+    fs::read_to_string(object_path).map_err(to_error)
+}
+
 fn update_file_history(
     root: &Path,
     file_id: &str,
@@ -227,6 +242,17 @@ mod tests {
         assert_eq!(first.file_id, second.file_id);
         assert_eq!(first.object_id, second.object_id);
         assert_ne!(first.revision_id, second.revision_id);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reading_text_object_rejects_invalid_object_id() {
+        let root = std::env::temp_dir().join(format!("daibase-test-{}", Ulid::new()));
+        fs::create_dir_all(&root).unwrap();
+
+        assert!(read_text_object(&root, "sha256:../secret").is_err());
+        assert!(read_text_object(&root, "md5:abc").is_err());
 
         fs::remove_dir_all(root).unwrap();
     }

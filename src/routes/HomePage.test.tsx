@@ -28,6 +28,7 @@ vi.mock("../api/tauriCommands", () => ({
   listNamespaces: vi.fn(),
   openInitialLocation: vi.fn(),
   openLocation: vi.fn(),
+  readPageHistorySnapshot: vi.fn(),
   resolveMarkdownLink: vi.fn(),
   savePage: vi.fn(),
 }));
@@ -92,11 +93,17 @@ describe("HomePage", () => {
     vi.mocked(api.listPageHistory).mockReset();
     vi.mocked(api.openInitialLocation).mockReset();
     vi.mocked(api.openLocation).mockReset();
+    vi.mocked(api.readPageHistorySnapshot).mockReset();
     vi.mocked(api.resolveMarkdownLink).mockReset();
     vi.mocked(api.savePage).mockReset();
 
     vi.mocked(api.listNamespaces).mockResolvedValue([workNamespace]);
     vi.mocked(api.listPageHistory).mockResolvedValue(historyEntries());
+    vi.mocked(api.readPageHistorySnapshot).mockResolvedValue({
+      entry: historyEntries()[0],
+      previous_content: "# Main\n\nBefore\n",
+      content: "# Main\n\nAfter\n",
+    });
     vi.mocked(api.openInitialLocation).mockResolvedValue({
       kind: "page",
       namespace: workNamespace,
@@ -342,7 +349,26 @@ describe("HomePage", () => {
     expect(await screen.findByRole("heading", { name: "編集履歴" })).toBeInTheDocument();
     expect(screen.queryByText("rev_02")).not.toBeInTheDocument();
     expect(screen.queryByText("sha256:second")).not.toBeInTheDocument();
+    expect(screen.getByText("1234567890ab")).toHaveAttribute("title", "sha256:1234567890abcdef");
     expect(screen.getAllByText("modified / Pages/Main.md")).toHaveLength(2);
+  });
+
+  it("履歴行を選択するとその時点の内容と編集差分を表示する", async () => {
+    const user = userEvent.setup();
+    render(<HomePage />);
+
+    await user.click(await screen.findByRole("tab", { name: "履歴" }));
+    await user.click(await screen.findByRole("button", { name: /2026\/01\/02.*modified/ }));
+
+    expect(api.readPageHistorySnapshot).toHaveBeenCalledWith(
+      workNamespace.id,
+      "Pages/Main.md",
+      "rev_02",
+    );
+    expect(await screen.findByRole("heading", { name: "その時点の内容" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Main" })).toBeInTheDocument();
+    expect(screen.getByText("+ After")).toBeInTheDocument();
+    expect(screen.getByText("- Before")).toBeInTheDocument();
   });
 });
 
@@ -376,7 +402,7 @@ function historyEntries(): FileHistoryEntry[] {
   return [
     {
       revision_id: "rev_02",
-      object_id: "sha256:second",
+      object_id: "sha256:1234567890abcdef",
       created_at: "2026-01-02T00:00:00Z",
       kind: "modified",
       path: "Pages/Main.md",
