@@ -1,7 +1,8 @@
 use crate::location::ResolvedLocation;
 use crate::models::{
-    ContentTree, FileHistoryEntry, NamespaceDetail, NamespaceSummary, OpenLocationResult,
-    PageContent, PageHistorySnapshot, SavePageResult, SaveResult, SpecialPageSummary,
+    ContentTree, FileHistoryEntry, MarkdownLinkStatus, NamespaceDetail, NamespaceSummary,
+    OpenLocationResult, PageContent, PageHistorySnapshot, SavePageResult, SaveResult,
+    SpecialPageSummary,
 };
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -127,6 +128,48 @@ pub fn resolve_markdown_link(
         &current_path,
         &target,
     ))
+}
+
+#[tauri::command]
+pub fn resolve_markdown_link_status(
+    app: AppHandle,
+    current_namespace_id: String,
+    current_path: String,
+    target: String,
+) -> Result<MarkdownLinkStatus, String> {
+    if crate::location::is_external_markdown_link_target(&target) {
+        return Ok(MarkdownLinkStatus {
+            location: target,
+            exists: false,
+            is_internal: false,
+        });
+    }
+
+    let namespaces = crate::namespace::list_namespaces(&app)?;
+    let current_namespace = namespaces
+        .iter()
+        .find(|namespace| namespace.id == current_namespace_id)
+        .ok_or_else(|| "ネームスペースが見つかりません。".to_string())?;
+    let location =
+        crate::location::resolve_markdown_link(current_namespace, &current_path, &target);
+    let resolved =
+        crate::location::resolve_location(&location, &namespaces, Some(current_namespace))?;
+    let exists = match resolved {
+        ResolvedLocation::Page {
+            namespace,
+            page_path,
+            ..
+        } => crate::namespace::page_exists_for_namespace(&namespace, &page_path)?,
+        ResolvedLocation::SpecialNamespaces { .. }
+        | ResolvedLocation::SpecialPages { .. }
+        | ResolvedLocation::SpecialPagesList { .. } => true,
+    };
+
+    Ok(MarkdownLinkStatus {
+        location,
+        exists,
+        is_internal: true,
+    })
 }
 
 #[tauri::command]

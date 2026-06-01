@@ -107,6 +107,10 @@ pub fn resolve_markdown_link(
     current_path: &str,
     target: &str,
 ) -> String {
+    if target.starts_with('#') {
+        return page_location_from_name(current_path, current_namespace);
+    }
+
     let path_without_fragment = target.split('#').next().unwrap_or("");
     let path_without_query = path_without_fragment.split('?').next().unwrap_or("");
     let parts = path_without_query.split(':').collect::<Vec<_>>();
@@ -148,6 +152,30 @@ pub fn resolve_markdown_link(
     }
 
     page_location_from_name(&normalized_parts.join("/"), current_namespace)
+}
+
+pub fn is_external_markdown_link_target(target: &str) -> bool {
+    if target.starts_with('#') {
+        return false;
+    }
+
+    let mut parts = target.split(':');
+    let first = parts.next().unwrap_or("");
+    let second = parts.next().unwrap_or("");
+    if first == "Page" || first == "Special" || second == "Page" || second == "Special" {
+        return false;
+    }
+
+    let Some((scheme, _)) = target.split_once(':') else {
+        return false;
+    };
+
+    let mut chars = scheme.chars();
+    chars
+        .next()
+        .is_some_and(|first_char| first_char.is_ascii_alphabetic())
+        && chars
+            .all(|char| char.is_ascii_alphanumeric() || char == '+' || char == '.' || char == '-')
 }
 
 fn page_location_from_name(page_name: &str, namespace: &NamespaceSummary) -> String {
@@ -330,6 +358,18 @@ mod tests {
     }
 
     #[test]
+    fn resolves_fragment_only_markdown_link_to_current_page() {
+        assert_eq!(
+            resolve_markdown_link(
+                &namespace("ns-work", "Work"),
+                "Pages/Guide/Intro.md",
+                "#setup",
+            ),
+            "Work:Page:Guide/Intro"
+        );
+    }
+
+    #[test]
     fn keeps_typed_markdown_links_for_location_resolution() {
         let namespace = namespace("ns-work", "Work");
         assert_eq!(
@@ -340,6 +380,19 @@ mod tests {
             resolve_markdown_link(&namespace, "Pages/Guide/Intro.md", "Main:Special:Pages"),
             "Main:Special:Pages"
         );
+    }
+
+    #[test]
+    fn classifies_external_markdown_link_targets() {
+        assert!(is_external_markdown_link_target("https://example.com"));
+        assert!(is_external_markdown_link_target("mailto:hello@example.com"));
+        assert!(!is_external_markdown_link_target("Page:Draft"));
+        assert!(!is_external_markdown_link_target("Special:Pages"));
+        assert!(!is_external_markdown_link_target("Work:Page:Draft"));
+        assert!(!is_external_markdown_link_target("Work:Special:Pages"));
+        assert!(!is_external_markdown_link_target("Guide/Intro"));
+        assert!(!is_external_markdown_link_target("../Draft"));
+        assert!(!is_external_markdown_link_target("#section"));
     }
 
     fn namespaces() -> Vec<NamespaceSummary> {

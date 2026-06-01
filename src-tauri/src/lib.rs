@@ -23,6 +23,7 @@ pub fn run() {
             commands::open_location,
             commands::resolve_location,
             commands::resolve_markdown_link,
+            commands::resolve_markdown_link_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

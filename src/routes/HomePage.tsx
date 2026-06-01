@@ -18,6 +18,7 @@ import {
   listNamespaces,
   openInitialLocation,
   openLocation,
+  resolveMarkdownLinkStatus,
   savePage,
 } from "../api/tauriCommands";
 import { AppHeader } from "../components/AppHeader";
@@ -399,6 +400,40 @@ export function HomePage() {
     );
   };
 
+  const handleResolvePageMarkdownLinkStatus = useCallback(
+    (target: string) => {
+      if (!pageView) {
+        return Promise.resolve({ location: target, exists: false, is_internal: false });
+      }
+
+      return resolveMarkdownLinkStatus(pageView.namespace.id, pageView.page.path, target);
+    },
+    [pageView],
+  );
+
+  const handleOpenPageMarkdownLink = useCallback(
+    async (target: string) => {
+      if (!pageView) {
+        return;
+      }
+
+      try {
+        const status = await resolveMarkdownLinkStatus(
+          pageView.namespace.id,
+          pageView.page.path,
+          target,
+        );
+        if (!status.is_internal) {
+          return;
+        }
+        await navigate(status.location);
+      } catch (caught) {
+        setError(errorMessage(caught));
+      }
+    },
+    [navigate, pageView],
+  );
+
   return (
     <Box
       sx={{
@@ -492,6 +527,8 @@ export function HomePage() {
                 mode={pageMode}
                 onDraftChange={setDraft}
                 onModeChange={(mode) => void handleModeChange(mode)}
+                onOpenMarkdownLink={(target) => void handleOpenPageMarkdownLink(target)}
+                onResolveMarkdownLinkStatus={handleResolvePageMarkdownLinkStatus}
                 onSelectHistoryEntry={handleSelectHistoryEntry}
                 selectedHistoryRevisionId={selectedHistoryRevisionId}
               />

@@ -99,6 +99,12 @@ export type SpecialPageSummary = {
   location: string;
 };
 
+export type MarkdownLinkStatus = {
+  location: string;
+  exists: boolean;
+  is_internal: boolean;
+};
+
 export type ResolvedLocation =
   | {
       kind: "page";
@@ -233,6 +239,18 @@ export function resolveMarkdownLink(
   target: string,
 ) {
   return invoke<string>("resolve_markdown_link", {
+    currentNamespaceId,
+    currentPath,
+    target,
+  });
+}
+
+export function resolveMarkdownLinkStatus(
+  currentNamespaceId: string,
+  currentPath: string,
+  target: string,
+) {
+  return invoke<MarkdownLinkStatus>("resolve_markdown_link_status", {
     currentNamespaceId,
     currentPath,
     target,

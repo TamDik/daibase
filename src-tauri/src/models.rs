@@ -113,6 +113,13 @@ pub struct SpecialPageSummary {
 }
 
 #[derive(Debug, Serialize)]
+pub struct MarkdownLinkStatus {
+    pub location: String,
+    pub exists: bool,
+    pub is_internal: bool,
+}
+
+#[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum OpenLocationResult {
     Page {

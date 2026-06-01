@@ -25,6 +25,8 @@ export function PageSurface({
   mode,
   onDraftChange,
   onModeChange,
+  onOpenMarkdownLink,
+  onResolveMarkdownLinkStatus,
   onSelectHistoryEntry,
   selectedHistoryRevisionId,
 }: {
@@ -38,6 +40,12 @@ export function PageSurface({
   mode: PageMode;
   onDraftChange: (value: string) => void;
   onModeChange: (mode: PageMode) => void;
+  onOpenMarkdownLink: (target: string) => void;
+  onResolveMarkdownLinkStatus: (target: string) => Promise<{
+    exists: boolean;
+    is_internal: boolean;
+    location: string;
+  }>;
   onSelectHistoryEntry: (entry: FileHistoryEntry) => void;
   selectedHistoryRevisionId: string | null;
 }) {
@@ -101,6 +109,8 @@ export function PageSurface({
               disabled={isSaving}
               value={draft}
               onChange={onDraftChange}
+              onOpenMarkdownLink={onOpenMarkdownLink}
+              onResolveMarkdownLinkStatus={onResolveMarkdownLinkStatus}
             />
           </Box>
         )}

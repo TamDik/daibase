@@ -32,6 +32,7 @@ vi.mock("../api/tauriCommands", () => ({
   openLocation: vi.fn(),
   readPageHistorySnapshot: vi.fn(),
   resolveMarkdownLink: vi.fn(),
+  resolveMarkdownLinkStatus: vi.fn(),
   savePage: vi.fn(),
 }));
 
@@ -98,6 +99,7 @@ describe("HomePage", () => {
     vi.mocked(api.openLocation).mockReset();
     vi.mocked(api.readPageHistorySnapshot).mockReset();
     vi.mocked(api.resolveMarkdownLink).mockReset();
+    vi.mocked(api.resolveMarkdownLinkStatus).mockReset();
     vi.mocked(api.savePage).mockReset();
 
     vi.mocked(api.listNamespaces).mockResolvedValue([workNamespace]);
@@ -196,6 +198,15 @@ describe("HomePage", () => {
     vi.mocked(api.resolveMarkdownLink).mockImplementation(async (_namespaceId, _path, target) => {
       return `Work:Page:${target}`;
     });
+    vi.mocked(api.resolveMarkdownLinkStatus).mockImplementation(
+      async (_namespaceId, _path, target) => {
+        return {
+          location: `Work:Page:${target}`,
+          exists: target === "Guide/Intro",
+          is_internal: true,
+        };
+      },
+    );
   });
 
   it("初期表示では Main ページを namespace 付きロケーションで表示する", async () => {

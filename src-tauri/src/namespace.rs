@@ -172,6 +172,12 @@ pub fn list_content(app: &AppHandle, namespace_id: String) -> Result<ContentTree
     list_content_for_namespace(&namespace)
 }
 
+pub fn page_exists_for_namespace(namespace: &NamespaceSummary, path: &str) -> Result<bool, String> {
+    let normalized_path = crate::paths::validate_page_path(path)?;
+    let resolved_path = resolve_namespace_path(&namespace.root_path, &normalized_path)?;
+    Ok(resolved_path.is_file())
+}
+
 pub fn list_page_history(
     app: &AppHandle,
     namespace_id: String,
@@ -627,6 +633,29 @@ mod tests {
         assert_eq!(content.folders[0].path, "Pages/Guide.md");
         assert_eq!(content.folders[0].location, "Work:Page:Guide");
         assert_eq!(content.folders[0].display_path, vec!["Guide"]);
+
+        fs::remove_dir_all(root_path).unwrap();
+    }
+
+    #[test]
+    fn page_exists_uses_namespace_file_path() {
+        let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
+        fs::create_dir_all(root_path.join("Pages/Guide")).unwrap();
+        fs::write(root_path.join("Pages/Guide/Intro.md"), "# Intro\n").unwrap();
+
+        let namespace = NamespaceSummary {
+            id: "ns-work".to_string(),
+            name: "Work".to_string(),
+            root_path: root_path.clone(),
+            default_page: DEFAULT_PAGE_PATH.to_string(),
+            default_location: "Work:Page:Main".to_string(),
+            pages_location: "Work:Special:Pages".to_string(),
+            created_at: "2026-06-01T00:00:00Z".to_string(),
+            updated_at: "2026-06-01T00:00:00Z".to_string(),
+        };
+
+        assert!(page_exists_for_namespace(&namespace, "Pages/Guide/Intro.md").unwrap());
+        assert!(!page_exists_for_namespace(&namespace, "Pages/Missing.md").unwrap());
 
         fs::remove_dir_all(root_path).unwrap();
     }
