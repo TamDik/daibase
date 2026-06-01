@@ -64,6 +64,14 @@ export type SavePageResult = {
   save: SaveResult;
 };
 
+export type FileHistoryEntry = {
+  revision_id: string;
+  object_id: string;
+  created_at: string;
+  kind: string;
+  path: string;
+};
+
 export type SpecialPageSummary = {
   title: string;
   description: string;
@@ -162,6 +170,13 @@ export function savePage(namespaceId: string, path: string, content: string) {
 export function listContent(namespaceId: string) {
   return invoke<ContentTree>("list_content", {
     namespaceId,
+  });
+}
+
+export function listPageHistory(namespaceId: string, path: string) {
+  return invoke<FileHistoryEntry[]>("list_page_history", {
+    namespaceId,
+    path,
   });
 }
 

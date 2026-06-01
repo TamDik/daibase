@@ -1,10 +1,10 @@
 use crate::models::{
-    ContentTree, FileSummary, FolderSummary, NamespaceDetail, NamespaceMetadata, NamespaceRegistry,
-    NamespaceSummary, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
+    ContentTree, FileHistoryEntry, FileSummary, FolderSummary, NamespaceDetail, NamespaceMetadata,
+    NamespaceRegistry, NamespaceSummary, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
 };
 use crate::paths::resolve_namespace_path;
 use crate::versioning::{
-    ensure_version_dirs, file_id_for_path, latest_revision_id, read_path_index,
+    ensure_version_dirs, file_id_for_path, latest_revision_id, read_file_history, read_path_index,
     record_file_revision,
 };
 use chrono::Utc;
@@ -169,6 +169,22 @@ pub fn write_page(
 pub fn list_content(app: &AppHandle, namespace_id: String) -> Result<ContentTree, String> {
     let namespace = find_namespace(app, &namespace_id)?;
     list_content_for_namespace(&namespace)
+}
+
+pub fn list_page_history(
+    app: &AppHandle,
+    namespace_id: String,
+    path: String,
+) -> Result<Vec<FileHistoryEntry>, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let normalized_path = crate::paths::validate_page_path(&path)?;
+    let file_id = file_id_for_path(&namespace.root_path, &normalized_path)?
+        .ok_or_else(|| "ページの履歴 ID が見つかりません。".to_string())?;
+    let Some(history) = read_file_history(&namespace.root_path, &file_id)? else {
+        return Ok(Vec::new());
+    };
+
+    Ok(history.revisions.into_iter().rev().collect())
 }
 
 fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTree, String> {

@@ -17,6 +17,7 @@ pub fn run() {
             commands::write_page,
             commands::save_page,
             commands::list_content,
+            commands::list_page_history,
             commands::open_initial_location,
             commands::open_location,
             commands::resolve_location,

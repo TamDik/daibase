@@ -10,7 +10,12 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ContentTree, NamespaceSummary, PageContent } from "../api/tauriCommands";
+import type {
+  ContentTree,
+  FileHistoryEntry,
+  NamespaceSummary,
+  PageContent,
+} from "../api/tauriCommands";
 import { HomePage } from "./HomePage";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -19,6 +24,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 
 vi.mock("../api/tauriCommands", () => ({
   createNamespace: vi.fn(),
+  listPageHistory: vi.fn(),
   listNamespaces: vi.fn(),
   openInitialLocation: vi.fn(),
   openLocation: vi.fn(),
@@ -83,12 +89,14 @@ describe("HomePage", () => {
 
   beforeEach(() => {
     vi.mocked(api.listNamespaces).mockReset();
+    vi.mocked(api.listPageHistory).mockReset();
     vi.mocked(api.openInitialLocation).mockReset();
     vi.mocked(api.openLocation).mockReset();
     vi.mocked(api.resolveMarkdownLink).mockReset();
     vi.mocked(api.savePage).mockReset();
 
     vi.mocked(api.listNamespaces).mockResolvedValue([workNamespace]);
+    vi.mocked(api.listPageHistory).mockResolvedValue(historyEntries());
     vi.mocked(api.openInitialLocation).mockResolvedValue({
       kind: "page",
       namespace: workNamespace,
@@ -312,7 +320,7 @@ describe("HomePage", () => {
 
     render(<HomePage />);
 
-    await user.click(await screen.findByRole("button", { name: "編集" }));
+    await user.click(await screen.findByRole("tab", { name: "編集" }));
     const editor = screen.getByRole("textbox", { name: "Markdown" });
     await user.clear(editor);
     await user.type(editor, "# Updated");
@@ -322,6 +330,19 @@ describe("HomePage", () => {
     expect(snackbar).toHaveTextContent("保存しました");
     expect(snackbar).not.toHaveTextContent("rev_saved");
     expect(snackbar.closest(".MuiSnackbar-root")).not.toBeNull();
+  });
+
+  it("ページの編集履歴を表示する", async () => {
+    const user = userEvent.setup();
+    render(<HomePage />);
+
+    await user.click(await screen.findByRole("tab", { name: "履歴" }));
+
+    expect(api.listPageHistory).toHaveBeenCalledWith(workNamespace.id, "Pages/Main.md");
+    expect(await screen.findByRole("heading", { name: "編集履歴" })).toBeInTheDocument();
+    expect(screen.queryByText("rev_02")).not.toBeInTheDocument();
+    expect(screen.queryByText("sha256:second")).not.toBeInTheDocument();
+    expect(screen.getAllByText("modified / Pages/Main.md")).toHaveLength(2);
   });
 });
 
@@ -349,6 +370,25 @@ function page(path: string, content: string): PageContent {
     latest_revision_id: "rev_01",
     is_virtual: false,
   };
+}
+
+function historyEntries(): FileHistoryEntry[] {
+  return [
+    {
+      revision_id: "rev_02",
+      object_id: "sha256:second",
+      created_at: "2026-01-02T00:00:00Z",
+      kind: "modified",
+      path: "Pages/Main.md",
+    },
+    {
+      revision_id: "rev_01",
+      object_id: "sha256:first",
+      created_at: "2026-01-01T00:00:00Z",
+      kind: "modified",
+      path: "Pages/Main.md",
+    },
+  ];
 }
 
 function lastPathPart(path: string) {
