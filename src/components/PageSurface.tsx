@@ -42,7 +42,7 @@ export function PageSurface({
   selectedHistoryRevisionId: string | null;
 }) {
   return (
-    <Box sx={{ bgcolor: "#ffffff", flexGrow: 1, overflow: "hidden" }}>
+    <Box sx={{ bgcolor: "#ffffff", flexGrow: 1, overflow: "visible" }}>
       <Box
         sx={{
           display: "flex",
