@@ -1,4 +1,4 @@
-import Box from "@mui/material/Box";
+import { Box } from "@mui/material";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 

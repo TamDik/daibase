@@ -1,7 +1,9 @@
-import Alert from "@mui/material/Alert";
-import Box from "@mui/material/Box";
-import Snackbar from "@mui/material/Snackbar";
-import Stack from "@mui/material/Stack";
+import {
+  Alert,
+  Box,
+  Snackbar,
+  Stack,
+} from "@mui/material";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";

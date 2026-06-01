@@ -1,5 +1,4 @@
-import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
+import { Box, Typography } from "@mui/material";
 import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import { RichTreeView } from "@mui/x-tree-view/RichTreeView";
