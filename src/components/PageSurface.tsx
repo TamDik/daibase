@@ -1,3 +1,4 @@
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
@@ -10,6 +11,7 @@ export function PageSurface({
   existingPageLocations,
   isEditing,
   isSaving,
+  isVirtual,
   previewContent,
   onCancelEditing,
   onDraftChange,
@@ -22,6 +24,7 @@ export function PageSurface({
   existingPageLocations: ReadonlySet<string>;
   isEditing: boolean;
   isSaving: boolean;
+  isVirtual: boolean;
   previewContent: string;
   onCancelEditing: () => void;
   onDraftChange: (value: string) => void;
@@ -77,6 +80,10 @@ export function PageSurface({
               },
             }}
           />
+        ) : isVirtual ? (
+          <Box sx={{ p: 2 }}>
+            <Alert severity="info">このページはまだ作成されていません。</Alert>
+          </Box>
         ) : (
           <MarkdownPreview
             existingPageLocations={existingPageLocations}

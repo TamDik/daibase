@@ -358,7 +358,6 @@ export function HomePage() {
           <Stack spacing={2}>
             {isLoading && <Alert severity="info">読み込み中</Alert>}
             {error && <Alert severity="error">{error}</Alert>}
-            {page?.is_virtual && <Alert severity="info">このページはまだ作成されていません。</Alert>}
 
             {specialView?.kind === "namespaces" && (
               <NamespacesSpecialPage
@@ -394,6 +393,7 @@ export function HomePage() {
                 existingPageLocations={existingPageLocations}
                 isEditing={isEditing}
                 isSaving={isSaving}
+                isVirtual={pageView.page.is_virtual ?? false}
                 previewContent={previewContent}
                 onCancelEditing={handleCancelEditing}
                 onDraftChange={setDraft}
