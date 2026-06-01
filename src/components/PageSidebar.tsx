@@ -52,7 +52,7 @@ export function PageSidebar({
           Pages
         </Typography>
       </Box>
-      <Box sx={{ maxHeight: "calc(100vh - 140px)", overflow: "auto", py: 1 }}>
+      <Box sx={{ flexGrow: 1, minHeight: 0, overflow: "auto", py: 1 }}>
         {treeItems.length === 0 ? (
           <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>
             ページはまだありません。

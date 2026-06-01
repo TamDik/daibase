@@ -34,7 +34,7 @@ export function PageSurface({
   onStartEditing: () => void;
 }) {
   return (
-    <Box sx={{ bgcolor: "#ffffff", minHeight: "calc(100vh - 57px)", overflow: "hidden" }}>
+    <Box sx={{ bgcolor: "#ffffff", flexGrow: 1, overflow: "hidden" }}>
       <Box
         sx={{
           display: "flex",

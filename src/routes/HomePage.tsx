@@ -324,6 +324,9 @@ export function HomePage() {
   return (
     <Box
       sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
         minHeight: "100vh",
         bgcolor: "#f6f8fa",
         color: "#1f2328",
@@ -342,8 +345,11 @@ export function HomePage() {
       <Box
         component="main"
         sx={{
-          alignItems: "flex-start",
+          alignItems: "stretch",
           display: "flex",
+          flexGrow: 1,
+          minHeight: 0,
+          overflow: "hidden",
           p: 0,
         }}
       >
@@ -354,8 +360,17 @@ export function HomePage() {
           onOpenLocation={(location) => void navigate(location)}
         />
 
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Stack spacing={2}>
+        <Box
+          sx={{
+            display: "flex",
+            flex: 1,
+            flexDirection: "column",
+            minHeight: 0,
+            minWidth: 0,
+            overflow: "auto",
+          }}
+        >
+          <Stack spacing={2} sx={{ flexGrow: 1 }}>
             {isLoading && <Alert severity="info">読み込み中</Alert>}
             {error && <Alert severity="error">{error}</Alert>}
 
