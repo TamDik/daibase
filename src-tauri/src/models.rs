@@ -64,6 +64,22 @@ pub struct PageContent {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct ManagedFileContent {
+    pub namespace_id: String,
+    pub file_id: String,
+    pub path: String,
+    pub title: String,
+    pub location: String,
+    pub note: String,
+    pub content_type: String,
+    pub text_content: Option<String>,
+    pub data_url: Option<String>,
+    pub size: u64,
+    pub latest_revision_id: Option<String>,
+    pub is_virtual: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SaveResult {
     pub namespace_id: String,
     pub file_id: String,
@@ -82,10 +98,21 @@ pub struct SavePageResult {
     pub save: SaveResult,
 }
 
+#[derive(Debug, Serialize)]
+pub struct SaveFileResult {
+    pub location: String,
+    pub namespace: NamespaceSummary,
+    pub content: ContentTree,
+    pub file: ManagedFileContent,
+    pub save: SaveResult,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ContentTree {
     pub pages: Vec<FileSummary>,
     pub folders: Vec<FolderSummary>,
+    #[serde(default)]
+    pub files: Vec<FileSummary>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -127,6 +154,12 @@ pub enum OpenLocationResult {
         namespace: NamespaceSummary,
         content: ContentTree,
         page: PageContent,
+    },
+    File {
+        location: String,
+        namespace: NamespaceSummary,
+        content: ContentTree,
+        file: ManagedFileContent,
     },
     SpecialNamespaces {
         location: String,

@@ -13,6 +13,12 @@ pub enum ResolvedLocation {
         page_path: String,
         location: String,
     },
+    File {
+        namespace: NamespaceSummary,
+        #[serde(rename = "filePath")]
+        file_path: String,
+        location: String,
+    },
     SpecialNamespaces {
         location: String,
     },
@@ -50,7 +56,7 @@ pub fn resolve_location(
 
     let first = parts[0];
     let second = parts[1];
-    let has_namespace = first != "Page" && first != "Special";
+    let has_namespace = first != "Page" && first != "File" && first != "Special";
     let namespace = if has_namespace {
         Some(find_namespace_by_name(namespaces, first)?)
     } else {
@@ -90,6 +96,15 @@ pub fn resolve_location(
         });
     }
 
+    if kind == "File" {
+        let resolved_namespace = require_namespace(namespace)?;
+        return Ok(ResolvedLocation::File {
+            namespace: resolved_namespace.clone(),
+            file_path: normalize_file_path(&name),
+            location: file_location_from_name(&name, resolved_namespace),
+        });
+    }
+
     Err(format!("未対応のロケーションです: {location}"))
 }
 
@@ -100,6 +115,14 @@ pub fn normalize_page_path(page_name: &str) -> String {
         .strip_suffix(".md")
         .unwrap_or_else(|| without_prefix.trim());
     format!("Pages/{without_extension}.md")
+}
+
+pub fn normalize_file_path(file_name: &str) -> String {
+    let without_file_prefix = file_name.strip_prefix("File:").unwrap_or(file_name);
+    let without_prefix = without_file_prefix
+        .strip_prefix("Files/")
+        .unwrap_or(without_file_prefix);
+    format!("Files/{}", without_prefix.trim())
 }
 
 pub fn resolve_markdown_link(
@@ -117,8 +140,10 @@ pub fn resolve_markdown_link(
 
     if parts.len() >= 2
         && (parts[0] == "Page"
+            || parts[0] == "File"
             || parts[0] == "Special"
             || parts[1] == "Page"
+            || parts[1] == "File"
             || parts[1] == "Special")
     {
         return path_without_query.to_string();
@@ -151,7 +176,12 @@ pub fn resolve_markdown_link(
         normalized_parts.push(part);
     }
 
-    page_location_from_name(&normalized_parts.join("/"), current_namespace)
+    let normalized_path = normalized_parts.join("/");
+    if normalized_path.starts_with("Files/") {
+        file_location_from_name(&normalized_path, current_namespace)
+    } else {
+        page_location_from_name(&normalized_path, current_namespace)
+    }
 }
 
 pub fn is_external_markdown_link_target(target: &str) -> bool {
@@ -162,7 +192,13 @@ pub fn is_external_markdown_link_target(target: &str) -> bool {
     let mut parts = target.split(':');
     let first = parts.next().unwrap_or("");
     let second = parts.next().unwrap_or("");
-    if first == "Page" || first == "Special" || second == "Page" || second == "Special" {
+    if first == "Page"
+        || first == "File"
+        || first == "Special"
+        || second == "Page"
+        || second == "File"
+        || second == "Special"
+    {
         return false;
     }
 
@@ -185,6 +221,14 @@ fn page_location_from_name(page_name: &str, namespace: &NamespaceSummary) -> Str
         .strip_suffix(".md")
         .unwrap_or(page_name);
     format!("{}:Page:{normalized_name}", namespace.name)
+}
+
+fn file_location_from_name(file_name: &str, namespace: &NamespaceSummary) -> String {
+    let without_files_prefix = file_name.strip_prefix("Files/").unwrap_or(file_name);
+    let normalized_name = without_files_prefix
+        .strip_prefix("File:")
+        .unwrap_or(without_files_prefix);
+    format!("{}:File:{normalized_name}", namespace.name)
 }
 
 fn require_namespace(namespace: Option<&NamespaceSummary>) -> Result<&NamespaceSummary, String> {
@@ -248,6 +292,42 @@ mod tests {
                 namespace: namespaces[1].clone(),
                 page_path: "Pages/Notes.md".to_string(),
                 location: "Work:Page:Notes".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_file_location_from_source_namespace() {
+        let namespaces = namespaces();
+        let resolved =
+            resolve_location("File:images/logo.png", &namespaces, Some(&namespaces[1])).unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedLocation::File {
+                namespace: namespaces[1].clone(),
+                file_path: "Files/images/logo.png".to_string(),
+                location: "Work:File:images/logo.png".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_explicit_namespace_file_location() {
+        let namespaces = namespaces();
+        let resolved = resolve_location(
+            "Work:File:images/logo.png",
+            &namespaces,
+            Some(&namespaces[0]),
+        )
+        .unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedLocation::File {
+                namespace: namespaces[1].clone(),
+                file_path: "Files/images/logo.png".to_string(),
+                location: "Work:File:images/logo.png".to_string(),
             }
         );
     }
@@ -322,6 +402,18 @@ mod tests {
     }
 
     #[test]
+    fn normalizes_file_path() {
+        assert_eq!(
+            normalize_file_path("File:images/logo.png"),
+            "Files/images/logo.png"
+        );
+        assert_eq!(
+            normalize_file_path("Files/images/logo.png"),
+            "Files/images/logo.png"
+        );
+    }
+
+    #[test]
     fn resolves_markdown_relative_link() {
         assert_eq!(
             resolve_markdown_link(
@@ -377,8 +469,24 @@ mod tests {
             "Page:Main"
         );
         assert_eq!(
+            resolve_markdown_link(&namespace, "Pages/Guide/Intro.md", "File:images/logo.png"),
+            "File:images/logo.png"
+        );
+        assert_eq!(
             resolve_markdown_link(&namespace, "Pages/Guide/Intro.md", "Main:Special:Pages"),
             "Main:Special:Pages"
+        );
+    }
+
+    #[test]
+    fn resolves_markdown_file_link_to_file_location() {
+        assert_eq!(
+            resolve_markdown_link(
+                &namespace("ns-work", "Work"),
+                "Pages/Guide/Intro.md",
+                "../../Files/images/logo.png",
+            ),
+            "Work:File:images/logo.png"
         );
     }
 
@@ -387,8 +495,12 @@ mod tests {
         assert!(is_external_markdown_link_target("https://example.com"));
         assert!(is_external_markdown_link_target("mailto:hello@example.com"));
         assert!(!is_external_markdown_link_target("Page:Draft"));
+        assert!(!is_external_markdown_link_target("File:images/logo.png"));
         assert!(!is_external_markdown_link_target("Special:Pages"));
         assert!(!is_external_markdown_link_target("Work:Page:Draft"));
+        assert!(!is_external_markdown_link_target(
+            "Work:File:images/logo.png"
+        ));
         assert!(!is_external_markdown_link_target("Work:Special:Pages"));
         assert!(!is_external_markdown_link_target("Guide/Intro"));
         assert!(!is_external_markdown_link_target("../Draft"));

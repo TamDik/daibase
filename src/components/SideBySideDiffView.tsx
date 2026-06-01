@@ -1,9 +1,4 @@
-import {
-  Box,
-  Button,
-  Stack,
-  Typography,
-} from "@mui/material";
+import { Box, Button, Stack, Typography } from "@mui/material";
 import { useState } from "react";
 
 import type { SideBySideDiffRow, SideBySideDiffSection } from "../api/tauriCommands";

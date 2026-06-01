@@ -13,6 +13,7 @@ pub fn ensure_version_dirs(root: &Path) -> Result<(), String> {
     fs::create_dir_all(root.join(".daibase/versions/objects")).map_err(to_error)?;
     fs::create_dir_all(root.join(".daibase/versions/revisions")).map_err(to_error)?;
     fs::create_dir_all(root.join(".daibase/versions/files")).map_err(to_error)?;
+    fs::create_dir_all(root.join(".daibase/file_notes")).map_err(to_error)?;
     fs::create_dir_all(root.join(".daibase/locks")).map_err(to_error)?;
     Ok(())
 }
@@ -42,6 +43,24 @@ pub fn record_file_revision(
     content: &[u8],
     message: &str,
 ) -> Result<SaveResult, String> {
+    record_file_revision_with_content_type(
+        root,
+        namespace_id,
+        path,
+        content,
+        "text/markdown",
+        message,
+    )
+}
+
+pub fn record_file_revision_with_content_type(
+    root: &Path,
+    namespace_id: &str,
+    path: &str,
+    content: &[u8],
+    content_type: &str,
+    message: &str,
+) -> Result<SaveResult, String> {
     ensure_version_dirs(root)?;
 
     let now = Utc::now();
@@ -69,7 +88,7 @@ pub fn record_file_revision(
             file_id: file_id.clone(),
             path: path.to_string(),
             kind: "modified".to_string(),
-            content_type: "text/markdown".to_string(),
+            content_type: content_type.to_string(),
             object_id: object_id.clone(),
             size,
         }],

@@ -1,12 +1,12 @@
 use crate::models::{
     ContentTree, FileHistoryEntry, FileSummary, FolderSummary, NamespaceDetail, NamespaceMetadata,
-    NamespaceRegistry, NamespaceSummary, PageHistorySnapshot, SideBySideDiffRow,
+    NamespaceRegistry, NamespaceSummary, PageHistorySnapshot, SaveFileResult, SideBySideDiffRow,
     SideBySideDiffSection, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
 };
-use crate::paths::resolve_namespace_path;
+use crate::paths::{resolve_namespace_file_path, resolve_namespace_path};
 use crate::versioning::{
     ensure_version_dirs, file_id_for_path, latest_revision_id, read_file_history, read_path_index,
-    read_text_object, record_file_revision,
+    read_text_object, record_file_revision, record_file_revision_with_content_type,
 };
 use chrono::Utc;
 use std::fs;
@@ -167,6 +167,73 @@ pub fn write_page(
     )
 }
 
+pub fn read_managed_file(
+    app: &AppHandle,
+    namespace_id: String,
+    path: String,
+) -> Result<crate::models::ManagedFileContent, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    read_managed_file_for_namespace(&namespace, &path)
+}
+
+pub fn upload_file(
+    app: &AppHandle,
+    namespace_id: String,
+    path: String,
+    source_path: PathBuf,
+) -> Result<SaveFileResult, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let normalized_path = crate::paths::validate_file_path(&path)?;
+    let resolved_path = resolve_namespace_file_path(&namespace.root_path, &normalized_path)?;
+    let content = fs::read(&source_path).map_err(to_error)?;
+    let content_type = guess_content_type_from_bytes(&content, Some(&source_path));
+    if let Some(parent) = resolved_path.parent() {
+        fs::create_dir_all(parent).map_err(to_error)?;
+    }
+
+    fs::write(&resolved_path, &content).map_err(to_error)?;
+    let save = record_file_revision_with_content_type(
+        &namespace.root_path,
+        &namespace.id,
+        &normalized_path,
+        &content,
+        &content_type,
+        &format!("Update {}", display_file_name(&normalized_path)),
+    )?;
+    let detail = open_namespace(app, namespace.id.clone())?;
+    let file = read_managed_file_for_namespace(&detail.namespace, &normalized_path)?;
+    let location = file.location.clone();
+
+    Ok(SaveFileResult {
+        location,
+        namespace: detail.namespace,
+        content: detail.content,
+        file,
+        save,
+    })
+}
+
+pub fn write_file_note(
+    app: &AppHandle,
+    namespace_id: String,
+    path: String,
+    note: String,
+) -> Result<crate::models::ManagedFileContent, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let file = read_managed_file_for_namespace(&namespace, &path)?;
+    if file.is_virtual {
+        return Err("ファイルをアップロードしてから説明を保存してください。".to_string());
+    }
+
+    let note_path = file_note_path(&namespace.root_path, &file.file_id)?;
+    if let Some(parent) = note_path.parent() {
+        fs::create_dir_all(parent).map_err(to_error)?;
+    }
+    fs::write(note_path, note).map_err(to_error)?;
+
+    read_managed_file_for_namespace(&namespace, &file.path)
+}
+
 pub fn list_content(app: &AppHandle, namespace_id: String) -> Result<ContentTree, String> {
     let namespace = find_namespace(app, &namespace_id)?;
     list_content_for_namespace(&namespace)
@@ -176,6 +243,28 @@ pub fn page_exists_for_namespace(namespace: &NamespaceSummary, path: &str) -> Re
     let normalized_path = crate::paths::validate_page_path(path)?;
     let resolved_path = resolve_namespace_path(&namespace.root_path, &normalized_path)?;
     Ok(resolved_path.is_file())
+}
+
+pub fn file_exists_for_namespace(namespace: &NamespaceSummary, path: &str) -> Result<bool, String> {
+    let normalized_path = crate::paths::validate_file_path(path)?;
+    let resolved_path = resolve_namespace_file_path(&namespace.root_path, &normalized_path)?;
+    Ok(resolved_path.is_file())
+}
+
+pub fn list_file_history(
+    app: &AppHandle,
+    namespace_id: String,
+    path: String,
+) -> Result<Vec<FileHistoryEntry>, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let normalized_path = crate::paths::validate_file_path(&path)?;
+    let file_id = file_id_for_path(&namespace.root_path, &normalized_path)?
+        .ok_or_else(|| "ファイルの履歴 ID が見つかりません。".to_string())?;
+    let Some(history) = read_file_history(&namespace.root_path, &file_id)? else {
+        return Ok(Vec::new());
+    };
+
+    Ok(history.revisions.into_iter().rev().collect())
 }
 
 pub fn list_page_history(
@@ -433,6 +522,7 @@ fn split_content_lines(content: &str) -> Vec<&str> {
 fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTree, String> {
     let mut pages = Vec::new();
     let mut folders = Vec::new();
+    let mut files = Vec::new();
     let path_index = read_path_index(&namespace.root_path)?;
     collect_markdown_pages(
         namespace,
@@ -442,9 +532,21 @@ fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTre
         &mut pages,
         &mut folders,
     )?;
+    collect_managed_files(
+        namespace,
+        &namespace.root_path,
+        &namespace.root_path.join("Files"),
+        &path_index.entries,
+        &mut files,
+    )?;
     pages.sort_by(|left, right| left.path.cmp(&right.path));
     folders.sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(ContentTree { pages, folders })
+    files.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(ContentTree {
+        pages,
+        folders,
+        files,
+    })
 }
 
 fn collect_markdown_pages(
@@ -497,6 +599,46 @@ fn collect_markdown_pages(
             title: page_title(&relative_path),
             location: page_location(&relative_path, namespace),
             display_path: page_display_path(&relative_path),
+            path: relative_path,
+        });
+    }
+
+    Ok(())
+}
+
+fn collect_managed_files(
+    namespace: &NamespaceSummary,
+    root: &Path,
+    current: &Path,
+    path_index: &std::collections::BTreeMap<String, String>,
+    files: &mut Vec<FileSummary>,
+) -> Result<(), String> {
+    if !current.exists() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(current).map_err(to_error)? {
+        let entry = entry.map_err(to_error)?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_managed_files(namespace, root, &path, path_index, files)?;
+            continue;
+        }
+
+        let relative_path = path
+            .strip_prefix(root)
+            .map_err(to_error)?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let file_id = path_index
+            .get(&relative_path)
+            .cloned()
+            .unwrap_or_else(|| "".to_string());
+        files.push(FileSummary {
+            file_id,
+            title: file_title(&relative_path),
+            location: file_location(&relative_path, namespace),
+            display_path: file_display_path(&relative_path),
             path: relative_path,
         });
     }
@@ -563,6 +705,10 @@ pub fn page_location(path: &str, namespace: &NamespaceSummary) -> String {
     format!("{}:Page:{}", namespace.name, display_page_name(path))
 }
 
+pub fn file_location(path: &str, namespace: &NamespaceSummary) -> String {
+    format!("{}:File:{}", namespace.name, display_file_name(path))
+}
+
 fn fill_namespace_locations(namespace: &mut NamespaceSummary) {
     if namespace.default_location.is_empty() {
         namespace.default_location = page_location(&namespace.default_page, namespace);
@@ -578,6 +724,200 @@ fn page_title(path: &str) -> String {
         .next_back()
         .unwrap_or(path)
         .to_string()
+}
+
+fn read_managed_file_for_namespace(
+    namespace: &NamespaceSummary,
+    path: &str,
+) -> Result<crate::models::ManagedFileContent, String> {
+    let normalized_path = crate::paths::validate_file_path(path)?;
+    let resolved_path = resolve_namespace_file_path(&namespace.root_path, &normalized_path)?;
+    let title = file_title(&normalized_path);
+    let location = file_location(&normalized_path, namespace);
+
+    if !resolved_path.exists() {
+        return Ok(crate::models::ManagedFileContent {
+            namespace_id: namespace.id.clone(),
+            file_id: String::new(),
+            path: normalized_path,
+            title,
+            location,
+            note: String::new(),
+            content_type: guess_content_type(path),
+            text_content: None,
+            data_url: None,
+            size: 0,
+            latest_revision_id: None,
+            is_virtual: true,
+        });
+    }
+
+    let file_id = file_id_for_path(&namespace.root_path, &normalized_path)?
+        .ok_or_else(|| "ファイルの履歴 ID が見つかりません。".to_string())?;
+    let latest_revision_id = latest_revision_id(&namespace.root_path, &file_id)?;
+    let metadata = fs::metadata(&resolved_path).map_err(to_error)?;
+    let note = read_file_note(&namespace.root_path, &file_id)?;
+    let content = fs::read(&resolved_path).map_err(to_error)?;
+    let content_type = guess_content_type_from_bytes(&content, Some(Path::new(&normalized_path)));
+    let text_content = if is_text_content_type(&content_type) {
+        Some(String::from_utf8(content).map_err(to_error)?)
+    } else {
+        None
+    };
+    let data_url = if is_embeddable_content_type(&content_type) {
+        Some(format!(
+            "data:{content_type};base64,{}",
+            encode_base64(&fs::read(&resolved_path).map_err(to_error)?)
+        ))
+    } else {
+        None
+    };
+
+    Ok(crate::models::ManagedFileContent {
+        namespace_id: namespace.id.clone(),
+        file_id,
+        path: normalized_path.clone(),
+        title,
+        location,
+        note,
+        content_type,
+        text_content,
+        data_url,
+        size: metadata.len(),
+        latest_revision_id,
+        is_virtual: false,
+    })
+}
+
+fn display_file_name(path: &str) -> String {
+    path.strip_prefix("Files/").unwrap_or(path).to_string()
+}
+
+fn file_title(path: &str) -> String {
+    display_file_name(path)
+        .split('/')
+        .next_back()
+        .unwrap_or(path)
+        .to_string()
+}
+
+fn file_display_path(path: &str) -> Vec<String> {
+    display_file_name(path)
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .map(ToString::to_string)
+        .collect()
+}
+
+fn file_note_path(root: &Path, file_id: &str) -> Result<PathBuf, String> {
+    if file_id.is_empty()
+        || !file_id
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+    {
+        return Err("file_id が不正です。".to_string());
+    }
+
+    Ok(root
+        .join(".daibase/file_notes")
+        .join(format!("{file_id}.md")))
+}
+
+fn read_file_note(root: &Path, file_id: &str) -> Result<String, String> {
+    let path = file_note_path(root, file_id)?;
+    if !path.exists() {
+        return Ok(String::new());
+    }
+
+    fs::read_to_string(path).map_err(to_error)
+}
+
+fn guess_content_type(path: &str) -> String {
+    guess_content_type_from_path(Path::new(path))
+}
+
+fn guess_content_type_from_bytes(content: &[u8], fallback_path: Option<&Path>) -> String {
+    if content.starts_with(&[0xff, 0xd8, 0xff]) {
+        return "image/jpeg".to_string();
+    }
+    if content.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return "image/png".to_string();
+    }
+    if content.starts_with(b"GIF87a") || content.starts_with(b"GIF89a") {
+        return "image/gif".to_string();
+    }
+    if content.len() >= 12 && &content[0..4] == b"RIFF" && &content[8..12] == b"WEBP" {
+        return "image/webp".to_string();
+    }
+    if content.starts_with(b"%PDF-") {
+        return "application/pdf".to_string();
+    }
+
+    fallback_path
+        .map(guess_content_type_from_path)
+        .unwrap_or_else(|| "application/octet-stream".to_string())
+}
+
+fn guess_content_type_from_path(path: &Path) -> String {
+    match path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "pdf" => "application/pdf",
+        "txt" => "text/plain",
+        "json" => "application/json",
+        "csv" => "text/csv",
+        "md" => "text/markdown",
+        _ => "application/octet-stream",
+    }
+    .to_string()
+}
+
+fn is_text_content_type(content_type: &str) -> bool {
+    content_type.starts_with("text/")
+        || matches!(
+            content_type,
+            "application/json" | "image/svg+xml" | "application/xml"
+        )
+}
+
+fn is_embeddable_content_type(content_type: &str) -> bool {
+    content_type.starts_with("image/") || content_type == "application/pdf"
+}
+
+fn encode_base64(content: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::with_capacity(content.len().div_ceil(3) * 4);
+
+    for chunk in content.chunks(3) {
+        let first = chunk[0];
+        let second = chunk.get(1).copied().unwrap_or(0);
+        let third = chunk.get(2).copied().unwrap_or(0);
+        let combined = ((first as u32) << 16) | ((second as u32) << 8) | third as u32;
+
+        encoded.push(TABLE[((combined >> 18) & 0x3f) as usize] as char);
+        encoded.push(TABLE[((combined >> 12) & 0x3f) as usize] as char);
+        if chunk.len() > 1 {
+            encoded.push(TABLE[((combined >> 6) & 0x3f) as usize] as char);
+        } else {
+            encoded.push('=');
+        }
+        if chunk.len() > 2 {
+            encoded.push(TABLE[(combined & 0x3f) as usize] as char);
+        } else {
+            encoded.push('=');
+        }
+    }
+
+    encoded
 }
 
 fn page_display_path(path: &str) -> Vec<String> {
@@ -638,6 +978,33 @@ mod tests {
     }
 
     #[test]
+    fn list_content_includes_file_locations() {
+        let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
+        fs::create_dir_all(root_path.join("Files/images")).unwrap();
+        fs::write(root_path.join("Files/images/logo.png"), b"image").unwrap();
+
+        let namespace = NamespaceSummary {
+            id: "ns-work".to_string(),
+            name: "Work".to_string(),
+            root_path: root_path.clone(),
+            default_page: DEFAULT_PAGE_PATH.to_string(),
+            default_location: "Work:Page:Main".to_string(),
+            pages_location: "Work:Special:Pages".to_string(),
+            created_at: "2026-06-01T00:00:00Z".to_string(),
+            updated_at: "2026-06-01T00:00:00Z".to_string(),
+        };
+
+        let content = list_content_for_namespace(&namespace).unwrap();
+
+        assert_eq!(content.files.len(), 1);
+        assert_eq!(content.files[0].path, "Files/images/logo.png");
+        assert_eq!(content.files[0].location, "Work:File:images/logo.png");
+        assert_eq!(content.files[0].display_path, vec!["images", "logo.png"]);
+
+        fs::remove_dir_all(root_path).unwrap();
+    }
+
+    #[test]
     fn page_exists_uses_namespace_file_path() {
         let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
         fs::create_dir_all(root_path.join("Pages/Guide")).unwrap();
@@ -658,6 +1025,41 @@ mod tests {
         assert!(!page_exists_for_namespace(&namespace, "Pages/Missing.md").unwrap());
 
         fs::remove_dir_all(root_path).unwrap();
+    }
+
+    #[test]
+    fn file_exists_uses_namespace_file_path() {
+        let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
+        fs::create_dir_all(root_path.join("Files/images")).unwrap();
+        fs::write(root_path.join("Files/images/logo.png"), b"image").unwrap();
+
+        let namespace = NamespaceSummary {
+            id: "ns-work".to_string(),
+            name: "Work".to_string(),
+            root_path: root_path.clone(),
+            default_page: DEFAULT_PAGE_PATH.to_string(),
+            default_location: "Work:Page:Main".to_string(),
+            pages_location: "Work:Special:Pages".to_string(),
+            created_at: "2026-06-01T00:00:00Z".to_string(),
+            updated_at: "2026-06-01T00:00:00Z".to_string(),
+        };
+
+        assert!(file_exists_for_namespace(&namespace, "Files/images/logo.png").unwrap());
+        assert!(!file_exists_for_namespace(&namespace, "Files/images/missing.png").unwrap());
+
+        fs::remove_dir_all(root_path).unwrap();
+    }
+
+    #[test]
+    fn detects_jpeg_content_type_from_file_content_without_extension() {
+        let content = [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10];
+
+        assert_eq!(guess_content_type_from_bytes(&content, None), "image/jpeg");
+    }
+
+    #[test]
+    fn encodes_base64_for_data_url() {
+        assert_eq!(encode_base64(b"hello"), "aGVsbG8=");
     }
 
     #[test]

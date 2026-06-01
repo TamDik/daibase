@@ -2,7 +2,7 @@
 
 ## 目的
 
-Daibase は、ユーザーが選択したローカルフォルダ内の Markdown や画像などのファイルを管理するアプリです。コンテンツはネームスペース単位で整理します。各ネームスペースは 1 つの保存先フォルダを持ち、必ず `Main` ページから始まり、他の Markdown ページや画像などのローカルアセットへリンクできます。
+Daibase は、ユーザーが選択したローカルフォルダ内の Markdown や画像などのファイルを管理するアプリです。コンテンツはネームスペース単位で整理します。各ネームスペースは 1 つの保存先フォルダを持ち、必ず `Main` ページから始まり、他の Markdown ページや画像などのローカルファイルへリンクできます。
 
 管理対象のファイルは、Git ではなく Daibase 独自のバージョン管理で履歴を保存します。初期実装では通常の編集を安全に行えることを優先し、将来的な復元や差分表示に対応できる履歴データを保存します。
 
@@ -37,23 +37,30 @@ Daibase は、ユーザーが選択したローカルフォルダ内の Markdown
 - ロケーションバーでは namespace 名を省略して入力できますが、画面遷移後の表示は常に `{namespace名}:Page:Main` のように namespace 名を含む完全なロケーションへ正規化します。
 - 特殊ページは `Special:Namespaces` や `{namespace名}:Special:Pages` のように表します。
 - ページタイトルは Markdown ファイルのパスに対応します。
-- リンク先のファイルがまだ存在しない場合でも、ナビゲーション先として扱えます。
+- リンク先のページがまだ存在しない場合でも、ナビゲーション先として扱えます。
 
 推奨する内部 ID:
 
-- ページやアセットには、作成時に `file_id` を割り当てます。
+- ページやファイルには、作成時に `file_id` を割り当てます。
 - `file_id` はリネームや移動では変わらない永続 ID です。
 - `Pages/Main.md` や `Pages/Projects/Roadmap.md` のような相対パスは、現在の表示・保存場所を表す属性として扱います。
 - `Page:Main` や `Page:Projects/Roadmap` は UI 上のロケーション表現であり、実ファイルパスには使いません。
 - 表示タイトルや相対パスはリネームや階層化で変わるため、履歴追跡用の永続 ID としては使いません。
 
-### アセット
+### ファイル
 
-アセットはネームスペース内の Markdown 以外のファイルです。初期対象は画像です。
+ファイルはネームスペース内で管理する Markdown ページ以外のファイルです。初期対象は画像ですが、PDF やその他の添付ファイルにも拡張できるようにします。
 
-- アセットはデフォルトで `_assets/` 配下に保存します。
-- Markdown からは相対リンクで参照します。
-- アセットもページと同じ独自履歴ストアでバージョン管理します。
+- ファイル本体はデフォルトで `Files/` 配下に保存します。
+- UI のロケーションバーでは `File:images/logo.png` のように `File:` 種別と名前をコロン区切りで表示します。
+- `File:images/logo.png` は実ファイルパス `Files/images/logo.png` に対応します。`File:` ロケーション上の名前には `Files/` 接頭辞を含めません。
+- 他 namespace を明示する場合は `{namespace名}:File:images/logo.png` のように、namespace 名、種別、名前をコロン区切りで表示します。
+- ロケーションバーでは namespace 名を省略して入力できますが、画面遷移後の表示は常に `{namespace名}:File:images/logo.png` のように namespace 名を含む完全なロケーションへ正規化します。
+- `{namespace}:File:{name}` は専用のアップロードロケーションではなく、ファイル詳細ページとして扱います。
+- ファイル詳細ページでは、プレビュー、アップロードまたは置き換え、履歴、ファイルについての Markdown 説明を扱います。
+- ファイル説明は実ファイル本体とは分け、`file_id` に紐づくアプリ管理メタデータとして保存します。これによりリネームや移動後も説明を維持できます。説明の変更履歴は将来的に独自履歴ストアへ統合できるようにします。
+- Markdown からファイル本体を埋め込む場合は、可搬性を保つため通常の相対リンクで参照します。
+- ファイル本体もページと同じ独自履歴ストアでバージョン管理します。
 
 ## ストレージ構成
 
@@ -75,12 +82,15 @@ Daibase は、ユーザーが選択したローカルフォルダ内の Markdown
       files/
         file_01HX...json
       path_index.json
+    file_notes/
+      file_01HX...md
     locks/
   Pages/
     Main.md
     Example.md
-  _assets/
-    image.png
+  Files/
+    images/
+      image.png
 ```
 
 ### `.daibase/namespace.json`
@@ -199,7 +209,8 @@ Daibase は、ユーザーが選択したローカルフォルダ内の Markdown
   "schema_version": 1,
   "entries": {
     "Pages/Start.md": "file_01HX...",
-    "Pages/Example.md": "file_01HZ..."
+    "Pages/Example.md": "file_01HZ...",
+    "Files/images/logo.png": "file_01JA..."
   }
 }
 ```
@@ -233,14 +244,14 @@ Daibase のバージョン管理は、ローカルファイルをそのまま使
 - `Pages/Main.md` がなければ作成します。
 - ネームスペースメタデータと `Pages/Main.md` の初期リビジョンを保存します。
 - 保存時は実ファイルを書き込み、同じ内容をオブジェクトストアへ保存し、リビジョンを追加します。
-- アセットのインポート時は、ファイルをネームスペース内にコピーしてリビジョンを追加します。
+- ファイルのアップロード時は、ファイルをネームスペース内の `Files/` 配下にコピーしてリビジョンを追加します。
 - 保存操作では内容が前回保存と同一でも新しいリビジョンを作成します。同じ内容のオブジェクトは重複保存せず、既存の `object_id` を参照します。
 
 リビジョンメッセージ例:
 
 - `Create namespace`
 - `Update Main`
-- `Add asset image.png`
+- `Add file image.png`
 
 ### 将来フェーズ
 
@@ -250,7 +261,7 @@ Daibase のバージョン管理は、ローカルファイルをそのまま使
 - 1 ファイルを過去バージョンへ復元。
 - ネームスペース全体を過去リビジョン時点へ復元。
 - Markdown テキストの差分表示。
-- バイナリアセットのメタデータ変更表示と画像バージョンプレビュー。
+- バイナリファイルのメタデータ変更表示と画像バージョンプレビュー。
 - 履歴データの整合性チェック。
 - リモート同期。
 
@@ -307,7 +318,7 @@ Markdown リンクは通常の Markdown として保持します。
 
 ```markdown
 [Roadmap](Roadmap.md)
-![Diagram](../_assets/diagram.png)
+![Diagram](../Files/images/diagram.png)
 ```
 
 Wiki 形式リンクは後から追加できます。
@@ -322,7 +333,7 @@ Wiki 形式リンクは後から追加できます。
 ナビゲーションルール:
 
 - 相対パスの Markdown リンクはアプリ内で開きます。
-- 既存アセットへのリンクはアセットプレビューを開きます。
+- 既存ファイルへのリンクは `File:` ロケーションとしてファイル詳細ページを開きます。
 - 存在しない Markdown リンクは、リンク先ページの作成を提案します。
 - 外部の `http:` / `https:` リンクはアプリ外で開きます。
 
@@ -336,7 +347,7 @@ Rust 側はファイルシステム、独自バージョン管理、パス検証
 
 - アプリ設定ディレクトリ内でネームスペース一覧を管理する。
 - Tauri のダイアログで保存先フォルダを選択する。
-- ページやアセットのパスが必ずネームスペースルート内に収まることを検証する。
+- ページやファイルのパスが必ずネームスペースルート内に収まることを検証する。
 - ネームスペース内ファイルの読み込み、書き込み、リネーム、削除を行う。
 - `.daibase/versions/` の初期化、追記、検証、復元を行う。
 - フロントエンドへ型付きのエラーを返す。
@@ -360,7 +371,7 @@ src-tauri/src/
 - `uuid`: ネームスペース ID。
 - `ulid`: `file_id`、`device_id`、リビジョン ID。
 - `chrono` または `time`: 日時。
-- `mime_guess`: アセットの MIME type 推定。
+- `mime_guess`: ファイルの MIME type 推定。
 - `similar`: Markdown 差分の生成。
 - Tauri の dialog / filesystem プラグイン: ネイティブのフォルダ・ファイル選択が必要な場合。
 
@@ -371,7 +382,7 @@ React 側はアプリ状態とユーザー操作を担当します。
 主な責務:
 
 - ネームスペース選択。
-- ページツリーとアセットブラウザ。
+- ページツリーとファイル一覧。
 - Markdown エディタ。
 - Markdown プレビュー。
 - リンクナビゲーション。
@@ -385,7 +396,7 @@ Markdown プレビューは自前パーサではなく、unified / remark / rehy
 ```text
 /
 /namespace/:namespaceId/page/*path
-/namespace/:namespaceId/asset/*path
+/namespace/:namespaceId/file/*path
 /namespace/:namespaceId/history/*path
 ```
 
@@ -422,11 +433,12 @@ create_page(namespace_id: String, path: String) -> PageContent
 rename_file(namespace_id: String, file_id: String, new_path: String) -> FileSummary
 list_content(namespace_id: String) -> ContentTree
 
-import_asset(namespace_id: String, source_path: PathBuf, target_dir: String) -> AssetSummary
-read_asset_metadata(namespace_id: String, path: String) -> AssetMetadata
+upload_file(namespace_id: String, path: String, source_path: PathBuf) -> SaveFileResult
+read_file(namespace_id: String, path: String) -> ManagedFileContent
+write_file_note(namespace_id: String, path: String, note: String) -> ManagedFileContent
 
 resolve_path(namespace_id: String, path: String) -> FileSummary
-list_file_history(namespace_id: String, file_id: String) -> Vec<FileVersion>
+list_file_history(namespace_id: String, path: String) -> Vec<FileVersion>
 diff_file(namespace_id: String, file_id: String, from_revision: String, to_revision: String) -> FileDiff
 restore_file(namespace_id: String, file_id: String, revision_id: String) -> SaveResult
 verify_history(namespace_id: String) -> HistoryCheckResult
@@ -441,10 +453,10 @@ verify_history(namespace_id: String) -> HistoryCheckResult
 ルール:
 
 - フロントエンドから渡されるパスは、すべてネームスペースからの相対パスとして扱います。
-- ページやアセット操作では絶対パスを拒否します。
+- ページやファイル操作では絶対パスを拒否します。
 - パスを正規化し、`..` によるディレクトリ脱出を拒否します。
 - 解決後のパスが必ずネームスペースルート配下であることを検証します。
-- `.daibase/` 配下はアプリ管理領域として扱い、通常のページ・アセット操作対象から除外します。
+- `.daibase/` 配下はアプリ管理領域として扱い、通常のページ・ファイル操作対象から除外します。
 - 初期実装では、書き込み先を対応済みのコンテンツ領域に制限します。
 - Tauri capability は最小権限に保ち、広いファイルシステム権限をフロントエンドへ直接渡さず command 経由で扱います。
 
@@ -515,12 +527,14 @@ verify_history(namespace_id: String) -> HistoryCheckResult
 - `Pages/` 配下の Markdown ファイルを一覧する。
 - ネストしたページパスに対応する。
 
-### Milestone 4: アセット
+### Milestone 4: ファイル
 
-- 画像を `_assets/` へインポートする。
+- `File:` ロケーションを解決する。
+- 画像を `Files/` へアップロードする。
 - プレビュー内で画像リンクを表示する。
-- アセット単体のプレビューを表示する。
-- アセットの追加・置き換えをバージョン管理する。
+- `File:` ページでファイルプレビュー、アップロードまたは置き換え、履歴を表示する。
+- `File:` ページでファイルについての Markdown 説明を編集する。
+- ファイルの追加・置き換えをバージョン管理する。
 
 ### Milestone 5: 履歴
 
@@ -547,7 +561,10 @@ verify_history(namespace_id: String) -> HistoryCheckResult
 ## 決定済み方針
 
 - Markdown ページはすべて `Pages/` 配下に保存します。
+- Markdown 以外の管理ファイルはすべて `Files/` 配下に保存します。
 - 保存操作ごとに必ずリビジョンを作成します。
+- ファイルの UI ロケーションは `{namespace}:File:{name}` とします。
+- `File:` ページはアップロード専用ではなく、ファイル詳細、説明、履歴、置き換えを扱う通常ページとして扱います。
 - wiki 形式リンクは初期リリースではサポートせず、将来的に導入します。
 - リビジョン ID には ULID を使います。
 - 大きなバイナリに対する圧縮、差分保存、履歴整理は行いません。
@@ -557,4 +574,4 @@ verify_history(namespace_id: String) -> HistoryCheckResult
 
 まずは、ユーザーが選択したネームスペースフォルダ内に `.daibase/versions/` を作り、`Pages/Main.md` だけを明示的に保存できる Markdown エディタから始めます。保存時には実ファイルを書き込み、同じ内容を SHA-256 オブジェクトとして保存し、リビジョン JSON を追記します。
 
-この流れが安定したら、通常の Markdown リンクによるナビゲーションと、存在しないリンク先ページの作成を追加します。その後、アセットと履歴ビューは同じネームスペース、パス検証、独自履歴ストアを再利用して実装できます。
+この流れが安定したら、通常の Markdown リンクによるナビゲーションと、存在しないリンク先ページの作成を追加します。その後、`File:` ページと履歴ビューは同じネームスペース、パス検証、独自履歴ストアを再利用して実装できます。

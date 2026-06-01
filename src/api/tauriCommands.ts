@@ -22,6 +22,7 @@ export type FileSummary = {
 export type ContentTree = {
   pages: FileSummary[];
   folders: FolderSummary[];
+  files: FileSummary[];
 };
 
 export type FolderSummary = {
@@ -61,6 +62,29 @@ export type SavePageResult = {
   namespace: NamespaceSummary;
   content: ContentTree;
   page: PageContent;
+  save: SaveResult;
+};
+
+export type ManagedFileContent = {
+  namespace_id: string;
+  file_id: string;
+  path: string;
+  title: string;
+  location: string;
+  note: string;
+  content_type: string;
+  text_content: string | null;
+  data_url: string | null;
+  size: number;
+  latest_revision_id: string | null;
+  is_virtual?: boolean;
+};
+
+export type SaveFileResult = {
+  location: string;
+  namespace: NamespaceSummary;
+  content: ContentTree;
+  file: ManagedFileContent;
   save: SaveResult;
 };
 
@@ -113,6 +137,12 @@ export type ResolvedLocation =
       location: string;
     }
   | {
+      kind: "file";
+      namespace: NamespaceSummary;
+      filePath: string;
+      location: string;
+    }
+  | {
       kind: "specialNamespaces";
       location: string;
     }
@@ -134,6 +164,13 @@ export type OpenLocationResult =
       namespace: NamespaceSummary;
       content: ContentTree;
       page: PageContent;
+    }
+  | {
+      kind: "file";
+      location: string;
+      namespace: NamespaceSummary;
+      content: ContentTree;
+      file: ManagedFileContent;
     }
   | {
       kind: "specialNamespaces";
@@ -194,6 +231,29 @@ export function savePage(namespaceId: string, path: string, content: string) {
   });
 }
 
+export function readFile(namespaceId: string, path: string) {
+  return invoke<ManagedFileContent>("read_file", {
+    namespaceId,
+    path,
+  });
+}
+
+export function uploadFile(namespaceId: string, path: string, sourcePath: string) {
+  return invoke<SaveFileResult>("upload_file", {
+    namespaceId,
+    path,
+    sourcePath,
+  });
+}
+
+export function writeFileNote(namespaceId: string, path: string, note: string) {
+  return invoke<ManagedFileContent>("write_file_note", {
+    namespaceId,
+    path,
+    note,
+  });
+}
+
 export function listContent(namespaceId: string) {
   return invoke<ContentTree>("list_content", {
     namespaceId,
@@ -202,6 +262,13 @@ export function listContent(namespaceId: string) {
 
 export function listPageHistory(namespaceId: string, path: string) {
   return invoke<FileHistoryEntry[]>("list_page_history", {
+    namespaceId,
+    path,
+  });
+}
+
+export function listFileHistory(namespaceId: string, path: string) {
+  return invoke<FileHistoryEntry[]>("list_file_history", {
     namespaceId,
     path,
   });

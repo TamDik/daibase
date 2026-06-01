@@ -1,8 +1,5 @@
 import { Box, Typography } from "@mui/material";
-import {
-  ArticleOutlined,
-  FolderOutlined,
-} from "@mui/icons-material";
+import { ArticleOutlined, InsertDriveFileOutlined, FolderOutlined } from "@mui/icons-material";
 import { RichTreeView } from "@mui/x-tree-view/RichTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import type { TreeItemProps } from "@mui/x-tree-view/TreeItem";
@@ -20,6 +17,7 @@ type PageTreeItem = {
   id: string;
   label: string;
   location: string | null;
+  kind: "page" | "folder" | "file";
   children?: PageTreeItem[];
 };
 
@@ -35,7 +33,8 @@ export function PageSidebar({
 }) {
   const pages = content?.pages ?? [];
   const folders = content?.folders ?? [];
-  const treeItems = useMemo(() => buildTreeItems(pages, folders), [folders, pages]);
+  const files = content?.files ?? [];
+  const treeItems = useMemo(() => buildTreeItems(pages, folders, files), [files, folders, pages]);
   const itemLocations = useMemo(() => collectItemLocations(treeItems), [treeItems]);
   const selectedItem = useMemo(() => {
     for (const [itemId, location] of itemLocations) {
@@ -95,6 +94,7 @@ export function PageSidebar({
 
 function PageTreeViewItem(props: TreeItemProps) {
   const isFolderOnly = props.itemId.startsWith("folder:");
+  const isFile = props.itemId.startsWith("file:");
   return (
     <TreeItem
       {...props}
@@ -112,7 +112,7 @@ function PageTreeViewItem(props: TreeItemProps) {
             aria-hidden
             component="span"
             sx={{
-              color: isFolderOnly ? "#9a6700" : "text.secondary",
+              color: isFolderOnly ? "#9a6700" : isFile ? "#0969da" : "text.secondary",
               flex: "0 0 auto",
               height: 16,
               width: 16,
@@ -122,7 +122,13 @@ function PageTreeViewItem(props: TreeItemProps) {
               },
             }}
           >
-            {isFolderOnly ? <FolderOutlined /> : <ArticleOutlined />}
+            {isFolderOnly ? (
+              <FolderOutlined />
+            ) : isFile ? (
+              <InsertDriveFileOutlined />
+            ) : (
+              <ArticleOutlined />
+            )}
           </Box>
           <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
             {props.label}
@@ -133,14 +139,21 @@ function PageTreeViewItem(props: TreeItemProps) {
   );
 }
 
-function buildTreeItems(pages: FileSummary[], folders: FolderSummary[]) {
-  const root: PageTreeItem = { id: "__root__", label: "", location: null, children: [] };
+function buildTreeItems(pages: FileSummary[], folders: FolderSummary[], files: FileSummary[]) {
+  const root: PageTreeItem = {
+    id: "__root__",
+    label: "",
+    location: null,
+    kind: "folder",
+    children: [],
+  };
 
   for (const folder of folders) {
     upsertTreeItem(root, folder.display_path, {
       id: `folder:${folder.location}`,
       label: folder.title,
       location: folder.location,
+      kind: "folder",
     });
   }
 
@@ -149,6 +162,16 @@ function buildTreeItems(pages: FileSummary[], folders: FolderSummary[]) {
       id: page.location,
       label: page.title,
       location: page.location,
+      kind: "page",
+    });
+  }
+
+  for (const file of files) {
+    upsertTreeItem(root, ["Files", ...file.display_path], {
+      id: `file:${file.location}`,
+      label: file.title,
+      location: file.location,
+      kind: "file",
     });
   }
 
@@ -159,7 +182,7 @@ function buildTreeItems(pages: FileSummary[], folders: FolderSummary[]) {
 function upsertTreeItem(
   root: PageTreeItem,
   parts: string[],
-  value: Pick<PageTreeItem, "id" | "label" | "location">,
+  value: Pick<PageTreeItem, "id" | "label" | "location" | "kind">,
 ) {
   let current = root;
   let path = "";
@@ -169,7 +192,7 @@ function upsertTreeItem(
     const children = current.children ?? [];
     let child = children.find((item) => item.label === part);
     if (!child) {
-      child = { id: `folder:${path}`, label: part, location: null, children: [] };
+      child = { id: `folder:${path}`, label: part, location: null, kind: "folder", children: [] };
       children.push(child);
       current.children = children;
     }
@@ -179,6 +202,7 @@ function upsertTreeItem(
   current.id = value.id;
   current.label = value.label;
   current.location = value.location;
+  current.kind = value.kind;
 }
 
 function sortTreeItems(items: PageTreeItem[]) {

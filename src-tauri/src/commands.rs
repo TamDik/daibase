@@ -1,8 +1,8 @@
 use crate::location::ResolvedLocation;
 use crate::models::{
     ContentTree, FileHistoryEntry, MarkdownLinkStatus, NamespaceDetail, NamespaceSummary,
-    OpenLocationResult, PageContent, PageHistorySnapshot, SavePageResult, SaveResult,
-    SpecialPageSummary,
+    OpenLocationResult, PageContent, PageHistorySnapshot, SaveFileResult, SavePageResult,
+    SaveResult, SpecialPageSummary,
 };
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -67,6 +67,35 @@ pub fn save_page(
 }
 
 #[tauri::command]
+pub fn read_file(
+    app: AppHandle,
+    namespace_id: String,
+    path: String,
+) -> Result<crate::models::ManagedFileContent, String> {
+    crate::namespace::read_managed_file(&app, namespace_id, path)
+}
+
+#[tauri::command]
+pub fn upload_file(
+    app: AppHandle,
+    namespace_id: String,
+    path: String,
+    source_path: PathBuf,
+) -> Result<SaveFileResult, String> {
+    crate::namespace::upload_file(&app, namespace_id, path, source_path)
+}
+
+#[tauri::command]
+pub fn write_file_note(
+    app: AppHandle,
+    namespace_id: String,
+    path: String,
+    note: String,
+) -> Result<crate::models::ManagedFileContent, String> {
+    crate::namespace::write_file_note(&app, namespace_id, path, note)
+}
+
+#[tauri::command]
 pub fn list_content(app: AppHandle, namespace_id: String) -> Result<ContentTree, String> {
     crate::namespace::list_content(&app, namespace_id)
 }
@@ -78,6 +107,15 @@ pub fn list_page_history(
     path: String,
 ) -> Result<Vec<FileHistoryEntry>, String> {
     crate::namespace::list_page_history(&app, namespace_id, path)
+}
+
+#[tauri::command]
+pub fn list_file_history(
+    app: AppHandle,
+    namespace_id: String,
+    path: String,
+) -> Result<Vec<FileHistoryEntry>, String> {
+    crate::namespace::list_file_history(&app, namespace_id, path)
 }
 
 #[tauri::command]
@@ -160,6 +198,11 @@ pub fn resolve_markdown_link_status(
             page_path,
             ..
         } => crate::namespace::page_exists_for_namespace(&namespace, &page_path)?,
+        ResolvedLocation::File {
+            namespace,
+            file_path,
+            ..
+        } => crate::namespace::file_exists_for_namespace(&namespace, &file_path)?,
         ResolvedLocation::SpecialNamespaces { .. }
         | ResolvedLocation::SpecialPages { .. }
         | ResolvedLocation::SpecialPagesList { .. } => true,
@@ -217,6 +260,21 @@ pub fn open_location(
                 namespace: detail.namespace,
                 content: detail.content,
                 page,
+            })
+        }
+        ResolvedLocation::File {
+            namespace,
+            file_path,
+            location,
+        } => {
+            let detail = crate::namespace::open_namespace(&app, namespace.id.clone())?;
+            let file =
+                crate::namespace::read_managed_file(&app, detail.namespace.id.clone(), file_path)?;
+            Ok(OpenLocationResult::File {
+                location,
+                namespace: detail.namespace,
+                content: detail.content,
+                file,
             })
         }
         ResolvedLocation::SpecialNamespaces { location } => {

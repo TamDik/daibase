@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ContentTree,
   FileHistoryEntry,
+  ManagedFileContent,
   NamespaceSummary,
   PageContent,
 } from "../api/tauriCommands";
@@ -26,6 +27,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 
 vi.mock("../api/tauriCommands", () => ({
   createNamespace: vi.fn(),
+  listFileHistory: vi.fn(),
   listPageHistory: vi.fn(),
   listNamespaces: vi.fn(),
   openInitialLocation: vi.fn(),
@@ -34,6 +36,8 @@ vi.mock("../api/tauriCommands", () => ({
   resolveMarkdownLink: vi.fn(),
   resolveMarkdownLinkStatus: vi.fn(),
   savePage: vi.fn(),
+  uploadFile: vi.fn(),
+  writeFileNote: vi.fn(),
 }));
 
 const api = await import("../api/tauriCommands");
@@ -84,6 +88,15 @@ const contentTree: ContentTree = {
       display_path: ["aaa", "bbb"],
     },
   ],
+  files: [
+    {
+      file_id: "file-logo",
+      path: "Files/images/logo.png",
+      title: "logo.png",
+      location: "Work:File:images/logo.png",
+      display_path: ["images", "logo.png"],
+    },
+  ],
 };
 
 describe("HomePage", () => {
@@ -94,6 +107,7 @@ describe("HomePage", () => {
 
   beforeEach(() => {
     vi.mocked(api.listNamespaces).mockReset();
+    vi.mocked(api.listFileHistory).mockReset();
     vi.mocked(api.listPageHistory).mockReset();
     vi.mocked(api.openInitialLocation).mockReset();
     vi.mocked(api.openLocation).mockReset();
@@ -101,8 +115,11 @@ describe("HomePage", () => {
     vi.mocked(api.resolveMarkdownLink).mockReset();
     vi.mocked(api.resolveMarkdownLinkStatus).mockReset();
     vi.mocked(api.savePage).mockReset();
+    vi.mocked(api.uploadFile).mockReset();
+    vi.mocked(api.writeFileNote).mockReset();
 
     vi.mocked(api.listNamespaces).mockResolvedValue([workNamespace]);
+    vi.mocked(api.listFileHistory).mockResolvedValue(fileHistoryEntries());
     vi.mocked(api.listPageHistory).mockResolvedValue(historyEntries());
     vi.mocked(api.readPageHistorySnapshot).mockResolvedValue({
       entry: historyEntries()[0],
@@ -124,6 +141,23 @@ describe("HomePage", () => {
         saved_at: "2026-01-01T00:00:00Z",
       },
     }));
+    vi.mocked(api.uploadFile).mockImplementation(async (namespaceId, path) => ({
+      namespace: workNamespace,
+      location: managedFile(path, "説明").location,
+      content: contentTree,
+      file: managedFile(path, "説明"),
+      save: {
+        namespace_id: namespaceId,
+        file_id: "file-logo",
+        path,
+        revision_id: "rev_file_saved",
+        object_id: "sha256:file",
+        saved_at: "2026-01-03T00:00:00Z",
+      },
+    }));
+    vi.mocked(api.writeFileNote).mockImplementation(async (_namespaceId, path, note) =>
+      managedFile(path, note),
+    );
     vi.mocked(api.openInitialLocation).mockResolvedValue({
       kind: "page",
       namespace: workNamespace,
@@ -171,6 +205,16 @@ describe("HomePage", () => {
           namespace,
           location: "Work:Special:Pages",
           content: contentTree,
+        };
+      }
+      if (location.startsWith("File:") || location.startsWith("Work:File:")) {
+        const fileName = location.replace(/^Work:/, "").replace(/^File:/, "");
+        return {
+          kind: "file",
+          namespace,
+          location: `Work:File:${fileName}`,
+          content: contentTree,
+          file: managedFile(`Files/${fileName}`, "説明"),
         };
       }
       const pageName = location.replace(/^Work:/, "").replace(/^Page:/, "");
@@ -243,6 +287,8 @@ describe("HomePage", () => {
     expect(pageList).toHaveTextContent("Intro");
     expect(within(pageList).getAllByText("aaa")).toHaveLength(1);
     expect(pageList).toHaveTextContent("bbb");
+    expect(pageList).toHaveTextContent("Files");
+    expect(pageList).toHaveTextContent("logo.png");
 
     const aaaItem = screen.getByRole("treeitem", { name: "aaa bbb" });
     await user.click(within(aaaItem).getByTestId("TreeViewCollapseIconIcon"));
@@ -253,6 +299,88 @@ describe("HomePage", () => {
     await user.click(within(pageList).getByText("Intro"));
 
     expect(await screen.findByDisplayValue("Work:Page:Guide/Intro")).toBeInTheDocument();
+  });
+
+  it("File ロケーションでファイル詳細を表示して説明を保存する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Page:Main");
+    await user.clear(locationInput);
+    await user.type(locationInput, "File:images/logo.png");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    expect(await screen.findByDisplayValue("Work:File:images/logo.png")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "logo.png" })).toBeInTheDocument();
+    const note = screen.getByRole("textbox", { name: "ファイル説明" });
+    expect(note).toHaveValue("説明");
+
+    await user.clear(note);
+    await user.type(note, "新しい説明");
+    await user.click(screen.getByRole("button", { name: "説明を保存" }));
+
+    await waitFor(() =>
+      expect(api.writeFileNote).toHaveBeenCalledWith(
+        workNamespace.id,
+        "Files/images/logo.png",
+        "新しい説明",
+      ),
+    );
+  });
+
+  it("File ページからアップロードする", async () => {
+    const dialog = await import("@tauri-apps/plugin-dialog");
+    vi.mocked(dialog.open).mockResolvedValue("/tmp/logo.png");
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Page:Main");
+    await user.clear(locationInput);
+    await user.type(locationInput, "File:images/logo.png");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+    await user.click(await screen.findByRole("button", { name: "置き換え" }));
+
+    await waitFor(() =>
+      expect(api.uploadFile).toHaveBeenCalledWith(
+        workNamespace.id,
+        "Files/images/logo.png",
+        "/tmp/logo.png",
+      ),
+    );
+  });
+
+  it("テキストファイルの中身を File ページに表示する", async () => {
+    vi.mocked(api.openLocation).mockResolvedValueOnce({
+      kind: "file",
+      namespace: workNamespace,
+      location: "Work:File:notes/readme.txt",
+      content: contentTree,
+      file: {
+        namespace_id: workNamespace.id,
+        file_id: "file-readme",
+        path: "Files/notes/readme.txt",
+        title: "readme.txt",
+        location: "Work:File:notes/readme.txt",
+        note: "",
+        content_type: "text/plain",
+        text_content: "hello\nworld",
+        data_url: null,
+        size: 11,
+        latest_revision_id: "rev_text_01",
+        is_virtual: false,
+      },
+    });
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Page:Main");
+    await user.clear(locationInput);
+    await user.type(locationInput, "File:notes/readme.txt");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    expect(await screen.findByRole("heading", { name: "readme.txt" })).toBeInTheDocument();
+    expect(screen.getByText("内容")).toBeInTheDocument();
+    expect(screen.getByText(/hello\s+world/)).toBeInTheDocument();
   });
 
   it("サイドバーのフォルダークリックで未作成ページとして表示する", async () => {
@@ -441,6 +569,35 @@ function historyEntries(): FileHistoryEntry[] {
       path: "Pages/Main.md",
     },
   ];
+}
+
+function fileHistoryEntries(): FileHistoryEntry[] {
+  return [
+    {
+      revision_id: "rev_file_01",
+      object_id: "sha256:file",
+      created_at: "2026-01-03T00:00:00Z",
+      kind: "modified",
+      path: "Files/images/logo.png",
+    },
+  ];
+}
+
+function managedFile(path: string, note: string): ManagedFileContent {
+  return {
+    namespace_id: workNamespace.id,
+    file_id: "file-logo",
+    path,
+    title: lastPathPart(path),
+    location: `Work:File:${path.replace(/^Files\//, "")}`,
+    note,
+    content_type: "image/png",
+    text_content: null,
+    data_url: "data:image/png;base64,aW1hZ2U=",
+    size: 1234,
+    latest_revision_id: "rev_file_01",
+    is_virtual: false,
+  };
 }
 
 function lastPathPart(path: string) {

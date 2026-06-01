@@ -1,12 +1,4 @@
-import {
-  Box,
-  Divider,
-  IconButton,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-} from "@mui/material";
+import { Box, Divider, IconButton, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import {
   ArrowBackRounded,
   ArrowForwardRounded,

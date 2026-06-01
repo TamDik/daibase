@@ -1,9 +1,4 @@
-import {
-  Alert,
-  Box,
-  Snackbar,
-  Stack,
-} from "@mui/material";
+import { Alert, Box, Snackbar, Stack } from "@mui/material";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -11,19 +6,24 @@ import { useNavigate } from "react-router";
 import {
   type ContentTree,
   type FileHistoryEntry,
+  type ManagedFileContent,
   type NamespaceSummary,
   type OpenLocationResult,
   type PageContent,
   type SpecialPageSummary,
   createNamespace,
+  listFileHistory,
   listPageHistory,
   listNamespaces,
   openInitialLocation,
   openLocation,
   resolveMarkdownLinkStatus,
   savePage,
+  uploadFile,
+  writeFileNote,
 } from "../api/tauriCommands";
 import { AppHeader } from "../components/AppHeader";
+import { FileSurface, type FileMode } from "../components/FileSurface";
 import { PageSidebar } from "../components/PageSidebar";
 import { PageSurface, type PageMode } from "../components/PageSurface";
 import {
@@ -37,6 +37,12 @@ type PageView = {
   kind: "page";
   namespace: NamespaceSummary;
   page: PageContent;
+};
+
+type FileView = {
+  kind: "file";
+  namespace: NamespaceSummary;
+  file: ManagedFileContent;
 };
 
 type SpecialView =
@@ -63,6 +69,7 @@ export function HomePage() {
   const [activeNamespace, setActiveNamespace] = useState<NamespaceSummary | null>(null);
   const [sidebarContent, setSidebarContent] = useState<ContentTree | null>(null);
   const [pageView, setPageView] = useState<PageView | null>(null);
+  const [fileView, setFileView] = useState<FileView | null>(null);
   const [specialView, setSpecialView] = useState<SpecialView | null>({
     kind: "namespaces",
     location: namespacesLocation,
@@ -74,9 +81,13 @@ export function HomePage() {
   const [namespaceName, setNamespaceName] = useState("");
   const [rootPath, setRootPath] = useState("");
   const [pageMode, setPageMode] = useState<PageMode>("view");
+  const [fileMode, setFileMode] = useState<FileMode>("detail");
+  const [fileNoteDraft, setFileNoteDraft] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isFileUploading, setIsFileUploading] = useState(false);
+  const [isFileNoteSaving, setIsFileNoteSaving] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<FileHistoryEntry[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [selectedHistoryRevisionId, setSelectedHistoryRevisionId] = useState<string | null>(null);
@@ -111,6 +122,7 @@ export function HomePage() {
       setActiveNamespace(null);
       setSidebarContent(null);
       setPageView(null);
+      setFileView(null);
       setSpecialView({ kind: "namespaces", location: opened.location });
       setDraft("");
       setLocationInput(opened.location);
@@ -122,6 +134,7 @@ export function HomePage() {
       setActiveNamespace(opened.namespace);
       setSidebarContent(opened.content);
       setPageView(null);
+      setFileView(null);
       setSpecialView({
         kind: "specialPages",
         location: opened.location,
@@ -138,6 +151,7 @@ export function HomePage() {
       setActiveNamespace(opened.namespace);
       setSidebarContent(opened.content);
       setPageView(null);
+      setFileView(null);
       setSpecialView({
         kind: "pages",
         location: opened.location,
@@ -150,6 +164,26 @@ export function HomePage() {
       return nextLocation;
     }
 
+    if (opened.kind === "file") {
+      setActiveNamespace(opened.namespace);
+      setSidebarContent(opened.content);
+      setPageView(null);
+      setFileView({
+        kind: "file",
+        namespace: opened.namespace,
+        file: opened.file,
+      });
+      setSpecialView(null);
+      setDraft("");
+      setFileNoteDraft(opened.file.note);
+      setLocationInput(nextLocation);
+      setFileMode("detail");
+      setHistoryEntries([]);
+      setHistoryError(null);
+      setSelectedHistoryRevisionId(null);
+      return nextLocation;
+    }
+
     setActiveNamespace(opened.namespace);
     setSidebarContent(opened.content);
     setPageView({
@@ -157,6 +191,7 @@ export function HomePage() {
       namespace: opened.namespace,
       page: opened.page,
     });
+    setFileView(null);
     setSpecialView(null);
     setDraft(opened.page.content);
     setLocationInput(nextLocation);
@@ -391,14 +426,109 @@ export function HomePage() {
     }
   };
 
+  const handleFileModeChange = async (mode: FileMode) => {
+    if (!fileView) {
+      return;
+    }
+
+    if (mode === "detail") {
+      setFileMode("detail");
+      return;
+    }
+
+    setFileMode("history");
+    setHistoryError(null);
+    if (historyEntries.length > 0) {
+      return;
+    }
+
+    setIsHistoryLoading(true);
+    try {
+      const entries = await listFileHistory(fileView.namespace.id, fileView.file.path);
+      setHistoryEntries(entries);
+    } catch (caught) {
+      setHistoryError(errorMessage(caught));
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
+
+  const handleUploadFile = async () => {
+    if (!fileView) {
+      return;
+    }
+
+    setError(null);
+    try {
+      const selected = await open({
+        multiple: false,
+        title: fileView.file.is_virtual
+          ? "アップロードするファイルを選択"
+          : "置き換えるファイルを選択",
+      });
+      if (typeof selected !== "string") {
+        return;
+      }
+
+      setIsFileUploading(true);
+      const saved = await uploadFile(fileView.namespace.id, fileView.file.path, selected);
+      setFileView({
+        kind: "file",
+        namespace: saved.namespace,
+        file: saved.file,
+      });
+      setActiveNamespace(saved.namespace);
+      setSidebarContent(saved.content);
+      setFileNoteDraft(saved.file.note);
+      setLocationInput(saved.location);
+      setSavedMessage("保存しました");
+      if (fileMode === "history") {
+        const entries = await listFileHistory(saved.namespace.id, saved.file.path);
+        setHistoryEntries(entries);
+      }
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setIsFileUploading(false);
+    }
+  };
+
+  const handleSaveFileNote = async () => {
+    if (!fileView) {
+      return;
+    }
+
+    setError(null);
+    setIsFileNoteSaving(true);
+    try {
+      const file = await writeFileNote(fileView.namespace.id, fileView.file.path, fileNoteDraft);
+      setFileView({
+        kind: "file",
+        namespace: fileView.namespace,
+        file,
+      });
+      setFileNoteDraft(file.note);
+      setSavedMessage("保存しました");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setIsFileNoteSaving(false);
+    }
+  };
+
   const handleSelectHistoryEntry = (entry: FileHistoryEntry) => {
-    if (!pageView) {
+    if (!pageView && !fileView) {
       return;
     }
 
     setSelectedHistoryRevisionId(entry.revision_id);
+    const namespaceId = pageView?.namespace.id ?? fileView?.namespace.id;
+    const path = pageView?.page.path ?? fileView?.file.path;
+    if (!namespaceId || !path) {
+      return;
+    }
     routerNavigate(
-      `/history?namespaceId=${encodeURIComponent(pageView.namespace.id)}&path=${encodeURIComponent(pageView.page.path)}&revisionId=${encodeURIComponent(entry.revision_id)}`,
+      `/history?namespaceId=${encodeURIComponent(namespaceId)}&path=${encodeURIComponent(path)}&revisionId=${encodeURIComponent(entry.revision_id)}`,
     );
   };
 
@@ -532,6 +662,25 @@ export function HomePage() {
                 onOpenMarkdownLink={(target) => void handleOpenPageMarkdownLink(target)}
                 onResolveMarkdownLinkStatus={handleResolvePageMarkdownLinkStatus}
                 onSelectHistoryEntry={handleSelectHistoryEntry}
+                selectedHistoryRevisionId={selectedHistoryRevisionId}
+              />
+            )}
+
+            {fileView && (
+              <FileSurface
+                file={fileView.file}
+                historyEntries={historyEntries}
+                historyError={historyError}
+                isHistoryLoading={isHistoryLoading}
+                isNoteSaving={isFileNoteSaving}
+                isUploading={isFileUploading}
+                mode={fileMode}
+                noteDraft={fileNoteDraft}
+                onModeChange={(mode) => void handleFileModeChange(mode)}
+                onNoteChange={setFileNoteDraft}
+                onSaveNote={() => void handleSaveFileNote()}
+                onSelectHistoryEntry={handleSelectHistoryEntry}
+                onUpload={() => void handleUploadFile()}
                 selectedHistoryRevisionId={selectedHistoryRevisionId}
               />
             )}
