@@ -265,8 +265,6 @@ export function MarkdownWysiwygEditor({
       ref={rootRef}
       sx={{
         minHeight: "calc(100vh - 120px)",
-        px: 2,
-        py: 1.5,
         "& .milkdown": {
           "--crepe-color-background": "#ffffff",
           "--crepe-color-hover": "#f6f8fa",

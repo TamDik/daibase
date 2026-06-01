@@ -216,7 +216,7 @@ describe("HomePage", () => {
     expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue(
       "# Main\n\n[Draft](Draft)\n\n[Intro](Guide/Intro)",
     );
-    expect(screen.getByRole("tab", { name: "本文" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "閲覧" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "編集" })).not.toBeInTheDocument();
   });
 
@@ -230,9 +230,7 @@ describe("HomePage", () => {
     await user.click(screen.getByRole("button", { name: "開く" }));
 
     await waitFor(() => expect(locationInput).toHaveValue("Work:Page:Draft"));
-    expect(
-      screen.getByText("このページはまだ作成されていません。入力すると自動保存で作成されます。"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
   });
 
   it("サイドバーにページを階層構造で表示してクリックで遷移する", async () => {
@@ -267,9 +265,7 @@ describe("HomePage", () => {
     await user.click(within(guideItem).getByText("Guide"));
 
     expect(await screen.findByDisplayValue("Work:Page:Guide")).toBeInTheDocument();
-    expect(
-      screen.getByText("このページはまだ作成されていません。入力すると自動保存で作成されます。"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
     expect(pageList).toHaveTextContent("Intro");
   });
 

@@ -1,13 +1,15 @@
-import Alert from "@mui/material/Alert";
-import Box from "@mui/material/Box";
-import CircularProgress from "@mui/material/CircularProgress";
-import List from "@mui/material/List";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemText from "@mui/material/ListItemText";
-import Stack from "@mui/material/Stack";
-import Tab from "@mui/material/Tab";
-import Tabs from "@mui/material/Tabs";
-import Typography from "@mui/material/Typography";
+import {
+  Alert,
+  Box,
+  CircularProgress,
+  List,
+  ListItemButton,
+  ListItemText,
+  Stack,
+  Tab,
+  Tabs,
+  Typography,
+} from "@mui/material";
 
 import type { FileHistoryEntry } from "../api/tauriCommands";
 import { MarkdownWysiwygEditor } from "./MarkdownWysiwygEditor";
@@ -65,7 +67,7 @@ export function PageSurface({
             onChange={(_, value: PageMode) => onModeChange(value)}
             sx={{ minHeight: 36 }}
           >
-            <Tab label="本文" value="view" sx={{ minHeight: 36, px: 1.5, py: 0 }} />
+            <Tab label="閲覧" value="view" sx={{ minHeight: 36, px: 1.5, py: 0 }} />
             <Tab
               label="履歴"
               value="history"
@@ -86,23 +88,35 @@ export function PageSurface({
             selectedRevisionId={selectedHistoryRevisionId}
           />
         ) : (
-          <Box>
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: "center", justifyContent: "space-between", px: 2, py: 0.75 }}
-            >
-              {isVirtual ? (
-                <Alert severity="info" sx={{ flex: 1 }}>
-                  このページはまだ作成されていません。入力すると自動保存で作成されます。
-                </Alert>
-              ) : (
-                <Box />
-              )}
-              <Typography variant="caption" color="text.secondary" sx={{ flex: "0 0 auto" }}>
-                {isSaving ? "保存中" : "自動保存"}
-              </Typography>
-            </Stack>
+          <Box sx={{ position: "relative" }}>
+            {isVirtual && (
+              <Alert severity="info" sx={{ m: 2 }}>
+                このページはまだ作成されていません。
+              </Alert>
+            )}
+            {isSaving && (
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{
+                  alignItems: "center",
+                  bgcolor: "#f6f8fa",
+                  border: "1px solid #d0d7de",
+                  borderRadius: 3,
+                  m: 2,
+                  p: 1,
+                  position: "absolute",
+                  right: 0,
+                  top: 0,
+                  zIndex: 1,
+                }}
+              >
+                <CircularProgress size={16} />
+                <Typography variant="body2" color="text.secondary">
+                  保存中
+                </Typography>
+              </Stack>
+            )}
             <MarkdownWysiwygEditor
               key={editorKey}
               ariaLabel="Markdown"
