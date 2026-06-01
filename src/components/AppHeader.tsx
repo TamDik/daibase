@@ -7,9 +7,11 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
-import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
-import SubdirectoryArrowLeftRoundedIcon from "@mui/icons-material/SubdirectoryArrowLeftRounded";
+import {
+  ArrowBackRounded,
+  ArrowForwardRounded,
+  SubdirectoryArrowLeftRounded,
+} from "@mui/icons-material";
 
 export function AppHeader({
   canGoBack,
@@ -64,7 +66,7 @@ export function AppHeader({
             <Tooltip title="戻る">
               <span>
                 <IconButton aria-label="戻る" size="small" onClick={onGoBack} disabled={!canGoBack}>
-                  <ArrowBackRoundedIcon fontSize="small" />
+                  <ArrowBackRounded fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
@@ -76,7 +78,7 @@ export function AppHeader({
                   onClick={onGoForward}
                   disabled={!canGoForward}
                 >
-                  <ArrowForwardRoundedIcon fontSize="small" />
+                  <ArrowForwardRounded fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
@@ -117,7 +119,7 @@ export function AppHeader({
               onClick={onLocationSubmit}
               sx={{ borderRadius: 0, flex: "0 0 auto", height: 38, width: 42 }}
             >
-              <SubdirectoryArrowLeftRoundedIcon fontSize="small" />
+              <SubdirectoryArrowLeftRounded fontSize="small" />
             </IconButton>
           </Tooltip>
         </Box>

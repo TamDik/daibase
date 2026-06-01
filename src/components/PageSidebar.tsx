@@ -1,6 +1,8 @@
 import { Box, Typography } from "@mui/material";
-import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
-import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
+import {
+  ArticleOutlined,
+  FolderOutlined,
+} from "@mui/icons-material";
 import { RichTreeView } from "@mui/x-tree-view/RichTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import type { TreeItemProps } from "@mui/x-tree-view/TreeItem";
@@ -120,7 +122,7 @@ function PageTreeViewItem(props: TreeItemProps) {
               },
             }}
           >
-            {isFolderOnly ? <FolderOutlinedIcon /> : <ArticleOutlinedIcon />}
+            {isFolderOnly ? <FolderOutlined /> : <ArticleOutlined />}
           </Box>
           <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
             {props.label}

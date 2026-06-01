@@ -1,4 +1,4 @@
-import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
+import { ArrowBackRounded } from "@mui/icons-material";
 import {
   Alert,
   Box,
@@ -54,7 +54,7 @@ export function HistoryPage() {
         }}
       >
         <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
-          <Button startIcon={<ArrowBackRoundedIcon />} variant="text" onClick={() => navigate(-1)}>
+          <Button startIcon={<ArrowBackRounded />} variant="text" onClick={() => navigate(-1)}>
             戻る
           </Button>
           <Box sx={{ minWidth: 0 }}>
