@@ -100,9 +100,18 @@ export function MarkdownWysiwygEditor({
         px: 2,
         py: 1.5,
         "& .milkdown": {
+          "--crepe-color-background": "#ffffff",
+          "--crepe-color-on-background": "#1f2328",
+          "--crepe-color-outline": "#57606a",
+          "--crepe-color-selected": "#d8dee4",
           minHeight: "calc(100vh - 152px)",
         },
+        "& .ProseMirror-focused": {
+          "--prosemirror-virtual-cursor-color": "#1f2328",
+        },
         "& .ProseMirror": {
+          caretColor: "#1f2328",
+          color: "#1f2328",
           minHeight: "calc(100vh - 160px)",
           outline: "none",
         },
