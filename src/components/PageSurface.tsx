@@ -54,15 +54,24 @@ export function PageSurface({
         sx={{
           display: "flex",
           alignItems: "center",
-          px: 2,
-          py: 0.75,
+          px: 1.5,
+          pt: 0.5,
         }}
       >
         <Box sx={{ borderBottom: 1, borderColor: "divider", flex: 1 }}>
-          <Tabs value={mode} onChange={(_, value: PageMode) => onModeChange(value)}>
-            <Tab label="閲覧" value="view" />
-            <Tab label="履歴" value="history" disabled={isVirtual} />
-            <Tab label="編集" value="edit" />
+          <Tabs
+            value={mode}
+            onChange={(_, value: PageMode) => onModeChange(value)}
+            sx={{ minHeight: 36 }}
+          >
+            <Tab label="閲覧" value="view" sx={{ minHeight: 36, px: 1.5, py: 0 }} />
+            <Tab
+              label="履歴"
+              value="history"
+              disabled={isVirtual}
+              sx={{ minHeight: 36, px: 1.5, py: 0 }}
+            />
+            <Tab label="編集" value="edit" sx={{ minHeight: 36, px: 1.5, py: 0 }} />
           </Tabs>
         </Box>
       </Box>
@@ -70,7 +79,11 @@ export function PageSurface({
       <Box>
         {mode === "edit" ? (
           <Box>
-            <Stack direction="row" spacing={0.5} sx={{ justifyContent: "flex-end", px: 2, py: 1 }}>
+            <Stack
+              direction="row"
+              spacing={0.5}
+              sx={{ justifyContent: "flex-end", px: 1.5, py: 0.5 }}
+            >
               <Button variant="text" size="small" onClick={onCancelEditing} disabled={isSaving}>
                 キャンセル
               </Button>

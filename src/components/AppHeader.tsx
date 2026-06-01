@@ -61,12 +61,7 @@ export function AppHeader({
           <Stack direction="row" spacing={0.25} sx={{ px: 0.5 }}>
             <Tooltip title="戻る">
               <span>
-                <IconButton
-                  aria-label="戻る"
-                  size="small"
-                  onClick={onGoBack}
-                  disabled={!canGoBack}
-                >
+                <IconButton aria-label="戻る" size="small" onClick={onGoBack} disabled={!canGoBack}>
                   <ArrowBackRoundedIcon fontSize="small" />
                 </IconButton>
               </span>
