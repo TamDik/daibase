@@ -44,85 +44,42 @@ pub fn resolve_location(
         });
     }
 
-    let parts = location.split(':').collect::<Vec<_>>();
-    if parts.len() < 2 {
-        let namespace = require_namespace(source_namespace)?;
-        return Ok(ResolvedLocation::Page {
-            namespace: namespace.clone(),
-            page_path: normalize_page_path(location),
-            location: page_location_from_name(location, namespace),
-        });
-    }
+    let (namespace, path) = split_location(location, namespaces, source_namespace)?;
 
-    let first = parts[0];
-    let second = parts[1];
-    let has_namespace = first != "Page" && first != "File" && first != "Special";
-    let namespace = if has_namespace {
-        Some(find_namespace_by_name(namespaces, first)?)
-    } else {
-        source_namespace
-    };
-    let kind = if has_namespace { second } else { first };
-    let name = parts[if has_namespace { 2 } else { 1 }..].join(":");
-
-    if kind == "Special" && name == "Namespaces" {
+    if path == NAMESPACES_LOCATION {
         return Ok(ResolvedLocation::SpecialNamespaces {
             location: NAMESPACES_LOCATION.to_string(),
         });
     }
 
-    if kind == "Special" && name == "SpecialPages" {
-        let resolved_namespace = require_namespace(namespace)?;
+    if path == SPECIAL_PAGES_LOCATION || path == "Special:SpecialPages" {
         return Ok(ResolvedLocation::SpecialPages {
-            namespace: resolved_namespace.clone(),
-            location: format!("{}:{SPECIAL_PAGES_LOCATION}", resolved_namespace.name),
+            namespace: namespace.clone(),
+            location: format!("{}:{SPECIAL_PAGES_LOCATION}", namespace.name),
         });
     }
 
-    if kind == "Special" && name == "Pages" {
-        let resolved_namespace = require_namespace(namespace)?;
+    if path == "Special:Pages" {
         return Ok(ResolvedLocation::SpecialPagesList {
-            namespace: resolved_namespace.clone(),
-            location: format!("{}:Special:Pages", resolved_namespace.name),
+            namespace: namespace.clone(),
+            location: format!("{}:Special:Pages", namespace.name),
         });
     }
 
-    if kind == "Page" {
-        let resolved_namespace = require_namespace(namespace)?;
-        return Ok(ResolvedLocation::Page {
-            namespace: resolved_namespace.clone(),
-            page_path: normalize_page_path(&name),
-            location: page_location_from_name(&name, resolved_namespace),
-        });
+    let normalized_path = normalize_content_path(path);
+    if is_page_path(&normalized_path) {
+        Ok(ResolvedLocation::Page {
+            namespace: namespace.clone(),
+            page_path: normalized_path.clone(),
+            location: content_location(&normalized_path, namespace),
+        })
+    } else {
+        Ok(ResolvedLocation::File {
+            namespace: namespace.clone(),
+            file_path: normalized_path.clone(),
+            location: content_location(&normalized_path, namespace),
+        })
     }
-
-    if kind == "File" {
-        let resolved_namespace = require_namespace(namespace)?;
-        return Ok(ResolvedLocation::File {
-            namespace: resolved_namespace.clone(),
-            file_path: normalize_file_path(&name),
-            location: file_location_from_name(&name, resolved_namespace),
-        });
-    }
-
-    Err(format!("未対応のロケーションです: {location}"))
-}
-
-pub fn normalize_page_path(page_name: &str) -> String {
-    let without_prefix = page_name.strip_prefix("Page:").unwrap_or(page_name);
-    let without_extension = without_prefix
-        .trim()
-        .strip_suffix(".md")
-        .unwrap_or_else(|| without_prefix.trim());
-    format!("Pages/{without_extension}.md")
-}
-
-pub fn normalize_file_path(file_name: &str) -> String {
-    let without_file_prefix = file_name.strip_prefix("File:").unwrap_or(file_name);
-    let without_prefix = without_file_prefix
-        .strip_prefix("Files/")
-        .unwrap_or(without_file_prefix);
-    format!("Files/{}", without_prefix.trim())
 }
 
 pub fn resolve_markdown_link(
@@ -131,29 +88,99 @@ pub fn resolve_markdown_link(
     target: &str,
 ) -> String {
     if target.starts_with('#') {
-        return page_location_from_name(current_path, current_namespace);
+        return content_location(current_path, current_namespace);
     }
 
     let path_without_fragment = target.split('#').next().unwrap_or("");
     let path_without_query = path_without_fragment.split('?').next().unwrap_or("");
-    let parts = path_without_query.split(':').collect::<Vec<_>>();
 
-    if parts.len() >= 2
-        && (parts[0] == "Page"
-            || parts[0] == "File"
-            || parts[0] == "Special"
-            || parts[1] == "Page"
-            || parts[1] == "File"
-            || parts[1] == "Special")
-    {
+    if is_special_location(path_without_query) || has_namespace_prefix(path_without_query) {
         return path_without_query.to_string();
     }
 
+    let normalized_path = normalize_relative_content_path(current_path, path_without_query);
+    content_location(&normalized_path, current_namespace)
+}
+
+pub fn resolve_markdown_image(
+    current_namespace: &NamespaceSummary,
+    current_path: &str,
+    target: &str,
+) -> String {
+    resolve_markdown_link(current_namespace, current_path, target)
+}
+
+pub fn is_external_markdown_link_target(target: &str) -> bool {
+    if target.starts_with('#') {
+        return false;
+    }
+
+    let Some((scheme, _)) = target.split_once(':') else {
+        return false;
+    };
+
+    if matches!(scheme, "http" | "https" | "mailto") {
+        return true;
+    }
+
+    if is_special_location(target) || has_namespace_prefix(target) {
+        return false;
+    }
+
+    let mut chars = scheme.chars();
+    chars
+        .next()
+        .is_some_and(|first_char| first_char.is_ascii_alphabetic())
+        && chars
+            .all(|char| char.is_ascii_alphanumeric() || char == '+' || char == '.' || char == '-')
+}
+
+fn split_location<'a>(
+    location: &'a str,
+    namespaces: &'a [NamespaceSummary],
+    source_namespace: Option<&'a NamespaceSummary>,
+) -> Result<(&'a NamespaceSummary, &'a str), String> {
+    if let Some((namespace_name, path)) = location.split_once(':') {
+        if namespace_name == "Special" {
+            return Ok((require_namespace(source_namespace)?, location));
+        }
+
+        let namespace = find_namespace_by_name(namespaces, namespace_name)?;
+        return Ok((namespace, path));
+    }
+
+    Ok((require_namespace(source_namespace)?, location))
+}
+
+fn is_page_path(path: &str) -> bool {
+    path.ends_with(".md")
+}
+
+fn is_special_location(target: &str) -> bool {
+    target == NAMESPACES_LOCATION || target.starts_with("Special:")
+}
+
+fn has_namespace_prefix(target: &str) -> bool {
+    let Some((prefix, _)) = target.split_once(':') else {
+        return false;
+    };
+
+    prefix != "Special"
+}
+
+fn content_location(path: &str, namespace: &NamespaceSummary) -> String {
+    format!("{}:{}", namespace.name, normalize_content_path(path))
+}
+
+fn normalize_content_path(path: &str) -> String {
+    path.trim()
+        .replace('\\', "/")
+        .trim_start_matches('/')
+        .to_string()
+}
+
+fn normalize_relative_content_path(current_path: &str, target: &str) -> String {
     let mut current_parts = current_path
-        .strip_prefix("Pages/")
-        .unwrap_or(current_path)
-        .strip_suffix(".md")
-        .unwrap_or(current_path)
         .split('/')
         .map(ToString::to_string)
         .collect::<Vec<_>>();
@@ -162,7 +189,7 @@ pub fn resolve_markdown_link(
     let mut normalized_parts = Vec::new();
     for part in current_parts
         .into_iter()
-        .chain(path_without_query.split('/').map(ToString::to_string))
+        .chain(target.split('/').map(ToString::to_string))
     {
         if part.is_empty() || part == "." {
             continue;
@@ -176,89 +203,7 @@ pub fn resolve_markdown_link(
         normalized_parts.push(part);
     }
 
-    let normalized_path = normalized_parts.join("/");
-    if normalized_path.starts_with("Files/") {
-        file_location_from_name(&normalized_path, current_namespace)
-    } else {
-        page_location_from_name(&normalized_path, current_namespace)
-    }
-}
-
-pub fn resolve_markdown_image(
-    current_namespace: &NamespaceSummary,
-    current_path: &str,
-    target: &str,
-) -> String {
-    let path_without_fragment = target.split('#').next().unwrap_or("");
-    let path_without_query = path_without_fragment.split('?').next().unwrap_or("");
-    let parts = path_without_query.split(':').collect::<Vec<_>>();
-
-    if parts.len() >= 2
-        && (parts[0] == "Page"
-            || parts[0] == "File"
-            || parts[0] == "Special"
-            || parts[1] == "Page"
-            || parts[1] == "File"
-            || parts[1] == "Special")
-    {
-        return path_without_query.to_string();
-    }
-
-    let page_relative_location =
-        resolve_markdown_link(current_namespace, current_path, path_without_query);
-    if page_relative_location.contains(":File:") || page_relative_location.starts_with("File:") {
-        return page_relative_location;
-    }
-
-    let normalized_file_path = normalize_file_path(path_without_query.trim_start_matches('/'));
-    file_location_from_name(&normalized_file_path, current_namespace)
-}
-
-pub fn is_external_markdown_link_target(target: &str) -> bool {
-    if target.starts_with('#') {
-        return false;
-    }
-
-    let mut parts = target.split(':');
-    let first = parts.next().unwrap_or("");
-    let second = parts.next().unwrap_or("");
-    if first == "Page"
-        || first == "File"
-        || first == "Special"
-        || second == "Page"
-        || second == "File"
-        || second == "Special"
-    {
-        return false;
-    }
-
-    let Some((scheme, _)) = target.split_once(':') else {
-        return false;
-    };
-
-    let mut chars = scheme.chars();
-    chars
-        .next()
-        .is_some_and(|first_char| first_char.is_ascii_alphabetic())
-        && chars
-            .all(|char| char.is_ascii_alphanumeric() || char == '+' || char == '.' || char == '-')
-}
-
-fn page_location_from_name(page_name: &str, namespace: &NamespaceSummary) -> String {
-    let normalized_name = page_name
-        .strip_prefix("Pages/")
-        .unwrap_or(page_name)
-        .strip_suffix(".md")
-        .unwrap_or(page_name);
-    format!("{}:Page:{normalized_name}", namespace.name)
-}
-
-fn file_location_from_name(file_name: &str, namespace: &NamespaceSummary) -> String {
-    let without_files_prefix = file_name.strip_prefix("Files/").unwrap_or(file_name);
-    let normalized_name = without_files_prefix
-        .strip_prefix("File:")
-        .unwrap_or(without_files_prefix);
-    format!("{}:File:{normalized_name}", namespace.name)
+    normalized_parts.join("/")
 }
 
 fn require_namespace(namespace: Option<&NamespaceSummary>) -> Result<&NamespaceSummary, String> {
@@ -283,81 +228,61 @@ mod tests {
     #[test]
     fn resolves_page_location_without_namespace_from_source_namespace() {
         let namespaces = namespaces();
-        let resolved = resolve_location("Page:Notes", &namespaces, Some(&namespaces[1])).unwrap();
+        let resolved = resolve_location("Notes.md", &namespaces, Some(&namespaces[1])).unwrap();
 
         assert_eq!(
             resolved,
             ResolvedLocation::Page {
                 namespace: namespaces[1].clone(),
-                page_path: "Pages/Notes.md".to_string(),
-                location: "Work:Page:Notes".to_string(),
+                page_path: "Notes.md".to_string(),
+                location: "Work:Notes.md".to_string(),
             }
         );
     }
 
     #[test]
-    fn resolves_plain_page_name_from_source_namespace() {
-        let namespaces = namespaces();
-        let resolved = resolve_location("Notes", &namespaces, Some(&namespaces[0])).unwrap();
-
-        assert_eq!(
-            resolved,
-            ResolvedLocation::Page {
-                namespace: namespaces[0].clone(),
-                page_path: "Pages/Notes.md".to_string(),
-                location: "Main:Page:Notes".to_string(),
-            }
-        );
-    }
-
-    #[test]
-    fn resolves_explicit_namespace_page_location() {
+    fn resolves_file_location_without_namespace_from_source_namespace() {
         let namespaces = namespaces();
         let resolved =
-            resolve_location("Work:Page:Notes", &namespaces, Some(&namespaces[0])).unwrap();
-
-        assert_eq!(
-            resolved,
-            ResolvedLocation::Page {
-                namespace: namespaces[1].clone(),
-                page_path: "Pages/Notes.md".to_string(),
-                location: "Work:Page:Notes".to_string(),
-            }
-        );
-    }
-
-    #[test]
-    fn resolves_file_location_from_source_namespace() {
-        let namespaces = namespaces();
-        let resolved =
-            resolve_location("File:images/logo.png", &namespaces, Some(&namespaces[1])).unwrap();
+            resolve_location("images/logo.png", &namespaces, Some(&namespaces[1])).unwrap();
 
         assert_eq!(
             resolved,
             ResolvedLocation::File {
                 namespace: namespaces[1].clone(),
-                file_path: "Files/images/logo.png".to_string(),
-                location: "Work:File:images/logo.png".to_string(),
+                file_path: "images/logo.png".to_string(),
+                location: "Work:images/logo.png".to_string(),
             }
         );
     }
 
     #[test]
-    fn resolves_explicit_namespace_file_location() {
+    fn resolves_extensionless_location_as_file() {
         let namespaces = namespaces();
-        let resolved = resolve_location(
-            "Work:File:images/logo.png",
-            &namespaces,
-            Some(&namespaces[0]),
-        )
-        .unwrap();
+        let resolved = resolve_location("test", &namespaces, Some(&namespaces[1])).unwrap();
 
         assert_eq!(
             resolved,
             ResolvedLocation::File {
                 namespace: namespaces[1].clone(),
-                file_path: "Files/images/logo.png".to_string(),
-                location: "Work:File:images/logo.png".to_string(),
+                file_path: "test".to_string(),
+                location: "Work:test".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_explicit_namespace_content_location() {
+        let namespaces = namespaces();
+        let resolved =
+            resolve_location("Work:Notes.md", &namespaces, Some(&namespaces[0])).unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedLocation::Page {
+                namespace: namespaces[1].clone(),
+                page_path: "Notes.md".to_string(),
+                location: "Work:Notes.md".to_string(),
             }
         );
     }
@@ -410,7 +335,7 @@ mod tests {
     fn rejects_unknown_namespace() {
         let namespaces = namespaces();
         let error =
-            resolve_location("Unknown:Page:Main", &namespaces, Some(&namespaces[0])).unwrap_err();
+            resolve_location("Unknown:Main.md", &namespaces, Some(&namespaces[0])).unwrap_err();
 
         assert_eq!(error, "ネームスペースが見つかりません: Unknown");
     }
@@ -418,29 +343,9 @@ mod tests {
     #[test]
     fn rejects_missing_source_namespace() {
         let namespaces = namespaces();
-        let error = resolve_location("Page:Main", &namespaces, None).unwrap_err();
+        let error = resolve_location("Main.md", &namespaces, None).unwrap_err();
 
         assert_eq!(error, "ネームスペースを選択してください。");
-    }
-
-    #[test]
-    fn normalizes_page_path() {
-        assert_eq!(
-            normalize_page_path("Page:Guide/Intro.md"),
-            "Pages/Guide/Intro.md"
-        );
-    }
-
-    #[test]
-    fn normalizes_file_path() {
-        assert_eq!(
-            normalize_file_path("File:images/logo.png"),
-            "Files/images/logo.png"
-        );
-        assert_eq!(
-            normalize_file_path("Files/images/logo.png"),
-            "Files/images/logo.png"
-        );
     }
 
     #[test]
@@ -448,10 +353,10 @@ mod tests {
         assert_eq!(
             resolve_markdown_link(
                 &namespace("ns-work", "Work"),
-                "Pages/Guide/Intro.md",
-                "Install"
+                "Guide/Intro.md",
+                "Install.md"
             ),
-            "Work:Page:Guide/Install"
+            "Work:Guide/Install.md"
         );
     }
 
@@ -460,10 +365,10 @@ mod tests {
         assert_eq!(
             resolve_markdown_link(
                 &namespace("ns-work", "Work"),
-                "Pages/Guide/Intro/Start.md",
-                "../Install",
+                "Guide/Intro/Start.md",
+                "../Install.md",
             ),
-            "Work:Page:Guide/Install"
+            "Work:Guide/Install.md"
         );
     }
 
@@ -472,51 +377,31 @@ mod tests {
         assert_eq!(
             resolve_markdown_link(
                 &namespace("ns-work", "Work"),
-                "Pages/Guide/Intro.md",
-                "Install?tab=mac#setup",
+                "Guide/Intro.md",
+                "Install.md?tab=mac#setup",
             ),
-            "Work:Page:Guide/Install"
+            "Work:Guide/Install.md"
         );
     }
 
     #[test]
     fn resolves_fragment_only_markdown_link_to_current_page() {
         assert_eq!(
-            resolve_markdown_link(
-                &namespace("ns-work", "Work"),
-                "Pages/Guide/Intro.md",
-                "#setup",
-            ),
-            "Work:Page:Guide/Intro"
+            resolve_markdown_link(&namespace("ns-work", "Work"), "Guide/Intro.md", "#setup",),
+            "Work:Guide/Intro.md"
         );
     }
 
     #[test]
-    fn keeps_typed_markdown_links_for_location_resolution() {
+    fn keeps_namespaced_markdown_links_for_location_resolution() {
         let namespace = namespace("ns-work", "Work");
         assert_eq!(
-            resolve_markdown_link(&namespace, "Pages/Guide/Intro.md", "Page:Main"),
-            "Page:Main"
-        );
-        assert_eq!(
-            resolve_markdown_link(&namespace, "Pages/Guide/Intro.md", "File:images/logo.png"),
-            "File:images/logo.png"
-        );
-        assert_eq!(
-            resolve_markdown_link(&namespace, "Pages/Guide/Intro.md", "Main:Special:Pages"),
+            resolve_markdown_link(&namespace, "Guide/Intro.md", "Main:Special:Pages"),
             "Main:Special:Pages"
         );
-    }
-
-    #[test]
-    fn resolves_markdown_file_link_to_file_location() {
         assert_eq!(
-            resolve_markdown_link(
-                &namespace("ns-work", "Work"),
-                "Pages/Guide/Intro.md",
-                "../../Files/images/logo.png",
-            ),
-            "Work:File:images/logo.png"
+            resolve_markdown_link(&namespace, "Guide/Intro.md", "Work:images/logo.png"),
+            "Work:images/logo.png"
         );
     }
 
@@ -524,20 +409,12 @@ mod tests {
     fn resolves_markdown_image_target_to_file_location() {
         let namespace = namespace("ns-work", "Work");
         assert_eq!(
-            resolve_markdown_image(&namespace, "Pages/Guide/Intro.md", "test"),
-            "Work:File:test"
+            resolve_markdown_image(&namespace, "Guide/Intro.md", "test"),
+            "Work:Guide/test"
         );
         assert_eq!(
-            resolve_markdown_image(&namespace, "Pages/Guide/Intro.md", "File:test"),
-            "File:test"
-        );
-        assert_eq!(
-            resolve_markdown_image(&namespace, "Pages/Guide/Intro.md", "Files/images/logo.png"),
-            "Work:File:images/logo.png"
-        );
-        assert_eq!(
-            resolve_markdown_image(&namespace, "Pages/Guide/Intro.md", "../../Files/logo.png"),
-            "Work:File:logo.png"
+            resolve_markdown_image(&namespace, "Guide/Intro.md", "../images/logo.png"),
+            "Work:images/logo.png"
         );
     }
 
@@ -545,16 +422,10 @@ mod tests {
     fn classifies_external_markdown_link_targets() {
         assert!(is_external_markdown_link_target("https://example.com"));
         assert!(is_external_markdown_link_target("mailto:hello@example.com"));
-        assert!(!is_external_markdown_link_target("Page:Draft"));
-        assert!(!is_external_markdown_link_target("File:images/logo.png"));
         assert!(!is_external_markdown_link_target("Special:Pages"));
-        assert!(!is_external_markdown_link_target("Work:Page:Draft"));
-        assert!(!is_external_markdown_link_target(
-            "Work:File:images/logo.png"
-        ));
-        assert!(!is_external_markdown_link_target("Work:Special:Pages"));
-        assert!(!is_external_markdown_link_target("Guide/Intro"));
-        assert!(!is_external_markdown_link_target("../Draft"));
+        assert!(!is_external_markdown_link_target("Work:Draft.md"));
+        assert!(!is_external_markdown_link_target("Guide/Intro.md"));
+        assert!(!is_external_markdown_link_target("../Draft.md"));
         assert!(!is_external_markdown_link_target("#section"));
     }
 
@@ -567,8 +438,8 @@ mod tests {
             id: id.to_string(),
             name: name.to_string(),
             root_path: PathBuf::from(format!("/tmp/{name}")),
-            default_page: "Pages/Main.md".to_string(),
-            default_location: format!("{name}:Page:Main"),
+            default_page: "Main.md".to_string(),
+            default_location: format!("{name}:Main.md"),
             pages_location: format!("{name}:Special:Pages"),
             created_at: "2026-01-01T00:00:00Z".to_string(),
             updated_at: "2026-01-01T00:00:00Z".to_string(),

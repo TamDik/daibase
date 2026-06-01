@@ -253,10 +253,9 @@ mod tests {
         let root = std::env::temp_dir().join(format!("daibase-test-{}", Ulid::new()));
         fs::create_dir_all(&root).unwrap();
 
-        let first =
-            record_file_revision(&root, "namespace", "Pages/Main.md", b"# Main", "Save").unwrap();
+        let first = record_file_revision(&root, "namespace", "Main.md", b"# Main", "Save").unwrap();
         let second =
-            record_file_revision(&root, "namespace", "Pages/Main.md", b"# Main", "Save").unwrap();
+            record_file_revision(&root, "namespace", "Main.md", b"# Main", "Save").unwrap();
 
         assert_eq!(first.file_id, second.file_id);
         assert_eq!(first.object_id, second.object_id);

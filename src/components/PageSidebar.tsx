@@ -167,7 +167,7 @@ function buildTreeItems(pages: FileSummary[], folders: FolderSummary[], files: F
   }
 
   for (const file of files) {
-    upsertTreeItem(root, ["Files", ...file.display_path], {
+    upsertTreeItem(root, file.display_path.length > 0 ? file.display_path : [file.title], {
       id: `file:${file.location}`,
       label: file.title,
       location: file.location,

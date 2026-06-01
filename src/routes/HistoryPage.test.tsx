@@ -24,7 +24,7 @@ describe("HistoryPage", () => {
         object_id: "sha256:1234567890abcdef",
         created_at: "2026-01-02T00:00:00Z",
         kind: "modified",
-        path: "Pages/Main.md",
+        path: "Main.md",
       },
       previous_content: "# Main\n\nBefore\n\nSame\n",
       content: "# Main\n\nAfter\n\nSame\n",
@@ -90,7 +90,7 @@ describe("HistoryPage", () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter
-        initialEntries={["/history?namespaceId=ns-work&path=Pages%2FMain.md&revisionId=rev_02"]}
+        initialEntries={["/history?namespaceId=ns-work&path=Main.md&revisionId=rev_02"]}
       >
         <Routes>
           <Route path="/history" element={<HistoryPage />} />
@@ -98,7 +98,7 @@ describe("HistoryPage", () => {
       </MemoryRouter>,
     );
 
-    expect(api.readPageHistorySnapshot).toHaveBeenCalledWith("ns-work", "Pages/Main.md", "rev_02");
+    expect(api.readPageHistorySnapshot).toHaveBeenCalledWith("ns-work", "Main.md", "rev_02");
     expect(await screen.findByText("古い内容")).toBeInTheDocument();
     expect(screen.getByText("新しい内容")).toBeInTheDocument();
     expect(screen.getByText("Before")).toBeInTheDocument();

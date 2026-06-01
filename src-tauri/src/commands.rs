@@ -375,8 +375,6 @@ fn read_page_or_virtual(
             file_id: String::new(),
             path: path.to_string(),
             title: path
-                .strip_prefix("Pages/")
-                .unwrap_or(path)
                 .strip_suffix(".md")
                 .unwrap_or(path)
                 .split('/')

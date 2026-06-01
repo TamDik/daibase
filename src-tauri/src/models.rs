@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-pub const DEFAULT_PAGE_PATH: &str = "Pages/Main.md";
+pub const DEFAULT_PAGE_PATH: &str = "Main.md";
 pub const DEFAULT_MAIN_CONTENT: &str = "# Main\n\nここからコンテンツを作成します。\n";
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

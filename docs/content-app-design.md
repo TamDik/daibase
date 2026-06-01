@@ -16,7 +16,7 @@ Daibase は、ユーザーが選択したローカルフォルダ内の Markdown
 - `name`: ユーザーに表示する名前。
 - `root_path`: ユーザーが選択したローカル保存先フォルダ。
 - `created_at`, `updated_at`: メタデータの日時。
-- `default_page`: 常に `Main`。
+- `default_page`: 常に `Main.md`。
 
 ルール:
 
@@ -29,34 +29,33 @@ Daibase は、ユーザーが選択したローカルフォルダ内の Markdown
 
 ページはネームスペース内の Markdown ファイルです。
 
-- 最初に必ず存在するページは `Main` です。
-- `Main` の標準ファイル名は `Pages/Main.md` です。
-- Markdown ページはすべて `Pages/` 配下に保存します。
-- UI のロケーションバーやページ一覧では、`Page:Main` のように `Page:` 種別と名前をコロン区切りで表示します。
-- 他 namespace を明示する場合は `{namespace名}:Page:Main` のように、namespace 名、種別、名前をコロン区切りで表示します。namespace 名を省略した場合は、参照元と同じ namespace として解釈します。
-- ロケーションバーでは namespace 名を省略して入力できますが、画面遷移後の表示は常に `{namespace名}:Page:Main` のように namespace 名を含む完全なロケーションへ正規化します。
+- 最初に必ず存在するページは `Main.md` です。
+- Markdown ページは namespace root 直下の相対パスとして保存します。
+- `.md` 拡張子を持つ管理対象ファイルを Page として扱います。
+- UI のロケーションバーやページ一覧では、`Main.md` や `{namespace名}:Guide/Intro.md` のようにパスをそのまま表示します。
+- namespace 名を省略した場合は、参照元と同じ namespace として解釈します。
+- ロケーションバーでは namespace 名を省略して入力できますが、画面遷移後の表示は常に `{namespace名}:Main.md` のように namespace 名を含む完全なロケーションへ正規化します。
 - 特殊ページは `Special:Namespaces` や `{namespace名}:Special:Pages` のように表します。
-- ページタイトルは Markdown ファイルのパスに対応します。
+- ページタイトルは Markdown ファイルのパスに対応し、表示上は末尾の `.md` を省略できます。
 - リンク先のページがまだ存在しない場合でも、ナビゲーション先として扱えます。
 
 推奨する内部 ID:
 
 - ページやファイルには、作成時に `file_id` を割り当てます。
 - `file_id` はリネームや移動では変わらない永続 ID です。
-- `Pages/Main.md` や `Pages/Projects/Roadmap.md` のような相対パスは、現在の表示・保存場所を表す属性として扱います。
-- `Page:Main` や `Page:Projects/Roadmap` は UI 上のロケーション表現であり、実ファイルパスには使いません。
+- `Main.md` や `Projects/Roadmap.md` のような相対パスは、現在の表示・保存場所を表す属性として扱います。
+- `{namespace}:{path}` は UI 上のロケーション表現であり、namespace 名を除いた `{path}` が実ファイルパスに対応します。
 - 表示タイトルや相対パスはリネームや階層化で変わるため、履歴追跡用の永続 ID としては使いません。
 
 ### ファイル
 
 ファイルはネームスペース内で管理する Markdown ページ以外のファイルです。初期対象は画像ですが、PDF やその他の添付ファイルにも拡張できるようにします。
 
-- ファイル本体はデフォルトで `Files/` 配下に保存します。
-- UI のロケーションバーでは `File:images/logo.png` のように `File:` 種別と名前をコロン区切りで表示します。
-- `File:images/logo.png` は実ファイルパス `Files/images/logo.png` に対応します。`File:` ロケーション上の名前には `Files/` 接頭辞を含めません。
-- 他 namespace を明示する場合は `{namespace名}:File:images/logo.png` のように、namespace 名、種別、名前をコロン区切りで表示します。
-- ロケーションバーでは namespace 名を省略して入力できますが、画面遷移後の表示は常に `{namespace名}:File:images/logo.png` のように namespace 名を含む完全なロケーションへ正規化します。
-- `{namespace}:File:{name}` は専用のアップロードロケーションではなく、ファイル詳細ページとして扱います。
+- ファイル本体は namespace root 直下の相対パスとして保存します。
+- `.md` 以外の管理対象ファイルを File として扱います。拡張子のない `test` も File です。
+- UI のロケーションバーでは `images/logo.png` や `{namespace名}:images/logo.png` のようにパスをそのまま表示します。
+- ロケーションバーでは namespace 名を省略して入力できますが、画面遷移後の表示は常に `{namespace名}:images/logo.png` のように namespace 名を含む完全なロケーションへ正規化します。
+- `{namespace}:{path}` は専用のアップロードロケーションではなく、`.md` 以外であればファイル詳細ページとして扱います。
 - ファイル詳細ページでは、プレビュー、アップロードまたは置き換え、履歴、ファイルについての Markdown 説明を扱います。
 - ファイル説明は実ファイル本体とは分け、`file_id` に紐づくアプリ管理メタデータとして保存します。これによりリネームや移動後も説明を維持できます。説明の変更履歴は将来的に独自履歴ストアへ統合できるようにします。
 - Markdown からファイル本体を埋め込む場合は、可搬性を保つため通常の相対リンクで参照します。
@@ -85,12 +84,10 @@ Daibase は、ユーザーが選択したローカルフォルダ内の Markdown
     file_notes/
       file_01HX...md
     locks/
-  Pages/
-    Main.md
-    Example.md
-  Files/
-    images/
-      image.png
+  Main.md
+  Example.md
+  images/
+    image.png
 ```
 
 ### `.daibase/namespace.json`
@@ -102,7 +99,7 @@ Daibase は、ユーザーが選択したローカルフォルダ内の Markdown
   "schema_version": 1,
   "namespace_id": "uuid",
   "name": "Personal",
-  "default_page": "Pages/Main.md",
+  "default_page": "Main.md",
   "created_at": "2026-05-29T00:00:00Z"
 }
 ```
@@ -137,7 +134,7 @@ Daibase は、ユーザーが選択したローカルフォルダ内の Markdown
   "changes": [
     {
       "file_id": "file_01HX...",
-      "path": "Pages/Main.md",
+      "path": "Main.md",
       "kind": "modified",
       "content_type": "text/markdown",
       "object_id": "sha256:abcd...",
@@ -161,8 +158,8 @@ Daibase は、ユーザーが選択したローカルフォルダ内の Markdown
     {
       "file_id": "file_01HX...",
       "kind": "renamed",
-      "from_path": "Pages/Main.md",
-      "to_path": "Pages/Start.md",
+      "from_path": "Main.md",
+      "to_path": "Start.md",
       "object_id": "sha256:abcd..."
     }
   ]
@@ -177,22 +174,22 @@ Daibase は、ユーザーが選択したローカルフォルダ内の Markdown
 {
   "schema_version": 1,
   "file_id": "file_01HX...",
-  "current_path": "Pages/Start.md",
+  "current_path": "Start.md",
   "revisions": [
     {
       "revision_id": "rev_01HX...",
       "object_id": "sha256:abcd...",
       "created_at": "2026-05-29T00:00:00Z",
       "kind": "modified",
-      "path": "Pages/Main.md"
+      "path": "Main.md"
     },
     {
       "revision_id": "rev_01HY...",
       "object_id": "sha256:abcd...",
       "created_at": "2026-05-29T01:00:00Z",
       "kind": "renamed",
-      "from_path": "Pages/Main.md",
-      "to_path": "Pages/Start.md"
+      "from_path": "Main.md",
+      "to_path": "Start.md"
     }
   ]
 }
@@ -208,9 +205,9 @@ Daibase は、ユーザーが選択したローカルフォルダ内の Markdown
 {
   "schema_version": 1,
   "entries": {
-    "Pages/Start.md": "file_01HX...",
-    "Pages/Example.md": "file_01HZ...",
-    "Files/images/logo.png": "file_01JA..."
+    "Start.md": "file_01HX...",
+    "Example.md": "file_01HZ...",
+    "images/logo.png": "file_01JA..."
   }
 }
 ```
@@ -241,10 +238,10 @@ Daibase のバージョン管理は、ローカルファイルをそのまま使
 推奨挙動:
 
 - ネームスペース作成時に `.daibase/` と `.daibase/versions/` を初期化します。
-- `Pages/Main.md` がなければ作成します。
-- ネームスペースメタデータと `Pages/Main.md` の初期リビジョンを保存します。
+- `Main.md` がなければ作成します。
+- ネームスペースメタデータと `Main.md` の初期リビジョンを保存します。
 - 保存時は実ファイルを書き込み、同じ内容をオブジェクトストアへ保存し、リビジョンを追加します。
-- ファイルのアップロード時は、ファイルをネームスペース内の `Files/` 配下にコピーしてリビジョンを追加します。
+- ファイルのアップロード時は、指定された namespace root 直下の相対パスへコピーしてリビジョンを追加します。
 - 保存操作では内容が前回保存と同一でも新しいリビジョンを作成します。同じ内容のオブジェクトは重複保存せず、既存の `object_id` を参照します。
 
 リビジョンメッセージ例:
@@ -318,7 +315,7 @@ Markdown リンクは通常の Markdown として保持します。
 
 ```markdown
 [Roadmap](Roadmap.md)
-![Diagram](../Files/images/diagram.png)
+![Diagram](../images/diagram.png)
 ```
 
 Wiki 形式リンクは後から追加できます。
@@ -333,7 +330,7 @@ Wiki 形式リンクは後から追加できます。
 ナビゲーションルール:
 
 - 相対パスの Markdown リンクはアプリ内で開きます。
-- 既存ファイルへのリンクは `File:` ロケーションとしてファイル詳細ページを開きます。
+- `.md` 以外の既存ファイルへのリンクはファイル詳細ページを開きます。
 - 存在しない Markdown リンクは、リンク先ページの作成を提案します。
 - 外部の `http:` / `https:` リンクはアプリ外で開きます。
 
@@ -395,8 +392,7 @@ Markdown プレビューは自前パーサではなく、unified / remark / rehy
 
 ```text
 /
-/namespace/:namespaceId/page/*path
-/namespace/:namespaceId/file/*path
+/namespace/:namespaceId/content/*path
 /namespace/:namespaceId/history/*path
 ```
 
@@ -479,7 +475,7 @@ verify_history(namespace_id: String) -> HistoryCheckResult
 
 1. ネームスペース作成画面を表示します。
 2. ユーザーがネームスペース名を入力し、ローカルフォルダを選択します。
-3. アプリが `.daibase/`、`.daibase/versions/`、`Pages/Main.md` を初期化します。
+3. アプリが `.daibase/`、`.daibase/versions/`、`Main.md` を初期化します。
 4. アプリが `Main` の初期リビジョンを保存します。
 5. アプリが `Main` を開きます。
 
@@ -504,8 +500,8 @@ verify_history(namespace_id: String) -> HistoryCheckResult
 
 - ネームスペースの作成・オープン。
 - ストレージ構成の初期化。
-- `Pages/Main.md` の存在保証。
-- `Pages/Main.md` の読み書き。
+- `Main.md` の存在保証。
+- `Main.md` の読み書き。
 - 初期ネームスペースとページ更新のリビジョン保存。
 - ネームスペース選択、ページ一覧、エディタ、プレビューを持つ基本 React レイアウト。
 
@@ -524,16 +520,16 @@ verify_history(namespace_id: String) -> HistoryCheckResult
 
 - Markdown リンクを解析してナビゲーションする。
 - 存在しないリンク先ページを作成する。
-- `Pages/` 配下の Markdown ファイルを一覧する。
+- namespace root 配下の Markdown ファイルを一覧する。
 - ネストしたページパスに対応する。
 
 ### Milestone 4: ファイル
 
-- `File:` ロケーションを解決する。
-- 画像を `Files/` へアップロードする。
+- `.md` 以外のロケーションをファイルとして解決する。
+- 画像を namespace root 配下の相対パスへアップロードする。
 - プレビュー内で画像リンクを表示する。
-- `File:` ページでファイルプレビュー、アップロードまたは置き換え、履歴を表示する。
-- `File:` ページでファイルについての Markdown 説明を編集する。
+- ファイル詳細ページでファイルプレビュー、アップロードまたは置き換え、履歴を表示する。
+- ファイル詳細ページでファイルについての Markdown 説明を編集する。
 - ファイルの追加・置き換えをバージョン管理する。
 
 ### Milestone 5: 履歴
@@ -560,11 +556,12 @@ verify_history(namespace_id: String) -> HistoryCheckResult
 
 ## 決定済み方針
 
-- Markdown ページはすべて `Pages/` 配下に保存します。
-- Markdown 以外の管理ファイルはすべて `Files/` 配下に保存します。
+- Markdown ページは namespace root からの相対パスに保存します。
+- Markdown 以外の管理ファイルも namespace root からの相対パスに保存します。
+- `.md` の有無で Page と File を判定します。
 - 保存操作ごとに必ずリビジョンを作成します。
-- ファイルの UI ロケーションは `{namespace}:File:{name}` とします。
-- `File:` ページはアップロード専用ではなく、ファイル詳細、説明、履歴、置き換えを扱う通常ページとして扱います。
+- UI ロケーションは Page と File のどちらも `{namespace}:{path}` とします。
+- `.md` 以外の `{namespace}:{path}` はアップロード専用ではなく、ファイル詳細、説明、履歴、置き換えを扱う通常ページとして扱います。
 - wiki 形式リンクは初期リリースではサポートせず、将来的に導入します。
 - リビジョン ID には ULID を使います。
 - 大きなバイナリに対する圧縮、差分保存、履歴整理は行いません。
@@ -572,6 +569,6 @@ verify_history(namespace_id: String) -> HistoryCheckResult
 
 ## 推奨する初期実装
 
-まずは、ユーザーが選択したネームスペースフォルダ内に `.daibase/versions/` を作り、`Pages/Main.md` だけを明示的に保存できる Markdown エディタから始めます。保存時には実ファイルを書き込み、同じ内容を SHA-256 オブジェクトとして保存し、リビジョン JSON を追記します。
+まずは、ユーザーが選択したネームスペースフォルダ内に `.daibase/versions/` を作り、`Main.md` だけを明示的に保存できる Markdown エディタから始めます。保存時には実ファイルを書き込み、同じ内容を SHA-256 オブジェクトとして保存し、リビジョン JSON を追記します。
 
-この流れが安定したら、通常の Markdown リンクによるナビゲーションと、存在しないリンク先ページの作成を追加します。その後、`File:` ページと履歴ビューは同じネームスペース、パス検証、独自履歴ストアを再利用して実装できます。
+この流れが安定したら、通常の Markdown リンクによるナビゲーションと、存在しないリンク先ページの作成を追加します。その後、`.md` 以外のファイル詳細ページと履歴ビューは同じネームスペース、パス検証、独自履歴ストアを再利用して実装できます。

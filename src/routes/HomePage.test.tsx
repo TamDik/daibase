@@ -47,54 +47,54 @@ const workNamespace = namespace("ns-work", "Work");
 const contentTree: ContentTree = {
   folders: [
     {
-      path: "Pages/Guide.md",
+      path: "Guide.md",
       title: "Guide",
-      location: "Work:Page:Guide",
+      location: "Work:Guide.md",
       display_path: ["Guide"],
     },
     {
-      path: "Pages/aaa.md",
+      path: "aaa.md",
       title: "aaa",
-      location: "Work:Page:aaa",
+      location: "Work:aaa.md",
       display_path: ["aaa"],
     },
   ],
   pages: [
     {
       file_id: "file-main",
-      path: "Pages/Main.md",
+      path: "Main.md",
       title: "Main",
-      location: "Work:Page:Main",
+      location: "Work:Main.md",
       display_path: ["Main"],
     },
     {
       file_id: "file-guide",
-      path: "Pages/Guide/Intro.md",
+      path: "Guide/Intro.md",
       title: "Intro",
-      location: "Work:Page:Guide/Intro",
+      location: "Work:Guide/Intro.md",
       display_path: ["Guide", "Intro"],
     },
     {
       file_id: "file-aaa",
-      path: "Pages/aaa.md",
+      path: "aaa.md",
       title: "aaa",
-      location: "Work:Page:aaa",
+      location: "Work:aaa.md",
       display_path: ["aaa"],
     },
     {
       file_id: "file-aaa-bbb",
-      path: "Pages/aaa/bbb.md",
+      path: "aaa/bbb.md",
       title: "bbb",
-      location: "Work:Page:aaa/bbb",
+      location: "Work:aaa/bbb.md",
       display_path: ["aaa", "bbb"],
     },
   ],
   files: [
     {
       file_id: "file-logo",
-      path: "Files/images/logo.png",
+      path: "images/logo.png",
       title: "logo.png",
-      location: "Work:File:images/logo.png",
+      location: "Work:images/logo.png",
       display_path: ["images", "logo.png"],
     },
   ],
@@ -163,9 +163,9 @@ describe("HomePage", () => {
     vi.mocked(api.openInitialLocation).mockResolvedValue({
       kind: "page",
       namespace: workNamespace,
-      location: "Work:Page:Main",
+      location: "Work:Main.md",
       content: contentTree,
-      page: page("Pages/Main.md", "# Main\n\n[Draft](Draft)\n\n[Intro](Guide/Intro)"),
+      page: page("Main.md", "# Main\n\n[Draft](Draft.md)\n\n[Intro](Guide/Intro.md)"),
     });
     vi.mocked(api.openLocation).mockImplementation(async (location, sourceNamespaceId) => {
       const namespace = sourceNamespaceId === workNamespace.id ? workNamespace : workNamespace;
@@ -209,32 +209,32 @@ describe("HomePage", () => {
           content: contentTree,
         };
       }
-      if (location.startsWith("File:") || location.startsWith("Work:File:")) {
-        const fileName = location.replace(/^Work:/, "").replace(/^File:/, "");
+      const contentPath = location.replace(/^Work:/, "");
+      if (!contentPath.endsWith(".md") && !contentPath.startsWith("Special:")) {
         return {
           kind: "file",
           namespace,
-          location: `Work:File:${fileName}`,
+          location: `Work:${contentPath}`,
           content: contentTree,
-          file: managedFile(`Files/${fileName}`, "説明"),
+          file: managedFile(contentPath, "説明"),
         };
       }
-      const pageName = location.replace(/^Work:/, "").replace(/^Page:/, "");
-      const path = `Pages/${pageName}.md`;
+      const path = contentPath;
+      const pageName = path.replace(/\.md$/, "");
       return {
         kind: "page",
         namespace,
-        location: `Work:Page:${pageName}`,
+        location: `Work:${path}`,
         content: contentTree,
         page:
-          path === "Pages/Main.md"
-            ? page(path, "# Main\n\n[Draft](Draft)\n\n[Intro](Guide/Intro)")
+          path === "Main.md"
+            ? page(path, "# Main\n\n[Draft](Draft.md)\n\n[Intro](Guide/Intro.md)")
             : {
                 namespace_id: namespace.id,
                 file_id: "",
                 path,
                 title: lastPathPart(pageName),
-                location: `Work:Page:${pageName}`,
+                location: `Work:${path}`,
                 content: "",
                 latest_revision_id: null,
                 is_virtual: true,
@@ -242,10 +242,10 @@ describe("HomePage", () => {
       };
     });
     vi.mocked(api.resolveMarkdownLink).mockImplementation(async (_namespaceId, _path, target) => {
-      return `Work:Page:${target}`;
+      return `Work:${target}`;
     });
     vi.mocked(api.resolveMarkdownImage).mockResolvedValue({
-      location: "Work:File:images/logo.png",
+      location: "Work:images/logo.png",
       exists: true,
       is_internal: true,
       is_image: true,
@@ -255,8 +255,8 @@ describe("HomePage", () => {
     vi.mocked(api.resolveMarkdownLinkStatus).mockImplementation(
       async (_namespaceId, _path, target) => {
         return {
-          location: `Work:Page:${target}`,
-          exists: target === "Guide/Intro",
+          location: `Work:${target}`,
+          exists: target === "Guide/Intro.md",
           is_internal: true,
         };
       },
@@ -266,9 +266,9 @@ describe("HomePage", () => {
   it("初期表示では Main ページを namespace 付きロケーションで表示する", async () => {
     renderHomePage();
 
-    expect(await screen.findByDisplayValue("Work:Page:Main")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Work:Main.md")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue(
-      "# Main\n\n[Draft](Draft)\n\n[Intro](Guide/Intro)",
+      "# Main\n\n[Draft](Draft.md)\n\n[Intro](Guide/Intro.md)",
     );
     expect(screen.getByRole("tab", { name: "閲覧" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "WYSIWYG" })).toBeInTheDocument();
@@ -281,10 +281,10 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    await screen.findByDisplayValue("Work:Page:Main");
+    await screen.findByDisplayValue("Work:Main.md");
     await user.click(screen.getByRole("button", { name: "Markdownソース" }));
     const rawEditor = screen.getByRole("textbox", { name: "Markdownソース" });
-    expect(rawEditor).toHaveValue("# Main\n\n[Draft](Draft)\n\n[Intro](Guide/Intro)");
+    expect(rawEditor).toHaveValue("# Main\n\n[Draft](Draft.md)\n\n[Intro](Guide/Intro.md)");
 
     await user.clear(rawEditor);
     await user.type(rawEditor, "# Raw");
@@ -297,12 +297,12 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Page:Main");
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
     await user.clear(locationInput);
-    await user.type(locationInput, "Page:Draft");
+    await user.type(locationInput, "Draft.md");
     await user.click(screen.getByRole("button", { name: "開く" }));
 
-    await waitFor(() => expect(locationInput).toHaveValue("Work:Page:Draft"));
+    await waitFor(() => expect(locationInput).toHaveValue("Work:Draft.md"));
     expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
   });
 
@@ -316,7 +316,6 @@ describe("HomePage", () => {
     expect(pageList).toHaveTextContent("Intro");
     expect(within(pageList).getAllByText("aaa")).toHaveLength(1);
     expect(pageList).toHaveTextContent("bbb");
-    expect(pageList).toHaveTextContent("Files");
     expect(pageList).toHaveTextContent("logo.png");
 
     const aaaItem = screen.getByRole("treeitem", { name: "aaa bbb" });
@@ -327,19 +326,19 @@ describe("HomePage", () => {
 
     await user.click(within(pageList).getByText("Intro"));
 
-    expect(await screen.findByDisplayValue("Work:Page:Guide/Intro")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Work:Guide/Intro.md")).toBeInTheDocument();
   });
 
   it("File ロケーションでファイル詳細を表示して説明を保存する", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Page:Main");
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
     await user.clear(locationInput);
-    await user.type(locationInput, "File:images/logo.png");
+    await user.type(locationInput, "images/logo.png");
     await user.click(screen.getByRole("button", { name: "開く" }));
 
-    expect(await screen.findByDisplayValue("Work:File:images/logo.png")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Work:images/logo.png")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "logo.png" })).toBeInTheDocument();
     const note = screen.getByRole("textbox", { name: "ファイル説明" });
     expect(note).toHaveValue("説明");
@@ -351,7 +350,7 @@ describe("HomePage", () => {
     await waitFor(() =>
       expect(api.writeFileNote).toHaveBeenCalledWith(
         workNamespace.id,
-        "Files/images/logo.png",
+        "images/logo.png",
         "新しい説明",
       ),
     );
@@ -363,16 +362,16 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Page:Main");
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
     await user.clear(locationInput);
-    await user.type(locationInput, "File:images/logo.png");
+    await user.type(locationInput, "images/logo.png");
     await user.click(screen.getByRole("button", { name: "開く" }));
     await user.click(await screen.findByRole("button", { name: "置き換え" }));
 
     await waitFor(() =>
       expect(api.uploadFile).toHaveBeenCalledWith(
         workNamespace.id,
-        "Files/images/logo.png",
+        "images/logo.png",
         "/tmp/logo.png",
       ),
     );
@@ -382,14 +381,14 @@ describe("HomePage", () => {
     vi.mocked(api.openLocation).mockResolvedValueOnce({
       kind: "file",
       namespace: workNamespace,
-      location: "Work:File:notes/readme.txt",
+      location: "Work:notes/readme.txt",
       content: contentTree,
       file: {
         namespace_id: workNamespace.id,
         file_id: "file-readme",
-        path: "Files/notes/readme.txt",
+        path: "notes/readme.txt",
         title: "readme.txt",
-        location: "Work:File:notes/readme.txt",
+        location: "Work:notes/readme.txt",
         note: "",
         content_type: "text/plain",
         text_content: "hello\nworld",
@@ -402,9 +401,9 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Page:Main");
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
     await user.clear(locationInput);
-    await user.type(locationInput, "File:notes/readme.txt");
+    await user.type(locationInput, "notes/readme.txt");
     await user.click(screen.getByRole("button", { name: "開く" }));
 
     expect(await screen.findByRole("heading", { name: "readme.txt" })).toBeInTheDocument();
@@ -421,7 +420,7 @@ describe("HomePage", () => {
 
     await user.click(within(guideItem).getByText("Guide"));
 
-    expect(await screen.findByDisplayValue("Work:Page:Guide")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Work:Guide.md")).toBeInTheDocument();
     expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
     expect(pageList).toHaveTextContent("Intro");
   });
@@ -445,21 +444,21 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Page:Main");
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
     await user.clear(locationInput);
     await user.type(locationInput, "Special:Pages");
     await user.click(screen.getByRole("button", { name: "開く" }));
 
     expect(await screen.findByDisplayValue("Work:Special:Pages")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Pages" })).toBeInTheDocument();
-    expect(screen.getByText("Work:Page:Guide/Intro")).toBeInTheDocument();
+    expect(screen.getByText("Work:Guide/Intro.md")).toBeInTheDocument();
   });
 
   it("Special:SpecialPages で全ての Special ページを表示する", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Page:Main");
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
     await user.clear(locationInput);
     await user.type(locationInput, "Special:SpecialPages");
     await user.click(screen.getByRole("button", { name: "開く" }));
@@ -487,14 +486,14 @@ describe("HomePage", () => {
       await Promise.resolve();
     });
 
-    expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Pages/Main.md", "# Updated");
+    expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Main.md", "# Updated");
   });
 
   it("Markdown ソース表示でも編集停止後に自動保存する", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    await screen.findByDisplayValue("Work:Page:Main");
+    await screen.findByDisplayValue("Work:Main.md");
     await user.click(screen.getByRole("button", { name: "Markdownソース" }));
     const editor = screen.getByRole("textbox", { name: "Markdownソース" });
     vi.useFakeTimers();
@@ -507,7 +506,7 @@ describe("HomePage", () => {
       await Promise.resolve();
     });
 
-    expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Pages/Main.md", "# Raw Updated");
+    expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Main.md", "# Raw Updated");
   });
 
   it("画面遷移前に未保存の編集を保存する", async () => {
@@ -517,13 +516,13 @@ describe("HomePage", () => {
     const editor = await screen.findByRole("textbox", { name: "Markdown" });
     await user.clear(editor);
     await user.type(editor, "# Moving");
-    const locationInput = screen.getByDisplayValue("Work:Page:Main");
+    const locationInput = screen.getByDisplayValue("Work:Main.md");
     await user.clear(locationInput);
     await user.type(locationInput, "Special:Pages");
     await user.click(screen.getByRole("button", { name: "開く" }));
 
     await waitFor(() =>
-      expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Pages/Main.md", "# Moving"),
+      expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Main.md", "# Moving"),
     );
     expect(await screen.findByDisplayValue("Work:Special:Pages")).toBeInTheDocument();
   });
@@ -534,12 +533,12 @@ describe("HomePage", () => {
 
     await user.click(await screen.findByRole("tab", { name: "履歴" }));
 
-    expect(api.listPageHistory).toHaveBeenCalledWith(workNamespace.id, "Pages/Main.md");
+    expect(api.listPageHistory).toHaveBeenCalledWith(workNamespace.id, "Main.md");
     expect(await screen.findByRole("heading", { name: "編集履歴" })).toBeInTheDocument();
     expect(screen.queryByText("rev_02")).not.toBeInTheDocument();
     expect(screen.queryByText("sha256:second")).not.toBeInTheDocument();
     expect(screen.getByText("1234567890ab")).toHaveAttribute("title", "sha256:1234567890abcdef");
-    expect(screen.getAllByText("modified / Pages/Main.md")).toHaveLength(2);
+    expect(screen.getAllByText("modified / Main.md")).toHaveLength(2);
   });
 
   it("履歴行を選択すると履歴詳細ページへ遷移する", async () => {
@@ -550,7 +549,7 @@ describe("HomePage", () => {
     await user.click(await screen.findByRole("button", { name: /2026\/01\/02.*modified/ }));
 
     expect(await screen.findByTestId("current-route")).toHaveTextContent(
-      "/history?namespaceId=ns-work&path=Pages%2FMain.md&revisionId=rev_02",
+      "/history?namespaceId=ns-work&path=Main.md&revisionId=rev_02",
     );
   });
 });
@@ -580,8 +579,8 @@ function namespace(id: string, name: string): NamespaceSummary {
     id,
     name,
     root_path: `/tmp/${name}`,
-    default_page: "Pages/Main.md",
-    default_location: `${name}:Page:Main`,
+    default_page: "Main.md",
+    default_location: `${name}:Main.md`,
     pages_location: `${name}:Special:Pages`,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
@@ -593,8 +592,8 @@ function page(path: string, content: string): PageContent {
     namespace_id: workNamespace.id,
     file_id: `file-${path}`,
     path,
-    title: lastPathPart(path.replace(/^Pages\//, "").replace(/\.md$/, "")),
-    location: `Work:Page:${path.replace(/^Pages\//, "").replace(/\.md$/, "")}`,
+    title: lastPathPart(path.replace(/\.md$/, "")),
+    location: `Work:${path}`,
     content,
     latest_revision_id: "rev_01",
     is_virtual: false,
@@ -608,14 +607,14 @@ function historyEntries(): FileHistoryEntry[] {
       object_id: "sha256:1234567890abcdef",
       created_at: "2026-01-02T00:00:00Z",
       kind: "modified",
-      path: "Pages/Main.md",
+      path: "Main.md",
     },
     {
       revision_id: "rev_01",
       object_id: "sha256:first",
       created_at: "2026-01-01T00:00:00Z",
       kind: "modified",
-      path: "Pages/Main.md",
+      path: "Main.md",
     },
   ];
 }
@@ -627,7 +626,7 @@ function fileHistoryEntries(): FileHistoryEntry[] {
       object_id: "sha256:file",
       created_at: "2026-01-03T00:00:00Z",
       kind: "modified",
-      path: "Files/images/logo.png",
+      path: "images/logo.png",
     },
   ];
 }
@@ -638,7 +637,7 @@ function managedFile(path: string, note: string): ManagedFileContent {
     file_id: "file-logo",
     path,
     title: lastPathPart(path),
-    location: `Work:File:${path.replace(/^Files\//, "")}`,
+    location: `Work:${path}`,
     note,
     content_type: "image/png",
     text_content: null,

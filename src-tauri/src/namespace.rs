@@ -54,7 +54,7 @@ pub fn create_namespace(
         name: name.trim().to_string(),
         root_path,
         default_page: DEFAULT_PAGE_PATH.to_string(),
-        default_location: format!("{}:Page:Main", name.trim()),
+        default_location: format!("{}:{DEFAULT_PAGE_PATH}", name.trim()),
         pages_location: format!("{}:Special:Pages", name.trim()),
         created_at: now.clone(),
         updated_at: now.clone(),
@@ -524,19 +524,13 @@ fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTre
     let mut folders = Vec::new();
     let mut files = Vec::new();
     let path_index = read_path_index(&namespace.root_path)?;
-    collect_markdown_pages(
+    collect_content_entries(
         namespace,
         &namespace.root_path,
-        &namespace.root_path.join("Pages"),
+        &namespace.root_path,
         &path_index.entries,
         &mut pages,
         &mut folders,
-    )?;
-    collect_managed_files(
-        namespace,
-        &namespace.root_path,
-        &namespace.root_path.join("Files"),
-        &path_index.entries,
         &mut files,
     )?;
     pages.sort_by(|left, right| left.path.cmp(&right.path));
@@ -549,71 +543,13 @@ fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTre
     })
 }
 
-fn collect_markdown_pages(
+fn collect_content_entries(
     namespace: &NamespaceSummary,
     root: &Path,
     current: &Path,
     path_index: &std::collections::BTreeMap<String, String>,
     pages: &mut Vec<FileSummary>,
     folders: &mut Vec<FolderSummary>,
-) -> Result<(), String> {
-    if !current.exists() {
-        return Ok(());
-    }
-
-    for entry in fs::read_dir(current).map_err(to_error)? {
-        let entry = entry.map_err(to_error)?;
-        let path = entry.path();
-        if is_hidden_path_entry(&path) {
-            continue;
-        }
-        if path.is_dir() {
-            let folder_relative_path = path
-                .strip_prefix(root)
-                .map_err(to_error)?
-                .to_string_lossy()
-                .replace('\\', "/");
-            let folder_page_path = format!("{folder_relative_path}.md");
-            folders.push(FolderSummary {
-                path: folder_page_path.clone(),
-                title: page_title(&folder_page_path),
-                location: page_location(&folder_page_path, namespace),
-                display_path: page_display_path(&folder_page_path),
-            });
-            collect_markdown_pages(namespace, root, &path, path_index, pages, folders)?;
-            continue;
-        }
-
-        if path.extension().and_then(|value| value.to_str()) != Some("md") {
-            continue;
-        }
-
-        let relative_path = path
-            .strip_prefix(root)
-            .map_err(to_error)?
-            .to_string_lossy()
-            .replace('\\', "/");
-        let file_id = path_index
-            .get(&relative_path)
-            .cloned()
-            .unwrap_or_else(|| "".to_string());
-        pages.push(FileSummary {
-            file_id,
-            title: page_title(&relative_path),
-            location: page_location(&relative_path, namespace),
-            display_path: page_display_path(&relative_path),
-            path: relative_path,
-        });
-    }
-
-    Ok(())
-}
-
-fn collect_managed_files(
-    namespace: &NamespaceSummary,
-    root: &Path,
-    current: &Path,
-    path_index: &std::collections::BTreeMap<String, String>,
     files: &mut Vec<FileSummary>,
 ) -> Result<(), String> {
     if !current.exists() {
@@ -627,7 +563,22 @@ fn collect_managed_files(
             continue;
         }
         if path.is_dir() {
-            collect_managed_files(namespace, root, &path, path_index, files)?;
+            collect_content_entries(namespace, root, &path, path_index, pages, folders, files)?;
+            if !directory_contains_markdown_page(&path)? {
+                continue;
+            }
+            let folder_relative_path = path
+                .strip_prefix(root)
+                .map_err(to_error)?
+                .to_string_lossy()
+                .replace('\\', "/");
+            let folder_page_path = format!("{folder_relative_path}.md");
+            folders.push(FolderSummary {
+                path: folder_page_path.clone(),
+                title: page_title(&folder_page_path),
+                location: page_location(&folder_page_path, namespace),
+                display_path: page_display_path(&folder_page_path),
+            });
             continue;
         }
 
@@ -640,16 +591,44 @@ fn collect_managed_files(
             .get(&relative_path)
             .cloned()
             .unwrap_or_else(|| "".to_string());
-        files.push(FileSummary {
-            file_id,
-            title: file_title(&relative_path),
-            location: file_location(&relative_path, namespace),
-            display_path: file_display_path(&relative_path),
-            path: relative_path,
-        });
+        if relative_path.ends_with(".md") {
+            pages.push(FileSummary {
+                file_id,
+                title: page_title(&relative_path),
+                location: page_location(&relative_path, namespace),
+                display_path: page_display_path(&relative_path),
+                path: relative_path,
+            });
+        } else {
+            files.push(FileSummary {
+                file_id,
+                title: file_title(&relative_path),
+                location: file_location(&relative_path, namespace),
+                display_path: file_display_path(&relative_path),
+                path: relative_path,
+            });
+        }
     }
 
     Ok(())
+}
+
+fn directory_contains_markdown_page(path: &Path) -> Result<bool, String> {
+    for entry in fs::read_dir(path).map_err(to_error)? {
+        let entry = entry.map_err(to_error)?;
+        let path = entry.path();
+        if is_hidden_path_entry(&path) {
+            continue;
+        }
+        if path.is_dir() && directory_contains_markdown_page(&path)? {
+            return Ok(true);
+        }
+        if path.extension().and_then(|value| value.to_str()) == Some("md") {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }
 
 fn ensure_namespace_ready(namespace: &NamespaceSummary) -> Result<(), String> {
@@ -700,19 +679,15 @@ fn mark_last_active_namespace(app: &AppHandle, namespace_id: &str) -> Result<(),
 }
 
 fn display_page_name(path: &str) -> String {
-    path.strip_prefix("Pages/")
-        .unwrap_or(path)
-        .strip_suffix(".md")
-        .unwrap_or(path)
-        .to_string()
+    path.strip_suffix(".md").unwrap_or(path).to_string()
 }
 
 pub fn page_location(path: &str, namespace: &NamespaceSummary) -> String {
-    format!("{}:Page:{}", namespace.name, display_page_name(path))
+    format!("{}:{}", namespace.name, path)
 }
 
 pub fn file_location(path: &str, namespace: &NamespaceSummary) -> String {
-    format!("{}:File:{}", namespace.name, display_file_name(path))
+    format!("{}:{}", namespace.name, path)
 }
 
 fn fill_namespace_locations(namespace: &mut NamespaceSummary) {
@@ -796,7 +771,7 @@ fn read_managed_file_for_namespace(
 }
 
 fn display_file_name(path: &str) -> String {
-    path.strip_prefix("Files/").unwrap_or(path).to_string()
+    path.to_string()
 }
 
 fn file_title(path: &str) -> String {
@@ -963,15 +938,15 @@ mod tests {
     #[test]
     fn list_content_includes_folder_page_locations() {
         let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
-        fs::create_dir_all(root_path.join("Pages/Guide")).unwrap();
-        fs::write(root_path.join("Pages/Guide/Intro.md"), "# Intro\n").unwrap();
+        fs::create_dir_all(root_path.join("Guide")).unwrap();
+        fs::write(root_path.join("Guide/Intro.md"), "# Intro\n").unwrap();
 
         let namespace = NamespaceSummary {
             id: "ns-work".to_string(),
             name: "Work".to_string(),
             root_path: root_path.clone(),
             default_page: DEFAULT_PAGE_PATH.to_string(),
-            default_location: "Work:Page:Main".to_string(),
+            default_location: "Work:Main.md".to_string(),
             pages_location: "Work:Special:Pages".to_string(),
             created_at: "2026-06-01T00:00:00Z".to_string(),
             updated_at: "2026-06-01T00:00:00Z".to_string(),
@@ -980,10 +955,10 @@ mod tests {
         let content = list_content_for_namespace(&namespace).unwrap();
 
         assert_eq!(content.pages.len(), 1);
-        assert_eq!(content.pages[0].location, "Work:Page:Guide/Intro");
+        assert_eq!(content.pages[0].location, "Work:Guide/Intro.md");
         assert_eq!(content.folders.len(), 1);
-        assert_eq!(content.folders[0].path, "Pages/Guide.md");
-        assert_eq!(content.folders[0].location, "Work:Page:Guide");
+        assert_eq!(content.folders[0].path, "Guide.md");
+        assert_eq!(content.folders[0].location, "Work:Guide.md");
         assert_eq!(content.folders[0].display_path, vec!["Guide"]);
 
         fs::remove_dir_all(root_path).unwrap();
@@ -992,18 +967,18 @@ mod tests {
     #[test]
     fn list_content_includes_file_locations() {
         let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
-        fs::create_dir_all(root_path.join("Files/images")).unwrap();
-        fs::create_dir_all(root_path.join("Files/.hidden")).unwrap();
-        fs::write(root_path.join("Files/.DS_Store"), b"metadata").unwrap();
-        fs::write(root_path.join("Files/.hidden/secret.png"), b"secret").unwrap();
-        fs::write(root_path.join("Files/images/logo.png"), b"image").unwrap();
+        fs::create_dir_all(root_path.join("images")).unwrap();
+        fs::create_dir_all(root_path.join(".hidden")).unwrap();
+        fs::write(root_path.join(".DS_Store"), b"metadata").unwrap();
+        fs::write(root_path.join(".hidden/secret.png"), b"secret").unwrap();
+        fs::write(root_path.join("images/logo.png"), b"image").unwrap();
 
         let namespace = NamespaceSummary {
             id: "ns-work".to_string(),
             name: "Work".to_string(),
             root_path: root_path.clone(),
             default_page: DEFAULT_PAGE_PATH.to_string(),
-            default_location: "Work:Page:Main".to_string(),
+            default_location: "Work:Main.md".to_string(),
             pages_location: "Work:Special:Pages".to_string(),
             created_at: "2026-06-01T00:00:00Z".to_string(),
             updated_at: "2026-06-01T00:00:00Z".to_string(),
@@ -1012,8 +987,8 @@ mod tests {
         let content = list_content_for_namespace(&namespace).unwrap();
 
         assert_eq!(content.files.len(), 1);
-        assert_eq!(content.files[0].path, "Files/images/logo.png");
-        assert_eq!(content.files[0].location, "Work:File:images/logo.png");
+        assert_eq!(content.files[0].path, "images/logo.png");
+        assert_eq!(content.files[0].location, "Work:images/logo.png");
         assert_eq!(content.files[0].display_path, vec!["images", "logo.png"]);
 
         fs::remove_dir_all(root_path).unwrap();
@@ -1022,17 +997,17 @@ mod tests {
     #[test]
     fn list_content_ignores_hidden_pages_and_folders() {
         let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
-        fs::create_dir_all(root_path.join("Pages/.hidden")).unwrap();
-        fs::write(root_path.join("Pages/.DS_Store"), b"metadata").unwrap();
-        fs::write(root_path.join("Pages/.hidden/Secret.md"), "# Secret\n").unwrap();
-        fs::write(root_path.join("Pages/Main.md"), "# Main\n").unwrap();
+        fs::create_dir_all(root_path.join(".hidden")).unwrap();
+        fs::write(root_path.join(".DS_Store"), b"metadata").unwrap();
+        fs::write(root_path.join(".hidden/Secret.md"), "# Secret\n").unwrap();
+        fs::write(root_path.join("Main.md"), "# Main\n").unwrap();
 
         let namespace = NamespaceSummary {
             id: "ns-work".to_string(),
             name: "Work".to_string(),
             root_path: root_path.clone(),
             default_page: DEFAULT_PAGE_PATH.to_string(),
-            default_location: "Work:Page:Main".to_string(),
+            default_location: "Work:Main.md".to_string(),
             pages_location: "Work:Special:Pages".to_string(),
             created_at: "2026-06-01T00:00:00Z".to_string(),
             updated_at: "2026-06-01T00:00:00Z".to_string(),
@@ -1041,7 +1016,7 @@ mod tests {
         let content = list_content_for_namespace(&namespace).unwrap();
 
         assert_eq!(content.pages.len(), 1);
-        assert_eq!(content.pages[0].path, "Pages/Main.md");
+        assert_eq!(content.pages[0].path, "Main.md");
         assert!(content.folders.is_empty());
 
         fs::remove_dir_all(root_path).unwrap();
@@ -1050,22 +1025,22 @@ mod tests {
     #[test]
     fn page_exists_uses_namespace_file_path() {
         let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
-        fs::create_dir_all(root_path.join("Pages/Guide")).unwrap();
-        fs::write(root_path.join("Pages/Guide/Intro.md"), "# Intro\n").unwrap();
+        fs::create_dir_all(root_path.join("Guide")).unwrap();
+        fs::write(root_path.join("Guide/Intro.md"), "# Intro\n").unwrap();
 
         let namespace = NamespaceSummary {
             id: "ns-work".to_string(),
             name: "Work".to_string(),
             root_path: root_path.clone(),
             default_page: DEFAULT_PAGE_PATH.to_string(),
-            default_location: "Work:Page:Main".to_string(),
+            default_location: "Work:Main.md".to_string(),
             pages_location: "Work:Special:Pages".to_string(),
             created_at: "2026-06-01T00:00:00Z".to_string(),
             updated_at: "2026-06-01T00:00:00Z".to_string(),
         };
 
-        assert!(page_exists_for_namespace(&namespace, "Pages/Guide/Intro.md").unwrap());
-        assert!(!page_exists_for_namespace(&namespace, "Pages/Missing.md").unwrap());
+        assert!(page_exists_for_namespace(&namespace, "Guide/Intro.md").unwrap());
+        assert!(!page_exists_for_namespace(&namespace, "Missing.md").unwrap());
 
         fs::remove_dir_all(root_path).unwrap();
     }
@@ -1073,22 +1048,22 @@ mod tests {
     #[test]
     fn file_exists_uses_namespace_file_path() {
         let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
-        fs::create_dir_all(root_path.join("Files/images")).unwrap();
-        fs::write(root_path.join("Files/images/logo.png"), b"image").unwrap();
+        fs::create_dir_all(root_path.join("images")).unwrap();
+        fs::write(root_path.join("images/logo.png"), b"image").unwrap();
 
         let namespace = NamespaceSummary {
             id: "ns-work".to_string(),
             name: "Work".to_string(),
             root_path: root_path.clone(),
             default_page: DEFAULT_PAGE_PATH.to_string(),
-            default_location: "Work:Page:Main".to_string(),
+            default_location: "Work:Main.md".to_string(),
             pages_location: "Work:Special:Pages".to_string(),
             created_at: "2026-06-01T00:00:00Z".to_string(),
             updated_at: "2026-06-01T00:00:00Z".to_string(),
         };
 
-        assert!(file_exists_for_namespace(&namespace, "Files/images/logo.png").unwrap());
-        assert!(!file_exists_for_namespace(&namespace, "Files/images/missing.png").unwrap());
+        assert!(file_exists_for_namespace(&namespace, "images/logo.png").unwrap());
+        assert!(!file_exists_for_namespace(&namespace, "images/missing.png").unwrap());
 
         fs::remove_dir_all(root_path).unwrap();
     }

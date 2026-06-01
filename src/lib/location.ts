@@ -1,2 +1,2 @@
-export const defaultPageLocation = "Page:Main";
+export const defaultPageLocation = "Main.md";
 export const namespacesLocation = "Special:Namespaces";
