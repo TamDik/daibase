@@ -1,8 +1,8 @@
 use crate::location::ResolvedLocation;
 use crate::models::{
-    ContentTree, FileHistoryEntry, MarkdownLinkStatus, NamespaceDetail, NamespaceSummary,
-    OpenLocationResult, PageContent, PageHistorySnapshot, SaveFileResult, SavePageResult,
-    SaveResult, SpecialPageSummary,
+    ContentTree, FileHistoryEntry, MarkdownImageResolution, MarkdownLinkStatus, NamespaceDetail,
+    NamespaceSummary, OpenLocationResult, PageContent, PageHistorySnapshot, SaveFileResult,
+    SavePageResult, SaveResult, SpecialPageSummary,
 };
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -212,6 +212,63 @@ pub fn resolve_markdown_link_status(
         location,
         exists,
         is_internal: true,
+    })
+}
+
+#[tauri::command]
+pub fn resolve_markdown_image(
+    app: AppHandle,
+    current_namespace_id: String,
+    current_path: String,
+    target: String,
+) -> Result<MarkdownImageResolution, String> {
+    if crate::location::is_external_markdown_link_target(&target) {
+        return Ok(MarkdownImageResolution {
+            location: target,
+            exists: false,
+            is_internal: false,
+            is_image: false,
+            content_type: None,
+            data_url: None,
+        });
+    }
+
+    let namespaces = crate::namespace::list_namespaces(&app)?;
+    let current_namespace = namespaces
+        .iter()
+        .find(|namespace| namespace.id == current_namespace_id)
+        .ok_or_else(|| "ネームスペースが見つかりません。".to_string())?;
+    let location =
+        crate::location::resolve_markdown_image(current_namespace, &current_path, &target);
+    let resolved =
+        crate::location::resolve_location(&location, &namespaces, Some(current_namespace))?;
+
+    let ResolvedLocation::File {
+        namespace,
+        file_path,
+        ..
+    } = resolved
+    else {
+        return Ok(MarkdownImageResolution {
+            location,
+            exists: false,
+            is_internal: true,
+            is_image: false,
+            content_type: None,
+            data_url: None,
+        });
+    };
+
+    let file = crate::namespace::read_managed_file(&app, namespace.id, file_path)?;
+    let is_image = !file.is_virtual && file.content_type.starts_with("image/");
+
+    Ok(MarkdownImageResolution {
+        location,
+        exists: !file.is_virtual,
+        is_internal: true,
+        is_image,
+        content_type: Some(file.content_type),
+        data_url: if is_image { file.data_url } else { None },
     })
 }
 

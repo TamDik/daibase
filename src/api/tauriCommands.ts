@@ -129,6 +129,15 @@ export type MarkdownLinkStatus = {
   is_internal: boolean;
 };
 
+export type MarkdownImageResolution = {
+  location: string;
+  exists: boolean;
+  is_internal: boolean;
+  is_image: boolean;
+  content_type: string | null;
+  data_url: string | null;
+};
+
 export type ResolvedLocation =
   | {
       kind: "page";
@@ -306,6 +315,18 @@ export function resolveMarkdownLink(
   target: string,
 ) {
   return invoke<string>("resolve_markdown_link", {
+    currentNamespaceId,
+    currentPath,
+    target,
+  });
+}
+
+export function resolveMarkdownImage(
+  currentNamespaceId: string,
+  currentPath: string,
+  target: string,
+) {
+  return invoke<MarkdownImageResolution>("resolve_markdown_image", {
     currentNamespaceId,
     currentPath,
     target,

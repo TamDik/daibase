@@ -34,6 +34,7 @@ vi.mock("../api/tauriCommands", () => ({
   openLocation: vi.fn(),
   readPageHistorySnapshot: vi.fn(),
   resolveMarkdownLink: vi.fn(),
+  resolveMarkdownImage: vi.fn(),
   resolveMarkdownLinkStatus: vi.fn(),
   savePage: vi.fn(),
   uploadFile: vi.fn(),
@@ -113,6 +114,7 @@ describe("HomePage", () => {
     vi.mocked(api.openLocation).mockReset();
     vi.mocked(api.readPageHistorySnapshot).mockReset();
     vi.mocked(api.resolveMarkdownLink).mockReset();
+    vi.mocked(api.resolveMarkdownImage).mockReset();
     vi.mocked(api.resolveMarkdownLinkStatus).mockReset();
     vi.mocked(api.savePage).mockReset();
     vi.mocked(api.uploadFile).mockReset();
@@ -241,6 +243,14 @@ describe("HomePage", () => {
     });
     vi.mocked(api.resolveMarkdownLink).mockImplementation(async (_namespaceId, _path, target) => {
       return `Work:Page:${target}`;
+    });
+    vi.mocked(api.resolveMarkdownImage).mockResolvedValue({
+      location: "Work:File:images/logo.png",
+      exists: true,
+      is_internal: true,
+      is_image: true,
+      content_type: "image/png",
+      data_url: "data:image/png;base64,aW1hZ2U=",
     });
     vi.mocked(api.resolveMarkdownLinkStatus).mockImplementation(
       async (_namespaceId, _path, target) => {

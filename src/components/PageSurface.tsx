@@ -28,6 +28,7 @@ export function PageSurface({
   onDraftChange,
   onModeChange,
   onOpenMarkdownLink,
+  onResolveMarkdownImage,
   onResolveMarkdownLinkStatus,
   onSelectHistoryEntry,
   selectedHistoryRevisionId,
@@ -43,6 +44,14 @@ export function PageSurface({
   onDraftChange: (value: string) => void;
   onModeChange: (mode: PageMode) => void;
   onOpenMarkdownLink: (target: string) => void;
+  onResolveMarkdownImage: (target: string) => Promise<{
+    content_type: string | null;
+    data_url: string | null;
+    exists: boolean;
+    is_image: boolean;
+    is_internal: boolean;
+    location: string;
+  }>;
   onResolveMarkdownLinkStatus: (target: string) => Promise<{
     exists: boolean;
     is_internal: boolean;
@@ -124,6 +133,7 @@ export function PageSurface({
               value={draft}
               onChange={onDraftChange}
               onOpenMarkdownLink={onOpenMarkdownLink}
+              onResolveMarkdownImage={onResolveMarkdownImage}
               onResolveMarkdownLinkStatus={onResolveMarkdownLinkStatus}
             />
           </Box>

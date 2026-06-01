@@ -17,6 +17,7 @@ import {
   listNamespaces,
   openInitialLocation,
   openLocation,
+  resolveMarkdownImage,
   resolveMarkdownLinkStatus,
   savePage,
   uploadFile,
@@ -566,6 +567,24 @@ export function HomePage() {
     [navigate, pageView],
   );
 
+  const handleResolvePageMarkdownImage = useCallback(
+    (target: string) => {
+      if (!pageView) {
+        return Promise.resolve({
+          content_type: null,
+          data_url: null,
+          exists: false,
+          is_image: false,
+          is_internal: false,
+          location: target,
+        });
+      }
+
+      return resolveMarkdownImage(pageView.namespace.id, pageView.page.path, target);
+    },
+    [pageView],
+  );
+
   return (
     <Box
       sx={{
@@ -660,6 +679,7 @@ export function HomePage() {
                 onDraftChange={setDraft}
                 onModeChange={(mode) => void handleModeChange(mode)}
                 onOpenMarkdownLink={(target) => void handleOpenPageMarkdownLink(target)}
+                onResolveMarkdownImage={handleResolvePageMarkdownImage}
                 onResolveMarkdownLinkStatus={handleResolvePageMarkdownLinkStatus}
                 onSelectHistoryEntry={handleSelectHistoryEntry}
                 selectedHistoryRevisionId={selectedHistoryRevisionId}

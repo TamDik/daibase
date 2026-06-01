@@ -184,6 +184,36 @@ pub fn resolve_markdown_link(
     }
 }
 
+pub fn resolve_markdown_image(
+    current_namespace: &NamespaceSummary,
+    current_path: &str,
+    target: &str,
+) -> String {
+    let path_without_fragment = target.split('#').next().unwrap_or("");
+    let path_without_query = path_without_fragment.split('?').next().unwrap_or("");
+    let parts = path_without_query.split(':').collect::<Vec<_>>();
+
+    if parts.len() >= 2
+        && (parts[0] == "Page"
+            || parts[0] == "File"
+            || parts[0] == "Special"
+            || parts[1] == "Page"
+            || parts[1] == "File"
+            || parts[1] == "Special")
+    {
+        return path_without_query.to_string();
+    }
+
+    let page_relative_location =
+        resolve_markdown_link(current_namespace, current_path, path_without_query);
+    if page_relative_location.contains(":File:") || page_relative_location.starts_with("File:") {
+        return page_relative_location;
+    }
+
+    let normalized_file_path = normalize_file_path(path_without_query.trim_start_matches('/'));
+    file_location_from_name(&normalized_file_path, current_namespace)
+}
+
 pub fn is_external_markdown_link_target(target: &str) -> bool {
     if target.starts_with('#') {
         return false;
@@ -487,6 +517,27 @@ mod tests {
                 "../../Files/images/logo.png",
             ),
             "Work:File:images/logo.png"
+        );
+    }
+
+    #[test]
+    fn resolves_markdown_image_target_to_file_location() {
+        let namespace = namespace("ns-work", "Work");
+        assert_eq!(
+            resolve_markdown_image(&namespace, "Pages/Guide/Intro.md", "test"),
+            "Work:File:test"
+        );
+        assert_eq!(
+            resolve_markdown_image(&namespace, "Pages/Guide/Intro.md", "File:test"),
+            "File:test"
+        );
+        assert_eq!(
+            resolve_markdown_image(&namespace, "Pages/Guide/Intro.md", "Files/images/logo.png"),
+            "Work:File:images/logo.png"
+        );
+        assert_eq!(
+            resolve_markdown_image(&namespace, "Pages/Guide/Intro.md", "../../Files/logo.png"),
+            "Work:File:logo.png"
         );
     }
 

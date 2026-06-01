@@ -147,6 +147,16 @@ pub struct MarkdownLinkStatus {
 }
 
 #[derive(Debug, Serialize)]
+pub struct MarkdownImageResolution {
+    pub location: String,
+    pub exists: bool,
+    pub is_internal: bool,
+    pub is_image: bool,
+    pub content_type: Option<String>,
+    pub data_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum OpenLocationResult {
     Page {

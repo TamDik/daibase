@@ -9,10 +9,20 @@ type MarkdownLinkStatus = {
   location: string;
 };
 
+type MarkdownImageResolution = {
+  content_type: string | null;
+  data_url: string | null;
+  exists: boolean;
+  is_image: boolean;
+  is_internal: boolean;
+  location: string;
+};
+
 export function MarkdownWysiwygEditor({
   ariaLabel,
   disabled,
   onOpenMarkdownLink,
+  onResolveMarkdownImage,
   onResolveMarkdownLinkStatus,
   value,
   onChange,
@@ -20,6 +30,7 @@ export function MarkdownWysiwygEditor({
   ariaLabel: string;
   disabled: boolean;
   onOpenMarkdownLink: (target: string) => void;
+  onResolveMarkdownImage: (target: string) => Promise<MarkdownImageResolution>;
   onResolveMarkdownLinkStatus: (target: string) => Promise<MarkdownLinkStatus>;
   value: string;
   onChange: (value: string) => void;
@@ -30,9 +41,11 @@ export function MarkdownWysiwygEditor({
   const disabledRef = useRef(disabled);
   const onChangeRef = useRef(onChange);
   const onOpenMarkdownLinkRef = useRef(onOpenMarkdownLink);
+  const onResolveMarkdownImageRef = useRef(onResolveMarkdownImage);
   const onResolveMarkdownLinkStatusRef = useRef(onResolveMarkdownLinkStatus);
   const linkStatusFrameRef = useRef<number | null>(null);
   const linkStatusRunIdRef = useRef(0);
+  const imageResolutionCacheRef = useRef(new Map<string, MarkdownImageResolution>());
   const linkStatusCacheRef = useRef(new Map<string, MarkdownLinkStatus>());
   const isTest = import.meta.env.MODE === "test";
 
@@ -43,6 +56,10 @@ export function MarkdownWysiwygEditor({
   useEffect(() => {
     onOpenMarkdownLinkRef.current = onOpenMarkdownLink;
   }, [onOpenMarkdownLink]);
+
+  useEffect(() => {
+    onResolveMarkdownImageRef.current = onResolveMarkdownImage;
+  }, [onResolveMarkdownImage]);
 
   useEffect(() => {
     disabledRef.current = disabled;
@@ -66,6 +83,10 @@ export function MarkdownWysiwygEditor({
         return Array.from(root.querySelectorAll<HTMLAnchorElement>(".ProseMirror a[href]"));
       };
 
+      const currentMarkdownImages = (root: ParentNode) => {
+        return Array.from(root.querySelectorAll<HTMLImageElement>(".ProseMirror img[src]"));
+      };
+
       const matchingCurrentAnchors = (target: string) => {
         const root = rootRef.current;
         if (!root) {
@@ -75,6 +96,15 @@ export function MarkdownWysiwygEditor({
         return currentMarkdownAnchors(root).filter(
           (anchor) => anchor.getAttribute("href") === target,
         );
+      };
+
+      const matchingCurrentImages = (target: string) => {
+        const root = rootRef.current;
+        if (!root) {
+          return [];
+        }
+
+        return currentMarkdownImages(root).filter((image) => markdownImageTarget(image) === target);
       };
 
       const markLinkStatusUnknown = (anchor: HTMLAnchorElement) => {
@@ -98,6 +128,33 @@ export function MarkdownWysiwygEditor({
         }
       };
 
+      const markImageResolutionUnknown = (image: HTMLImageElement) => {
+        image.dataset.imageInternal = "unknown";
+        image.dataset.imageExists = "unknown";
+      };
+
+      const applyImageResolution = (
+        image: HTMLImageElement,
+        target: string,
+        resolution: MarkdownImageResolution,
+      ) => {
+        image.dataset.markdownImageTarget = target;
+        image.dataset.imageInternal = resolution.is_internal ? "true" : "false";
+        image.dataset.imageExists = resolution.exists ? "true" : "false";
+
+        if (resolution.is_image && resolution.data_url) {
+          image.setAttribute("src", resolution.data_url);
+          image.removeAttribute("title");
+          return;
+        }
+
+        if (resolution.is_internal) {
+          image.title = resolution.exists
+            ? "画像として表示できないファイルです。"
+            : "ファイルが見つかりません。";
+        }
+      };
+
       const applyLinkStatusToCurrentAnchors = (target: string, status: MarkdownLinkStatus) => {
         for (const anchor of matchingCurrentAnchors(target)) {
           applyLinkStatus(anchor, status);
@@ -107,6 +164,21 @@ export function MarkdownWysiwygEditor({
       const applyUnknownStatusToCurrentAnchors = (target: string) => {
         for (const anchor of matchingCurrentAnchors(target)) {
           markLinkStatusUnknown(anchor);
+        }
+      };
+
+      const applyImageResolutionToCurrentImages = (
+        target: string,
+        resolution: MarkdownImageResolution,
+      ) => {
+        for (const image of matchingCurrentImages(target)) {
+          applyImageResolution(image, target, resolution);
+        }
+      };
+
+      const applyUnknownResolutionToCurrentImages = (target: string) => {
+        for (const image of matchingCurrentImages(target)) {
+          markImageResolutionUnknown(image);
         }
       };
 
@@ -131,6 +203,25 @@ export function MarkdownWysiwygEditor({
         targets.add(target);
       }
 
+      const images = currentMarkdownImages(root);
+      const imageTargets = new Set<string>();
+      for (const image of images) {
+        const target = markdownImageTarget(image);
+        if (!target || target.startsWith("data:")) {
+          continue;
+        }
+
+        const cachedResolution = imageResolutionCacheRef.current.get(target);
+        if (cachedResolution) {
+          applyImageResolution(image, target, cachedResolution);
+        } else {
+          image.dataset.markdownImageTarget = target;
+          markImageResolutionUnknown(image);
+        }
+
+        imageTargets.add(target);
+      }
+
       for (const target of targets) {
         void onResolveMarkdownLinkStatusRef
           .current(target)
@@ -148,6 +239,26 @@ export function MarkdownWysiwygEditor({
             }
             linkStatusCacheRef.current.delete(target);
             applyUnknownStatusToCurrentAnchors(target);
+          });
+      }
+
+      for (const target of imageTargets) {
+        void onResolveMarkdownImageRef
+          .current(target)
+          .then((resolution) => {
+            if (runId !== linkStatusRunIdRef.current) {
+              return;
+            }
+
+            imageResolutionCacheRef.current.set(target, resolution);
+            applyImageResolutionToCurrentImages(target, resolution);
+          })
+          .catch(() => {
+            if (runId !== linkStatusRunIdRef.current) {
+              return;
+            }
+            imageResolutionCacheRef.current.delete(target);
+            applyUnknownResolutionToCurrentImages(target);
           });
       }
     });
@@ -303,4 +414,8 @@ export function MarkdownWysiwygEditor({
       }}
     />
   );
+}
+
+function markdownImageTarget(image: HTMLImageElement) {
+  return image.dataset.markdownImageTarget ?? image.getAttribute("src") ?? "";
 }
