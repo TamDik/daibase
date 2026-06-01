@@ -3,7 +3,8 @@ import Box from "@mui/material/Box";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 
 import {
   type ContentTree,
@@ -11,15 +12,12 @@ import {
   type NamespaceSummary,
   type OpenLocationResult,
   type PageContent,
-  type PageHistorySnapshot,
   type SpecialPageSummary,
   createNamespace,
   listPageHistory,
   listNamespaces,
   openInitialLocation,
   openLocation,
-  readPageHistorySnapshot,
-  resolveMarkdownLink,
   savePage,
 } from "../api/tauriCommands";
 import { AppHeader } from "../components/AppHeader";
@@ -57,6 +55,7 @@ type SpecialView =
     };
 
 export function HomePage() {
+  const routerNavigate = useNavigate();
   const [namespaces, setNamespaces] = useState<NamespaceSummary[]>([]);
   const [activeNamespace, setActiveNamespace] = useState<NamespaceSummary | null>(null);
   const [sidebarContent, setSidebarContent] = useState<ContentTree | null>(null);
@@ -78,20 +77,28 @@ export function HomePage() {
   const [historyEntries, setHistoryEntries] = useState<FileHistoryEntry[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [selectedHistoryRevisionId, setSelectedHistoryRevisionId] = useState<string | null>(null);
-  const [historySnapshot, setHistorySnapshot] = useState<PageHistorySnapshot | null>(null);
-  const [historySnapshotError, setHistorySnapshotError] = useState<string | null>(null);
-  const [isHistorySnapshotLoading, setIsHistorySnapshotLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const pageViewRef = useRef<PageView | null>(null);
+  const draftRef = useRef("");
+  const isSavingRef = useRef(false);
 
   const page = pageView?.page ?? null;
-  const isDirty = page !== null && pageMode === "edit" && page.content !== draft;
+  const isDirty = page !== null && page.content !== draft;
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex >= 0 && historyIndex < history.length - 1;
-  const existingPageLocations = useMemo(
-    () => new Set(sidebarContent?.pages.map((item) => item.location) ?? []),
-    [sidebarContent],
-  );
+
+  useEffect(() => {
+    pageViewRef.current = pageView;
+  }, [pageView]);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
+    isSavingRef.current = isSaving;
+  }, [isSaving]);
 
   const applyOpenedLocation = useCallback((opened: OpenLocationResult) => {
     const nextLocation = opened.location;
@@ -154,10 +161,69 @@ export function HomePage() {
     setHistoryEntries([]);
     setHistoryError(null);
     setSelectedHistoryRevisionId(null);
-    setHistorySnapshot(null);
-    setHistorySnapshotError(null);
     return nextLocation;
   }, []);
+
+  const saveCurrentDraft = useCallback(
+    async ({ showMessage = false }: { showMessage?: boolean } = {}) => {
+      const currentPageView = pageViewRef.current;
+      const nextContent = draftRef.current;
+
+      if (!currentPageView || currentPageView.page.content === nextContent) {
+        return true;
+      }
+
+      if (isSavingRef.current) {
+        return false;
+      }
+
+      isSavingRef.current = true;
+      setIsSaving(true);
+      setError(null);
+      if (showMessage) {
+        setSavedMessage(null);
+      }
+
+      try {
+        const saved = await savePage(
+          currentPageView.namespace.id,
+          currentPageView.page.path,
+          nextContent,
+        );
+        setPageView({
+          kind: "page",
+          namespace: saved.namespace,
+          page: saved.page,
+        });
+        pageViewRef.current = {
+          kind: "page",
+          namespace: saved.namespace,
+          page: saved.page,
+        };
+        setActiveNamespace(saved.namespace);
+        setSidebarContent(saved.content);
+        setDraft(saved.page.content);
+        draftRef.current = saved.page.content;
+        setLocationInput(saved.location);
+        if (showMessage) {
+          setSavedMessage("保存しました");
+        }
+        if (pageMode === "history") {
+          const entries = await listPageHistory(saved.namespace.id, saved.page.path);
+          setHistoryEntries(entries);
+          setSelectedHistoryRevisionId(null);
+        }
+        return true;
+      } catch (caught) {
+        setError(errorMessage(caught));
+        return false;
+      } finally {
+        isSavingRef.current = false;
+        setIsSaving(false);
+      }
+    },
+    [pageMode],
+  );
 
   const navigate = useCallback(
     async (
@@ -165,7 +231,7 @@ export function HomePage() {
       mode: "push" | "replace" | "history" = "push",
       sourceNamespace = activeNamespace,
     ) => {
-      if (isDirty && !window.confirm("未保存の変更を破棄して移動しますか？")) {
+      if (!(await saveCurrentDraft())) {
         return;
       }
 
@@ -187,8 +253,20 @@ export function HomePage() {
         return next;
       });
     },
-    [activeNamespace, applyOpenedLocation, historyIndex, isDirty],
+    [activeNamespace, applyOpenedLocation, historyIndex, saveCurrentDraft],
   );
+
+  useEffect(() => {
+    if (!isDirty || pageMode !== "view") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void saveCurrentDraft();
+    }, 3000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [draft, isDirty, pageMode, saveCurrentDraft]);
 
   useEffect(() => {
     const loadInitialState = async () => {
@@ -279,77 +357,20 @@ export function HomePage() {
     }
   };
 
-  const handleStartEditing = () => {
-    setDraft(page?.content ?? "");
-    setSavedMessage(null);
-    setPageMode("edit");
-  };
-
-  const handleCancelEditing = () => {
-    if (isDirty && !window.confirm("未保存の変更を破棄しますか？")) {
-      return;
-    }
-
-    setDraft(page?.content ?? "");
-    setPageMode("view");
-  };
-
-  const handleSave = async () => {
-    if (!pageView) {
-      return;
-    }
-
-    setIsSaving(true);
-    setError(null);
-    setSavedMessage(null);
-    try {
-      const saved = await savePage(pageView.namespace.id, pageView.page.path, draft);
-      setPageView({
-        kind: "page",
-        namespace: saved.namespace,
-        page: saved.page,
-      });
-      setActiveNamespace(saved.namespace);
-      setSidebarContent(saved.content);
-      setDraft(saved.page.content);
-      setLocationInput(saved.location);
-      setPageMode("view");
-      setSavedMessage("保存しました");
-      if (pageMode === "history") {
-        const entries = await listPageHistory(saved.namespace.id, saved.page.path);
-        setHistoryEntries(entries);
-        setSelectedHistoryRevisionId(null);
-        setHistorySnapshot(null);
-        setHistorySnapshotError(null);
-      }
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleModeChange = async (mode: PageMode) => {
     if (!pageView) {
       return;
     }
 
-    if (mode !== "edit" && isDirty && !window.confirm("未保存の変更を破棄しますか？")) {
-      return;
-    }
-
-    if (mode === "edit") {
-      handleStartEditing();
-      return;
-    }
-
     if (mode === "view") {
-      setDraft(pageView.page.content);
       setPageMode("view");
       return;
     }
 
-    setDraft(pageView.page.content);
+    if (!(await saveCurrentDraft())) {
+      return;
+    }
+
     setPageMode("history");
     setHistoryError(null);
     if (historyEntries.length > 0) {
@@ -367,43 +388,16 @@ export function HomePage() {
     }
   };
 
-  const handleSelectHistoryEntry = async (entry: FileHistoryEntry) => {
+  const handleSelectHistoryEntry = (entry: FileHistoryEntry) => {
     if (!pageView) {
       return;
     }
 
     setSelectedHistoryRevisionId(entry.revision_id);
-    setHistorySnapshot(null);
-    setHistorySnapshotError(null);
-    setIsHistorySnapshotLoading(true);
-    try {
-      const snapshot = await readPageHistorySnapshot(
-        pageView.namespace.id,
-        pageView.page.path,
-        entry.revision_id,
-      );
-      setHistorySnapshot(snapshot);
-    } catch (caught) {
-      setHistorySnapshotError(errorMessage(caught));
-    } finally {
-      setIsHistorySnapshotLoading(false);
-    }
+    routerNavigate(
+      `/history?namespaceId=${encodeURIComponent(pageView.namespace.id)}&path=${encodeURIComponent(pageView.page.path)}&revisionId=${encodeURIComponent(entry.revision_id)}`,
+    );
   };
-
-  const previewContent = useMemo(
-    () => (pageMode === "edit" ? draft : (page?.content ?? "")),
-    [draft, pageMode, page?.content],
-  );
-  const handleResolvePageMarkdownLink = useCallback(
-    (target: string) => {
-      if (!pageView) {
-        return Promise.resolve(target);
-      }
-
-      return resolveMarkdownLink(pageView.namespace.id, pageView.page.path, target);
-    },
-    [pageView],
-  );
 
   return (
     <Box
@@ -489,24 +483,16 @@ export function HomePage() {
             {pageView && (
               <PageSurface
                 draft={draft}
-                existingPageLocations={existingPageLocations}
+                editorKey={`${pageView.namespace.id}:${pageView.page.path}`}
                 historyEntries={historyEntries}
                 historyError={historyError}
-                historySnapshot={historySnapshot}
-                historySnapshotError={historySnapshotError}
                 isHistoryLoading={isHistoryLoading}
-                isHistorySnapshotLoading={isHistorySnapshotLoading}
                 isSaving={isSaving}
                 isVirtual={pageView.page.is_virtual ?? false}
                 mode={pageMode}
-                previewContent={previewContent}
-                onCancelEditing={handleCancelEditing}
                 onDraftChange={setDraft}
                 onModeChange={(mode) => void handleModeChange(mode)}
-                onOpenLocation={(location) => void navigate(location)}
-                onResolveMarkdownLink={handleResolvePageMarkdownLink}
-                onSave={() => void handleSave()}
-                onSelectHistoryEntry={(entry) => void handleSelectHistoryEntry(entry)}
+                onSelectHistoryEntry={handleSelectHistoryEntry}
                 selectedHistoryRevisionId={selectedHistoryRevisionId}
               />
             )}

@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -8,6 +9,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -85,6 +87,7 @@ const contentTree: ContentTree = {
 
 describe("HomePage", () => {
   afterEach(() => {
+    vi.useRealTimers();
     cleanup();
   });
 
@@ -103,7 +106,22 @@ describe("HomePage", () => {
       entry: historyEntries()[0],
       previous_content: "# Main\n\nBefore\n",
       content: "# Main\n\nAfter\n",
+      diff_sections: [],
     });
+    vi.mocked(api.savePage).mockImplementation(async (namespaceId, path, content) => ({
+      namespace: workNamespace,
+      location: page(path, content).location,
+      content: contentTree,
+      page: page(path, content),
+      save: {
+        namespace_id: namespaceId,
+        file_id: "file-main",
+        path,
+        revision_id: "rev_saved",
+        object_id: "sha256:saved",
+        saved_at: "2026-01-01T00:00:00Z",
+      },
+    }));
     vi.mocked(api.openInitialLocation).mockResolvedValue({
       kind: "page",
       namespace: workNamespace,
@@ -181,17 +199,19 @@ describe("HomePage", () => {
   });
 
   it("初期表示では Main ページを namespace 付きロケーションで表示する", async () => {
-    render(<HomePage />);
+    renderHomePage();
 
     expect(await screen.findByDisplayValue("Work:Page:Main")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: "Main" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { level: 2, name: "Main" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Draft" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue(
+      "# Main\n\n[Draft](Draft)\n\n[Intro](Guide/Intro)",
+    );
+    expect(screen.getByRole("tab", { name: "本文" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "編集" })).not.toBeInTheDocument();
   });
 
   it("ロケーションバーで namespace を省略しても遷移後は完全ロケーションを表示する", async () => {
     const user = userEvent.setup();
-    render(<HomePage />);
+    renderHomePage();
 
     const locationInput = await screen.findByDisplayValue("Work:Page:Main");
     await user.clear(locationInput);
@@ -199,35 +219,14 @@ describe("HomePage", () => {
     await user.click(screen.getByRole("button", { name: "開く" }));
 
     await waitFor(() => expect(locationInput).toHaveValue("Work:Page:Draft"));
-    expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
-  });
-
-  it("存在しない Markdown リンクをクリックすると未作成ページとして表示する", async () => {
-    const user = userEvent.setup();
-    render(<HomePage />);
-
-    await user.click(await screen.findByRole("link", { name: "Draft" }));
-
-    expect(await screen.findByDisplayValue("Work:Page:Draft")).toBeInTheDocument();
-    expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
-  });
-
-  it("内部リンクが既存ページか未作成ページかを表示で区別する", async () => {
-    render(<HomePage />);
-
-    const missingLink = await screen.findByRole("link", { name: "Draft" });
-    const existingLink = await screen.findByRole("link", { name: "Intro" });
-
-    await waitFor(() => {
-      expect(missingLink).toHaveAttribute("data-page-exists", "false");
-      expect(existingLink).toHaveAttribute("data-page-exists", "true");
-    });
-    expect(missingLink).toHaveStyle({ textDecorationStyle: "dashed" });
+    expect(
+      screen.getByText("このページはまだ作成されていません。入力すると自動保存で作成されます。"),
+    ).toBeInTheDocument();
   });
 
   it("サイドバーにページを階層構造で表示してクリックで遷移する", async () => {
     const user = userEvent.setup();
-    render(<HomePage />);
+    renderHomePage();
 
     const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
     expect(pageList).toHaveTextContent("Main");
@@ -249,7 +248,7 @@ describe("HomePage", () => {
 
   it("サイドバーのフォルダークリックで未作成ページとして表示する", async () => {
     const user = userEvent.setup();
-    render(<HomePage />);
+    renderHomePage();
 
     const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
     const guideItem = screen.getByRole("treeitem", { name: "Guide Intro" });
@@ -257,12 +256,14 @@ describe("HomePage", () => {
     await user.click(within(guideItem).getByText("Guide"));
 
     expect(await screen.findByDisplayValue("Work:Page:Guide")).toBeInTheDocument();
-    expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
+    expect(
+      screen.getByText("このページはまだ作成されていません。入力すると自動保存で作成されます。"),
+    ).toBeInTheDocument();
     expect(pageList).toHaveTextContent("Intro");
   });
 
   it("サイドバーの幅をドラッグで変更できる", async () => {
-    render(<HomePage />);
+    renderHomePage();
 
     await screen.findByRole("tree", { name: "ページ一覧" });
     const resizeHandle = screen.getByRole("separator", { name: "サイドバーの幅" });
@@ -278,7 +279,7 @@ describe("HomePage", () => {
 
   it("Special:Pages を現在の namespace で表示する", async () => {
     const user = userEvent.setup();
-    render(<HomePage />);
+    renderHomePage();
 
     const locationInput = await screen.findByDisplayValue("Work:Page:Main");
     await user.clear(locationInput);
@@ -292,7 +293,7 @@ describe("HomePage", () => {
 
   it("Special:SpecialPages で全ての Special ページを表示する", async () => {
     const user = userEvent.setup();
-    render(<HomePage />);
+    renderHomePage();
 
     const locationInput = await screen.findByDisplayValue("Work:Page:Main");
     await user.clear(locationInput);
@@ -308,40 +309,44 @@ describe("HomePage", () => {
     expect(screen.queryByText(/Work namespace/)).not.toBeInTheDocument();
   });
 
-  it("保存完了メッセージはページ内 Alert ではなく Snackbar として表示する", async () => {
-    const user = userEvent.setup();
-    vi.mocked(api.savePage).mockResolvedValue({
-      namespace: workNamespace,
-      location: "Work:Page:Main",
-      content: contentTree,
-      page: page("Pages/Main.md", "# Updated"),
-      save: {
-        namespace_id: workNamespace.id,
-        file_id: "file-main",
-        path: "Pages/Main.md",
-        revision_id: "rev_saved",
-        object_id: "sha256:saved",
-        saved_at: "2026-01-01T00:00:00Z",
-      },
+  it("編集停止後に自動保存する", async () => {
+    renderHomePage();
+
+    const editor = await screen.findByRole("textbox", { name: "Markdown" });
+    vi.useFakeTimers();
+    fireEvent.change(editor, { target: { value: "# Updated" } });
+
+    expect(api.savePage).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+      await Promise.resolve();
     });
 
-    render(<HomePage />);
+    expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Pages/Main.md", "# Updated");
+  });
 
-    await user.click(await screen.findByRole("tab", { name: "編集" }));
-    const editor = screen.getByRole("textbox", { name: "Markdown" });
+  it("画面遷移前に未保存の編集を保存する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const editor = await screen.findByRole("textbox", { name: "Markdown" });
     await user.clear(editor);
-    await user.type(editor, "# Updated");
-    await user.click(screen.getByRole("button", { name: "保存" }));
+    await user.type(editor, "# Moving");
+    const locationInput = screen.getByDisplayValue("Work:Page:Main");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:Pages");
+    await user.click(screen.getByRole("button", { name: "開く" }));
 
-    const snackbar = await screen.findByRole("alert");
-    expect(snackbar).toHaveTextContent("保存しました");
-    expect(snackbar).not.toHaveTextContent("rev_saved");
-    expect(snackbar.closest(".MuiSnackbar-root")).not.toBeNull();
+    await waitFor(() =>
+      expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Pages/Main.md", "# Moving"),
+    );
+    expect(await screen.findByDisplayValue("Work:Special:Pages")).toBeInTheDocument();
   });
 
   it("ページの編集履歴を表示する", async () => {
     const user = userEvent.setup();
-    render(<HomePage />);
+    renderHomePage();
 
     await user.click(await screen.findByRole("tab", { name: "履歴" }));
 
@@ -353,24 +358,38 @@ describe("HomePage", () => {
     expect(screen.getAllByText("modified / Pages/Main.md")).toHaveLength(2);
   });
 
-  it("履歴行を選択するとその時点の内容と編集差分を表示する", async () => {
+  it("履歴行を選択すると履歴詳細ページへ遷移する", async () => {
     const user = userEvent.setup();
-    render(<HomePage />);
+    renderHomePage();
 
     await user.click(await screen.findByRole("tab", { name: "履歴" }));
     await user.click(await screen.findByRole("button", { name: /2026\/01\/02.*modified/ }));
 
-    expect(api.readPageHistorySnapshot).toHaveBeenCalledWith(
-      workNamespace.id,
-      "Pages/Main.md",
-      "rev_02",
+    expect(await screen.findByTestId("current-route")).toHaveTextContent(
+      "/history?namespaceId=ns-work&path=Pages%2FMain.md&revisionId=rev_02",
     );
-    expect(await screen.findByRole("heading", { name: "その時点の内容" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: "Main" })).toBeInTheDocument();
-    expect(screen.getByText("+ After")).toBeInTheDocument();
-    expect(screen.getByText("- Before")).toBeInTheDocument();
   });
 });
+
+function renderHomePage() {
+  return render(
+    <MemoryRouter>
+      <HomePage />
+      <CurrentRoute />
+    </MemoryRouter>,
+  );
+}
+
+function CurrentRoute() {
+  const location = useLocation();
+
+  return (
+    <div data-testid="current-route">
+      {location.pathname}
+      {location.search}
+    </div>
+  );
+}
 
 function namespace(id: string, name: string): NamespaceSummary {
   return {

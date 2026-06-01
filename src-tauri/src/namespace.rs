@@ -1,7 +1,7 @@
 use crate::models::{
     ContentTree, FileHistoryEntry, FileSummary, FolderSummary, NamespaceDetail, NamespaceMetadata,
-    NamespaceRegistry, NamespaceSummary, PageHistorySnapshot, DEFAULT_MAIN_CONTENT,
-    DEFAULT_PAGE_PATH,
+    NamespaceRegistry, NamespaceSummary, PageHistorySnapshot, SideBySideDiffRow,
+    SideBySideDiffSection, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
 };
 use crate::paths::resolve_namespace_path;
 use crate::versioning::{
@@ -211,12 +211,217 @@ pub fn read_page_history_snapshot(
         .map(|index| read_text_object(&namespace.root_path, &history.revisions[index].object_id))
         .transpose()?;
     let content = read_text_object(&namespace.root_path, &entry.object_id)?;
+    let diff_sections =
+        build_side_by_side_diff(previous_content.as_deref().unwrap_or(""), &content);
 
     Ok(PageHistorySnapshot {
         entry,
         content,
         previous_content,
+        diff_sections,
     })
+}
+
+#[derive(Clone)]
+enum DiffLine {
+    Unchanged {
+        old_line_number: usize,
+        new_line_number: usize,
+        text: String,
+    },
+    Removed {
+        old_line_number: usize,
+        text: String,
+    },
+    Added {
+        new_line_number: usize,
+        text: String,
+    },
+}
+
+fn build_side_by_side_diff(old_content: &str, new_content: &str) -> Vec<SideBySideDiffSection> {
+    group_diff_rows(pair_changed_rows(build_line_diff(old_content, new_content)))
+}
+
+fn build_line_diff(old_content: &str, new_content: &str) -> Vec<DiffLine> {
+    let old_lines = split_content_lines(old_content);
+    let new_lines = split_content_lines(new_content);
+    let mut matrix = vec![vec![0usize; new_lines.len() + 1]; old_lines.len() + 1];
+
+    for old_index in (0..old_lines.len()).rev() {
+        for new_index in (0..new_lines.len()).rev() {
+            matrix[old_index][new_index] = if old_lines[old_index] == new_lines[new_index] {
+                matrix[old_index + 1][new_index + 1] + 1
+            } else {
+                matrix[old_index + 1][new_index].max(matrix[old_index][new_index + 1])
+            };
+        }
+    }
+
+    let mut diff = Vec::new();
+    let mut old_index = 0;
+    let mut new_index = 0;
+    while old_index < old_lines.len() && new_index < new_lines.len() {
+        if old_lines[old_index] == new_lines[new_index] {
+            diff.push(DiffLine::Unchanged {
+                old_line_number: old_index + 1,
+                new_line_number: new_index + 1,
+                text: old_lines[old_index].to_string(),
+            });
+            old_index += 1;
+            new_index += 1;
+        } else if matrix[old_index + 1][new_index] >= matrix[old_index][new_index + 1] {
+            diff.push(DiffLine::Removed {
+                old_line_number: old_index + 1,
+                text: old_lines[old_index].to_string(),
+            });
+            old_index += 1;
+        } else {
+            diff.push(DiffLine::Added {
+                new_line_number: new_index + 1,
+                text: new_lines[new_index].to_string(),
+            });
+            new_index += 1;
+        }
+    }
+
+    while old_index < old_lines.len() {
+        diff.push(DiffLine::Removed {
+            old_line_number: old_index + 1,
+            text: old_lines[old_index].to_string(),
+        });
+        old_index += 1;
+    }
+    while new_index < new_lines.len() {
+        diff.push(DiffLine::Added {
+            new_line_number: new_index + 1,
+            text: new_lines[new_index].to_string(),
+        });
+        new_index += 1;
+    }
+
+    diff
+}
+
+fn pair_changed_rows(diff: Vec<DiffLine>) -> Vec<SideBySideDiffRow> {
+    let mut rows = Vec::new();
+    let mut index = 0;
+
+    while index < diff.len() {
+        match &diff[index] {
+            DiffLine::Unchanged {
+                old_line_number,
+                new_line_number,
+                text,
+            } => {
+                rows.push(SideBySideDiffRow {
+                    kind: "unchanged".to_string(),
+                    old_line_number: Some(*old_line_number),
+                    old_text: Some(text.clone()),
+                    new_line_number: Some(*new_line_number),
+                    new_text: Some(text.clone()),
+                });
+                index += 1;
+            }
+            DiffLine::Removed { .. } | DiffLine::Added { .. } => {
+                let mut removed = Vec::new();
+                let mut added = Vec::new();
+                while index < diff.len() {
+                    match &diff[index] {
+                        DiffLine::Removed {
+                            old_line_number,
+                            text,
+                        } => removed.push((*old_line_number, text.clone())),
+                        DiffLine::Added {
+                            new_line_number,
+                            text,
+                        } => added.push((*new_line_number, text.clone())),
+                        DiffLine::Unchanged { .. } => break,
+                    }
+                    index += 1;
+                }
+
+                let paired_length = removed.len().min(added.len());
+                for pair_index in 0..paired_length {
+                    rows.push(SideBySideDiffRow {
+                        kind: "modified".to_string(),
+                        old_line_number: Some(removed[pair_index].0),
+                        old_text: Some(removed[pair_index].1.clone()),
+                        new_line_number: Some(added[pair_index].0),
+                        new_text: Some(added[pair_index].1.clone()),
+                    });
+                }
+                for removed_item in removed.iter().skip(paired_length) {
+                    rows.push(SideBySideDiffRow {
+                        kind: "removed".to_string(),
+                        old_line_number: Some(removed_item.0),
+                        old_text: Some(removed_item.1.clone()),
+                        new_line_number: None,
+                        new_text: None,
+                    });
+                }
+                for added_item in added.iter().skip(paired_length) {
+                    rows.push(SideBySideDiffRow {
+                        kind: "added".to_string(),
+                        old_line_number: None,
+                        old_text: None,
+                        new_line_number: Some(added_item.0),
+                        new_text: Some(added_item.1.clone()),
+                    });
+                }
+            }
+        }
+    }
+
+    rows
+}
+
+fn group_diff_rows(rows: Vec<SideBySideDiffRow>) -> Vec<SideBySideDiffSection> {
+    let mut sections = Vec::new();
+    let mut current_rows = Vec::new();
+    let mut current_kind: Option<String> = None;
+
+    for row in rows {
+        let next_kind = if row.kind == "unchanged" {
+            "unchanged"
+        } else {
+            "changed"
+        };
+        if current_kind
+            .as_deref()
+            .is_some_and(|kind| kind != next_kind)
+        {
+            sections.push(diff_section(
+                current_kind.take().unwrap_or_default(),
+                sections.len(),
+                std::mem::take(&mut current_rows),
+            ));
+        }
+        current_kind = Some(next_kind.to_string());
+        current_rows.push(row);
+    }
+
+    if let Some(kind) = current_kind {
+        sections.push(diff_section(kind, sections.len(), current_rows));
+    }
+
+    sections
+}
+
+fn diff_section(kind: String, index: usize, rows: Vec<SideBySideDiffRow>) -> SideBySideDiffSection {
+    SideBySideDiffSection {
+        id: format!("{kind}-{index}"),
+        kind,
+        rows,
+    }
+}
+
+fn split_content_lines(content: &str) -> Vec<&str> {
+    if content.is_empty() {
+        Vec::new()
+    } else {
+        content.split('\n').collect()
+    }
 }
 
 fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTree, String> {
@@ -424,5 +629,19 @@ mod tests {
         assert_eq!(content.folders[0].display_path, vec!["Guide"]);
 
         fs::remove_dir_all(root_path).unwrap();
+    }
+
+    #[test]
+    fn builds_side_by_side_diff_sections() {
+        let sections = build_side_by_side_diff("# Main\n\nBefore\nSame", "# Main\n\nAfter\nSame");
+
+        assert_eq!(sections[0].kind, "unchanged");
+        assert_eq!(sections[0].rows[0].old_text.as_deref(), Some("# Main"));
+        assert_eq!(sections[1].kind, "changed");
+        assert_eq!(sections[1].rows[0].kind, "modified");
+        assert_eq!(sections[1].rows[0].old_text.as_deref(), Some("Before"));
+        assert_eq!(sections[1].rows[0].new_text.as_deref(), Some("After"));
+        assert_eq!(sections[2].kind, "unchanged");
+        assert_eq!(sections[2].rows[0].old_text.as_deref(), Some("Same"));
     }
 }

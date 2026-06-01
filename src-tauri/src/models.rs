@@ -175,6 +175,23 @@ pub struct PageHistorySnapshot {
     pub entry: FileHistoryEntry,
     pub content: String,
     pub previous_content: Option<String>,
+    pub diff_sections: Vec<SideBySideDiffSection>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SideBySideDiffSection {
+    pub kind: String,
+    pub id: String,
+    pub rows: Vec<SideBySideDiffRow>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct SideBySideDiffRow {
+    pub kind: String,
+    pub old_line_number: Option<usize>,
+    pub old_text: Option<String>,
+    pub new_line_number: Option<usize>,
+    pub new_text: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

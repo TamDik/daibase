@@ -4,6 +4,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { RouterProvider, createBrowserRouter } from "react-router";
 
+import { HistoryPage } from "./routes/HistoryPage";
 import { HomePage } from "./routes/HomePage";
 
 const theme = createTheme({
@@ -19,6 +20,10 @@ const router = createBrowserRouter([
   {
     path: "/",
     element: <HomePage />,
+  },
+  {
+    path: "/history",
+    element: <HistoryPage />,
   },
 ]);
 

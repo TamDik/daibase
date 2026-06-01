@@ -76,6 +76,21 @@ export type PageHistorySnapshot = {
   entry: FileHistoryEntry;
   content: string;
   previous_content: string | null;
+  diff_sections: SideBySideDiffSection[];
+};
+
+export type SideBySideDiffSection = {
+  kind: "unchanged" | "changed";
+  id: string;
+  rows: SideBySideDiffRow[];
+};
+
+export type SideBySideDiffRow = {
+  kind: "unchanged" | "removed" | "added" | "modified";
+  old_line_number: number | null;
+  old_text: string | null;
+  new_line_number: number | null;
+  new_text: string | null;
 };
 
 export type SpecialPageSummary = {
