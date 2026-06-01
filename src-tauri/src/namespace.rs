@@ -1,5 +1,5 @@
 use crate::models::{
-    ContentTree, FileSummary, NamespaceDetail, NamespaceMetadata, NamespaceRegistry,
+    ContentTree, FileSummary, FolderSummary, NamespaceDetail, NamespaceMetadata, NamespaceRegistry,
     NamespaceSummary, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
 };
 use crate::paths::resolve_namespace_path;
@@ -173,6 +173,7 @@ pub fn list_content(app: &AppHandle, namespace_id: String) -> Result<ContentTree
 
 fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTree, String> {
     let mut pages = Vec::new();
+    let mut folders = Vec::new();
     let path_index = read_path_index(&namespace.root_path)?;
     collect_markdown_pages(
         namespace,
@@ -180,9 +181,11 @@ fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTre
         &namespace.root_path.join("Pages"),
         &path_index.entries,
         &mut pages,
+        &mut folders,
     )?;
     pages.sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(ContentTree { pages })
+    folders.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(ContentTree { pages, folders })
 }
 
 fn collect_markdown_pages(
@@ -191,6 +194,7 @@ fn collect_markdown_pages(
     current: &Path,
     path_index: &std::collections::BTreeMap<String, String>,
     pages: &mut Vec<FileSummary>,
+    folders: &mut Vec<FolderSummary>,
 ) -> Result<(), String> {
     if !current.exists() {
         return Ok(());
@@ -200,7 +204,19 @@ fn collect_markdown_pages(
         let entry = entry.map_err(to_error)?;
         let path = entry.path();
         if path.is_dir() {
-            collect_markdown_pages(namespace, root, &path, path_index, pages)?;
+            let folder_relative_path = path
+                .strip_prefix(root)
+                .map_err(to_error)?
+                .to_string_lossy()
+                .replace('\\', "/");
+            let folder_page_path = format!("{folder_relative_path}.md");
+            folders.push(FolderSummary {
+                path: folder_page_path.clone(),
+                title: page_title(&folder_page_path),
+                location: page_location(&folder_page_path, namespace),
+                display_path: page_display_path(&folder_page_path),
+            });
+            collect_markdown_pages(namespace, root, &path, path_index, pages, folders)?;
             continue;
         }
 
@@ -327,4 +343,38 @@ fn write_json_atomic<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), 
 
 fn to_error(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn list_content_includes_folder_page_locations() {
+        let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
+        fs::create_dir_all(root_path.join("Pages/Guide")).unwrap();
+        fs::write(root_path.join("Pages/Guide/Intro.md"), "# Intro\n").unwrap();
+
+        let namespace = NamespaceSummary {
+            id: "ns-work".to_string(),
+            name: "Work".to_string(),
+            root_path: root_path.clone(),
+            default_page: DEFAULT_PAGE_PATH.to_string(),
+            default_location: "Work:Page:Main".to_string(),
+            pages_location: "Work:Special:Pages".to_string(),
+            created_at: "2026-06-01T00:00:00Z".to_string(),
+            updated_at: "2026-06-01T00:00:00Z".to_string(),
+        };
+
+        let content = list_content_for_namespace(&namespace).unwrap();
+
+        assert_eq!(content.pages.len(), 1);
+        assert_eq!(content.pages[0].location, "Work:Page:Guide/Intro");
+        assert_eq!(content.folders.len(), 1);
+        assert_eq!(content.folders[0].path, "Pages/Guide.md");
+        assert_eq!(content.folders[0].location, "Work:Page:Guide");
+        assert_eq!(content.folders[0].display_path, vec!["Guide"]);
+
+        fs::remove_dir_all(root_path).unwrap();
+    }
 }

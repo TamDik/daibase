@@ -30,6 +30,20 @@ const api = await import("../api/tauriCommands");
 
 const workNamespace = namespace("ns-work", "Work");
 const contentTree: ContentTree = {
+  folders: [
+    {
+      path: "Pages/Guide.md",
+      title: "Guide",
+      location: "Work:Page:Guide",
+      display_path: ["Guide"],
+    },
+    {
+      path: "Pages/aaa.md",
+      title: "aaa",
+      location: "Work:Page:aaa",
+      display_path: ["aaa"],
+    },
+  ],
   pages: [
     {
       file_id: "file-main",
@@ -216,6 +230,20 @@ describe("HomePage", () => {
     await user.click(within(pageList).getByText("Intro"));
 
     expect(await screen.findByDisplayValue("Work:Page:Guide/Intro")).toBeInTheDocument();
+  });
+
+  it("サイドバーのフォルダークリックで未作成ページとして表示する", async () => {
+    const user = userEvent.setup();
+    render(<HomePage />);
+
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    const guideItem = screen.getByRole("treeitem", { name: "Guide Intro" });
+
+    await user.click(within(guideItem).getByText("Guide"));
+
+    expect(await screen.findByDisplayValue("Work:Page:Guide")).toBeInTheDocument();
+    expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
+    expect(pageList).toHaveTextContent("Intro");
   });
 
   it("サイドバーの幅をドラッグで変更できる", async () => {

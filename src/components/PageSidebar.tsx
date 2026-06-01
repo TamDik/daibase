@@ -7,7 +7,12 @@ import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import type { TreeItemProps } from "@mui/x-tree-view/TreeItem";
 import { useMemo } from "react";
 
-import type { ContentTree, FileSummary, NamespaceSummary } from "../api/tauriCommands";
+import type {
+  ContentTree,
+  FileSummary,
+  FolderSummary,
+  NamespaceSummary,
+} from "../api/tauriCommands";
 import { ResizableSidebar } from "./ResizableSidebar";
 
 type PageTreeItem = {
@@ -28,10 +33,17 @@ export function PageSidebar({
   onOpenLocation: (location: string) => void;
 }) {
   const pages = content?.pages ?? [];
-  const treeItems = useMemo(() => buildTreeItems(pages), [pages]);
-  const pageLocations = useMemo(() => new Map(pages.map((page) => [page.location, page])), [pages]);
+  const folders = content?.folders ?? [];
+  const treeItems = useMemo(() => buildTreeItems(pages, folders), [folders, pages]);
   const itemLocations = useMemo(() => collectItemLocations(treeItems), [treeItems]);
-  const selectedItem = pageLocations.has(currentLocation) ? currentLocation : null;
+  const selectedItem = useMemo(() => {
+    for (const [itemId, location] of itemLocations) {
+      if (location === currentLocation) {
+        return itemId;
+      }
+    }
+    return null;
+  }, [currentLocation, itemLocations]);
 
   return (
     <ResizableSidebar>
@@ -120,32 +132,52 @@ function PageTreeViewItem(props: TreeItemProps) {
   );
 }
 
-function buildTreeItems(pages: FileSummary[]) {
+function buildTreeItems(pages: FileSummary[], folders: FolderSummary[]) {
   const root: PageTreeItem = { id: "__root__", label: "", location: null, children: [] };
 
+  for (const folder of folders) {
+    upsertTreeItem(root, folder.display_path, {
+      id: `folder:${folder.location}`,
+      label: folder.title,
+      location: folder.location,
+    });
+  }
+
   for (const page of pages) {
-    const parts = page.display_path.length > 0 ? page.display_path : [page.title];
-    let current = root;
-    let path = "";
-
-    for (const part of parts) {
-      path = path ? `${path}/${part}` : part;
-      const children = current.children ?? [];
-      let child = children.find((item) => item.label === part);
-      if (!child) {
-        child = { id: `folder:${path}`, label: part, location: null, children: [] };
-        children.push(child);
-        current.children = children;
-      }
-      current = child;
-    }
-
-    current.id = page.location;
-    current.location = page.location;
+    upsertTreeItem(root, page.display_path.length > 0 ? page.display_path : [page.title], {
+      id: page.location,
+      label: page.title,
+      location: page.location,
+    });
   }
 
   sortTreeItems(root.children ?? []);
   return root.children ?? [];
+}
+
+function upsertTreeItem(
+  root: PageTreeItem,
+  parts: string[],
+  value: Pick<PageTreeItem, "id" | "label" | "location">,
+) {
+  let current = root;
+  let path = "";
+
+  for (const part of parts) {
+    path = path ? `${path}/${part}` : part;
+    const children = current.children ?? [];
+    let child = children.find((item) => item.label === part);
+    if (!child) {
+      child = { id: `folder:${path}`, label: part, location: null, children: [] };
+      children.push(child);
+      current.children = children;
+    }
+    current = child;
+  }
+
+  current.id = value.id;
+  current.label = value.label;
+  current.location = value.location;
 }
 
 function sortTreeItems(items: PageTreeItem[]) {
