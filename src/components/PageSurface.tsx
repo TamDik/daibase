@@ -8,8 +8,14 @@ import {
   Stack,
   Tab,
   Tabs,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import { Article, Code } from "@mui/icons-material";
+import { useState } from "react";
 
 import type { FileHistoryEntry } from "../api/tauriCommands";
 import { MarkdownWysiwygEditor } from "./MarkdownWysiwygEditor";
@@ -60,6 +66,8 @@ export function PageSurface({
   onSelectHistoryEntry: (entry: FileHistoryEntry) => void;
   selectedHistoryRevisionId: string | null;
 }) {
+  const [editorView, setEditorView] = useState<"wysiwyg" | "source">("wysiwyg");
+
   return (
     <Box sx={{ bgcolor: "#ffffff", flexGrow: 1, overflow: "visible" }}>
       <Box
@@ -126,16 +134,68 @@ export function PageSurface({
                 </Typography>
               </Stack>
             )}
-            <MarkdownWysiwygEditor
-              key={editorKey}
-              ariaLabel="Markdown"
-              disabled={isSaving}
-              value={draft}
-              onChange={onDraftChange}
-              onOpenMarkdownLink={onOpenMarkdownLink}
-              onResolveMarkdownImage={onResolveMarkdownImage}
-              onResolveMarkdownLinkStatus={onResolveMarkdownLinkStatus}
-            />
+            <Stack direction="row" sx={{ justifyContent: "flex-end", px: 2, pt: 1 }}>
+              <ToggleButtonGroup
+                exclusive
+                size="small"
+                value={editorView}
+                onChange={(_, value: "wysiwyg" | "source" | null) => {
+                  if (value) {
+                    setEditorView(value);
+                  }
+                }}
+              >
+                <Tooltip title="WYSIWYG">
+                  <ToggleButton
+                    aria-label="WYSIWYG"
+                    value="wysiwyg"
+                    disabled={isSaving}
+                    sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+                  >
+                    <Article fontSize="small" />
+                  </ToggleButton>
+                </Tooltip>
+                <Tooltip title="Markdownソース">
+                  <ToggleButton
+                    aria-label="Markdownソース"
+                    value="source"
+                    disabled={isSaving}
+                    sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+                  >
+                    <Code fontSize="small" />
+                  </ToggleButton>
+                </Tooltip>
+              </ToggleButtonGroup>
+            </Stack>
+            {editorView === "source" ? (
+              <TextField
+                label="Markdownソース"
+                value={draft}
+                onChange={(event) => onDraftChange(event.target.value)}
+                disabled={isSaving}
+                multiline
+                minRows={24}
+                fullWidth
+                sx={{
+                  "& textarea": {
+                    fontFamily:
+                      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+                    lineHeight: 1.6,
+                  },
+                }}
+              />
+            ) : (
+              <MarkdownWysiwygEditor
+                key={editorKey}
+                ariaLabel="Markdown"
+                disabled={isSaving}
+                value={draft}
+                onChange={onDraftChange}
+                onOpenMarkdownLink={onOpenMarkdownLink}
+                onResolveMarkdownImage={onResolveMarkdownImage}
+                onResolveMarkdownLinkStatus={onResolveMarkdownLinkStatus}
+              />
+            )}
           </Box>
         )}
       </Box>

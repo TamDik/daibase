@@ -271,7 +271,26 @@ describe("HomePage", () => {
       "# Main\n\n[Draft](Draft)\n\n[Intro](Guide/Intro)",
     );
     expect(screen.getByRole("tab", { name: "閲覧" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "WYSIWYG" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Markdownソース" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Markdown" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "編集" })).not.toBeInTheDocument();
+  });
+
+  it("Markdown ソース表示で本文を編集できる", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await screen.findByDisplayValue("Work:Page:Main");
+    await user.click(screen.getByRole("button", { name: "Markdownソース" }));
+    const rawEditor = screen.getByRole("textbox", { name: "Markdownソース" });
+    expect(rawEditor).toHaveValue("# Main\n\n[Draft](Draft)\n\n[Intro](Guide/Intro)");
+
+    await user.clear(rawEditor);
+    await user.type(rawEditor, "# Raw");
+    await user.click(screen.getByRole("button", { name: "WYSIWYG" }));
+
+    expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue("# Raw");
   });
 
   it("ロケーションバーで namespace を省略しても遷移後は完全ロケーションを表示する", async () => {
@@ -469,6 +488,26 @@ describe("HomePage", () => {
     });
 
     expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Pages/Main.md", "# Updated");
+  });
+
+  it("Markdown ソース表示でも編集停止後に自動保存する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await screen.findByDisplayValue("Work:Page:Main");
+    await user.click(screen.getByRole("button", { name: "Markdownソース" }));
+    const editor = screen.getByRole("textbox", { name: "Markdownソース" });
+    vi.useFakeTimers();
+    fireEvent.change(editor, { target: { value: "# Raw Updated" } });
+
+    expect(api.savePage).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+      await Promise.resolve();
+    });
+
+    expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Pages/Main.md", "# Raw Updated");
   });
 
   it("画面遷移前に未保存の編集を保存する", async () => {
