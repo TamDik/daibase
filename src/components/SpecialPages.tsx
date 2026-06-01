@@ -88,10 +88,7 @@ export function NamespacesSpecialPage({
                   onClick={() => onOpenLocation(namespace.default_location)}
                   sx={{ borderRadius: 1 }}
                 >
-                  <ListItemText
-                    primary={namespace.name}
-                    secondary={namespace.pages_location}
-                  />
+                  <ListItemText primary={namespace.name} secondary={namespace.pages_location} />
                 </ListItemButton>
               ))}
             </List>
