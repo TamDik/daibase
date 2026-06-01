@@ -564,6 +564,9 @@ fn collect_markdown_pages(
     for entry in fs::read_dir(current).map_err(to_error)? {
         let entry = entry.map_err(to_error)?;
         let path = entry.path();
+        if is_hidden_path_entry(&path) {
+            continue;
+        }
         if path.is_dir() {
             let folder_relative_path = path
                 .strip_prefix(root)
@@ -620,6 +623,9 @@ fn collect_managed_files(
     for entry in fs::read_dir(current).map_err(to_error)? {
         let entry = entry.map_err(to_error)?;
         let path = entry.path();
+        if is_hidden_path_entry(&path) {
+            continue;
+        }
         if path.is_dir() {
             collect_managed_files(namespace, root, &path, path_index, files)?;
             continue;
@@ -809,6 +815,12 @@ fn file_display_path(path: &str) -> Vec<String> {
         .collect()
 }
 
+fn is_hidden_path_entry(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with('.'))
+}
+
 fn file_note_path(root: &Path, file_id: &str) -> Result<PathBuf, String> {
     if file_id.is_empty()
         || !file_id
@@ -981,6 +993,9 @@ mod tests {
     fn list_content_includes_file_locations() {
         let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
         fs::create_dir_all(root_path.join("Files/images")).unwrap();
+        fs::create_dir_all(root_path.join("Files/.hidden")).unwrap();
+        fs::write(root_path.join("Files/.DS_Store"), b"metadata").unwrap();
+        fs::write(root_path.join("Files/.hidden/secret.png"), b"secret").unwrap();
         fs::write(root_path.join("Files/images/logo.png"), b"image").unwrap();
 
         let namespace = NamespaceSummary {
@@ -1000,6 +1015,34 @@ mod tests {
         assert_eq!(content.files[0].path, "Files/images/logo.png");
         assert_eq!(content.files[0].location, "Work:File:images/logo.png");
         assert_eq!(content.files[0].display_path, vec!["images", "logo.png"]);
+
+        fs::remove_dir_all(root_path).unwrap();
+    }
+
+    #[test]
+    fn list_content_ignores_hidden_pages_and_folders() {
+        let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
+        fs::create_dir_all(root_path.join("Pages/.hidden")).unwrap();
+        fs::write(root_path.join("Pages/.DS_Store"), b"metadata").unwrap();
+        fs::write(root_path.join("Pages/.hidden/Secret.md"), "# Secret\n").unwrap();
+        fs::write(root_path.join("Pages/Main.md"), "# Main\n").unwrap();
+
+        let namespace = NamespaceSummary {
+            id: "ns-work".to_string(),
+            name: "Work".to_string(),
+            root_path: root_path.clone(),
+            default_page: DEFAULT_PAGE_PATH.to_string(),
+            default_location: "Work:Page:Main".to_string(),
+            pages_location: "Work:Special:Pages".to_string(),
+            created_at: "2026-06-01T00:00:00Z".to_string(),
+            updated_at: "2026-06-01T00:00:00Z".to_string(),
+        };
+
+        let content = list_content_for_namespace(&namespace).unwrap();
+
+        assert_eq!(content.pages.len(), 1);
+        assert_eq!(content.pages[0].path, "Pages/Main.md");
+        assert!(content.folders.is_empty());
 
         fs::remove_dir_all(root_path).unwrap();
     }
