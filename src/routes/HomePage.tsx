@@ -1,4 +1,15 @@
-import { Alert, Box, Snackbar, Stack } from "@mui/material";
+import {
+  Alert,
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Snackbar,
+  Stack,
+  TextField,
+} from "@mui/material";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -11,6 +22,7 @@ import {
   type OpenLocationResult,
   type PageContent,
   type SpecialPageSummary,
+  createFolder,
   createNamespace,
   listFileHistory,
   listPageHistory,
@@ -64,6 +76,12 @@ type SpecialView =
       content: ContentTree;
     };
 
+type CreateDialogState = {
+  kind: "folder" | "page";
+  parentDirectory: string;
+  name: string;
+};
+
 export function HomePage() {
   const routerNavigate = useNavigate();
   const [namespaces, setNamespaces] = useState<NamespaceSummary[]>([]);
@@ -94,6 +112,7 @@ export function HomePage() {
   const [selectedHistoryRevisionId, setSelectedHistoryRevisionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [createDialog, setCreateDialog] = useState<CreateDialogState | null>(null);
   const pageViewRef = useRef<PageView | null>(null);
   const draftRef = useRef("");
   const isSavingRef = useRef(false);
@@ -295,6 +314,19 @@ export function HomePage() {
     [activeNamespace, applyOpenedLocation, historyIndex, saveCurrentDraft],
   );
 
+  const pushHistoryLocation = useCallback(
+    (nextLocation: string) => {
+      setHistory((current) => {
+        const base = current.slice(0, historyIndex + 1);
+        const last = base[base.length - 1];
+        const next = last === nextLocation ? base : [...base, nextLocation];
+        setHistoryIndex(next.length - 1);
+        return next;
+      });
+    },
+    [historyIndex],
+  );
+
   useEffect(() => {
     if (!isDirty || pageMode !== "view") {
       return;
@@ -361,6 +393,71 @@ export function HomePage() {
   const handleLocationSubmit = async () => {
     try {
       await navigate(locationInput);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  };
+
+  const handleOpenCreateDialog = (kind: CreateDialogState["kind"], parentDirectory: string) => {
+    if (!activeNamespace) {
+      return;
+    }
+
+    setCreateDialog({
+      kind,
+      parentDirectory,
+      name: kind === "page" ? "NewPage.md" : "NewFolder",
+    });
+  };
+
+  const handleCloseCreateDialog = () => {
+    setCreateDialog(null);
+  };
+
+  const handleSubmitCreateDialog = async () => {
+    if (!activeNamespace || !createDialog) {
+      return;
+    }
+
+    const path = createPathFromDialog(createDialog);
+    if (!path) {
+      setError("名前を入力してください。");
+      return;
+    }
+
+    setError(null);
+    setSavedMessage(null);
+    try {
+      if (!(await saveCurrentDraft())) {
+        return;
+      }
+
+      if (createDialog.kind === "folder") {
+        const detail = await createFolder(activeNamespace.id, path);
+        setActiveNamespace(detail.namespace);
+        setSidebarContent(detail.content);
+        if (specialView?.kind === "pages") {
+          setSpecialView({
+            kind: "pages",
+            location: specialView.location,
+            namespace: detail.namespace,
+            content: detail.content,
+          });
+        }
+      } else {
+        const saved = await savePage(activeNamespace.id, path, "");
+        const nextLocation = applyOpenedLocation({
+          kind: "page",
+          location: saved.location,
+          namespace: saved.namespace,
+          content: saved.content,
+          page: saved.page,
+        });
+        pushHistoryLocation(nextLocation);
+      }
+
+      setCreateDialog(null);
+      setSavedMessage("作成しました");
     } catch (caught) {
       setError(errorMessage(caught));
     }
@@ -621,6 +718,8 @@ export function HomePage() {
           content={sidebarContent}
           currentLocation={locationInput}
           namespace={activeNamespace}
+          onCreateFolder={(parentDirectory) => handleOpenCreateDialog("folder", parentDirectory)}
+          onCreatePage={(parentDirectory) => handleOpenCreateDialog("page", parentDirectory)}
           onOpenLocation={(location) => void navigate(location)}
         />
 
@@ -718,6 +817,52 @@ export function HomePage() {
           {savedMessage}
         </Alert>
       </Snackbar>
+      <Dialog open={createDialog !== null} onClose={handleCloseCreateDialog} fullWidth maxWidth="xs">
+        <DialogTitle>
+          {createDialog?.kind === "folder" ? "フォルダー作成" : "ページ作成"}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ pt: 1 }}>
+            <TextField
+              autoFocus
+              fullWidth
+              label={createDialog?.kind === "folder" ? "フォルダー名" : "ページ名"}
+              size="small"
+              value={createDialog?.name ?? ""}
+              onChange={(event) =>
+                setCreateDialog((current) =>
+                  current ? { ...current, name: event.target.value } : current,
+                )
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void handleSubmitCreateDialog();
+                }
+              }}
+            />
+            {createDialog?.parentDirectory && (
+              <TextField
+                fullWidth
+                label="作成先"
+                size="small"
+                value={createDialog.parentDirectory}
+                slotProps={{
+                  input: {
+                    readOnly: true,
+                  },
+                }}
+              />
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCreateDialog}>キャンセル</Button>
+          <Button variant="contained" onClick={() => void handleSubmitCreateDialog()}>
+            作成
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -732,4 +877,22 @@ function errorMessage(error: unknown) {
   }
 
   return "エラーが発生しました。";
+}
+
+function createPathFromDialog(dialog: CreateDialogState) {
+  const name = dialog.name.trim();
+  if (!name) {
+    return "";
+  }
+
+  const normalizedName =
+    dialog.kind === "page" && !name.endsWith(".md") ? `${name}.md` : name;
+
+  return joinManagedPath(dialog.parentDirectory, normalizedName);
+}
+
+function joinManagedPath(parentDirectory: string, name: string) {
+  const parent = parentDirectory.trim().replace(/\/+$/, "");
+  const child = name.trim().replace(/^\/+/, "");
+  return parent ? `${parent}/${child}` : child;
 }

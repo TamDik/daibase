@@ -1,51 +1,101 @@
-import { Box, Typography } from "@mui/material";
-import { ArticleOutlined, InsertDriveFileOutlined, FolderOutlined } from "@mui/icons-material";
+import { Box, IconButton, Stack, Tooltip, Typography } from "@mui/material";
+import {
+  ArticleOutlined,
+  CreateNewFolderOutlined,
+  InsertDriveFileOutlined,
+  FolderOutlined,
+  NoteAddOutlined,
+  SortByAlphaOutlined,
+} from "@mui/icons-material";
 import { RichTreeView } from "@mui/x-tree-view/RichTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import type { TreeItemProps } from "@mui/x-tree-view/TreeItem";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import type { ContentTree, FileSummary, NamespaceSummary } from "../api/tauriCommands";
+import type {
+  ContentTree,
+  FileSummary,
+  FolderSummary,
+  NamespaceSummary,
+} from "../api/tauriCommands";
 import { ResizableSidebar } from "./ResizableSidebar";
 
 type PageTreeItem = {
   id: string;
   label: string;
   location: string | null;
+  path: string | null;
   kind: "page" | "folder" | "file";
   children?: PageTreeItem[];
+};
+
+type PageTreeItemMetadata = {
+  kind: PageTreeItem["kind"];
+  location: string | null;
+  path: string | null;
 };
 
 export function PageSidebar({
   content,
   currentLocation,
+  namespace,
+  onCreateFolder,
+  onCreatePage,
   onOpenLocation,
 }: {
   content: ContentTree | null;
   currentLocation: string;
   namespace: NamespaceSummary | null;
+  onCreateFolder: (parentDirectory: string) => void;
+  onCreatePage: (parentDirectory: string) => void;
   onOpenLocation: (location: string) => void;
 }) {
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const folders = content?.folders ?? [];
   const pages = content?.pages ?? [];
   const files = content?.files ?? [];
-  const treeItems = useMemo(() => buildTreeItems(pages, files), [files, pages]);
-  const itemLocations = useMemo(() => collectItemLocations(treeItems), [treeItems]);
-  const selectedItem = useMemo(() => {
-    for (const [itemId, location] of itemLocations) {
-      if (location === currentLocation) {
+  const treeItems = useMemo(
+    () => buildTreeItems(folders, pages, files, sortDirection),
+    [files, folders, pages, sortDirection],
+  );
+  const expandableItemIds = useMemo(() => collectExpandableItemIds(treeItems), [treeItems]);
+  const [expandedItems, setExpandedItems] = useState<string[]>([]);
+  const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const itemMetadata = useMemo(() => collectItemMetadata(treeItems), [treeItems]);
+  const selectedLocationItem = useMemo(() => {
+    for (const [itemId, metadata] of itemMetadata) {
+      if (metadata.location === currentLocation) {
         return itemId;
       }
     }
     return null;
-  }, [currentLocation, itemLocations]);
+  }, [currentLocation, itemMetadata]);
+  const selectedItem = activeItemId ?? selectedLocationItem;
+  const createParentDirectory = selectedItem
+    ? parentDirectoryForItem(itemMetadata.get(selectedItem) ?? null)
+    : "";
+
+  useEffect(() => {
+    setExpandedItems((current) => mergeExpandedItemIds(current, expandableItemIds));
+  }, [expandableItemIds]);
+
+  useEffect(() => {
+    if (selectedLocationItem) {
+      setActiveItemId(selectedLocationItem);
+    }
+  }, [selectedLocationItem]);
 
   return (
     <ResizableSidebar>
-      <Box sx={{ px: 2, py: 1.5 }}>
-        <Typography component="div" variant="subtitle2" sx={{ fontWeight: 700 }}>
-          Contents
-        </Typography>
-      </Box>
+      <SidebarToolbar
+        canCreate={namespace !== null}
+        sortDirection={sortDirection}
+        onCreateFolder={() => onCreateFolder(createParentDirectory)}
+        onCreatePage={() => onCreatePage(createParentDirectory)}
+        onToggleSortDirection={() =>
+          setSortDirection((current) => (current === "asc" ? "desc" : "asc"))
+        }
+      />
       <Box sx={{ flexGrow: 1, minHeight: 0, overflow: "auto", py: 1 }}>
         {treeItems.length === 0 ? (
           <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>
@@ -54,14 +104,16 @@ export function PageSidebar({
         ) : (
           <RichTreeView
             aria-label="ページ一覧"
-            defaultExpandedItems={collectExpandableItemIds(treeItems)}
+            expandedItems={expandedItems}
             expansionTrigger="iconContainer"
             itemChildrenIndentation={18}
             items={treeItems}
             selectedItems={selectedItem}
             slots={{ item: PageTreeViewItem }}
+            onExpandedItemsChange={(_, itemIds) => setExpandedItems(itemIds)}
             onItemClick={(_, itemId) => {
-              const location = itemLocations.get(itemId);
+              setActiveItemId(itemId);
+              const location = itemMetadata.get(itemId)?.location;
               if (location) {
                 onOpenLocation(location);
               }
@@ -83,6 +135,71 @@ export function PageSidebar({
         )}
       </Box>
     </ResizableSidebar>
+  );
+}
+
+type SortDirection = "asc" | "desc";
+
+function SidebarToolbar({
+  canCreate,
+  sortDirection,
+  onCreateFolder,
+  onCreatePage,
+  onToggleSortDirection,
+}: {
+  canCreate: boolean;
+  sortDirection: SortDirection;
+  onCreateFolder: () => void;
+  onCreatePage: () => void;
+  onToggleSortDirection: () => void;
+}) {
+  const sidebarActions = [
+    {
+      label: "フォルダー作成",
+      Icon: CreateNewFolderOutlined,
+      disabled: !canCreate,
+      onClick: onCreateFolder,
+    },
+    { label: "ページ作成", Icon: NoteAddOutlined, disabled: !canCreate, onClick: onCreatePage },
+    {
+      label: "ソート",
+      Icon: SortByAlphaOutlined,
+      disabled: false,
+      onClick: onToggleSortDirection,
+      pressed: sortDirection === "desc",
+      tooltip: sortDirection === "asc" ? "ソート: 昇順" : "ソート: 降順",
+    },
+  ];
+
+  return (
+    <Stack
+      aria-label="サイドバー操作"
+      direction="row"
+      spacing={0.5}
+      sx={{
+        alignItems: "center",
+        borderBottom: "1px solid",
+        borderColor: "divider",
+        px: 1,
+        py: 0.75,
+      }}
+    >
+      {sidebarActions.map((action) => (
+        <Tooltip key={action.label} title={action.tooltip ?? action.label}>
+          <span>
+            <IconButton
+              aria-label={action.label}
+              aria-pressed={action.pressed}
+              disabled={action.disabled}
+              size="small"
+              onClick={action.onClick}
+            >
+              <action.Icon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+      ))}
+    </Stack>
   );
 }
 
@@ -133,20 +250,37 @@ function PageTreeViewItem(props: TreeItemProps) {
   );
 }
 
-function buildTreeItems(pages: FileSummary[], files: FileSummary[]) {
+function buildTreeItems(
+  folders: FolderSummary[],
+  pages: FileSummary[],
+  files: FileSummary[],
+  sortDirection: SortDirection,
+) {
   const root: PageTreeItem = {
     id: "__root__",
     label: "",
     location: null,
+    path: null,
     kind: "folder",
     children: [],
   };
+
+  for (const folder of folders) {
+    insertTreeItem(root, folder.display_path.length > 0 ? folder.display_path : [folder.title], {
+      id: `folder:${folder.path}`,
+      label: folder.title,
+      location: null,
+      path: folder.path,
+      kind: "folder",
+    });
+  }
 
   for (const page of pages) {
     insertTreeItem(root, page.display_path.length > 0 ? page.display_path : [page.title], {
       id: `page:${page.location}`,
       label: page.title,
       location: page.location,
+      path: page.path,
       kind: "page",
     });
   }
@@ -156,18 +290,19 @@ function buildTreeItems(pages: FileSummary[], files: FileSummary[]) {
       id: `file:${file.location}`,
       label: file.title,
       location: file.location,
+      path: file.path,
       kind: "file",
     });
   }
 
-  sortTreeItems(root.children ?? []);
+  sortTreeItems(root.children ?? [], sortDirection);
   return root.children ?? [];
 }
 
 function insertTreeItem(
   root: PageTreeItem,
   parts: string[],
-  value: Pick<PageTreeItem, "id" | "label" | "location" | "kind">,
+  value: Pick<PageTreeItem, "id" | "label" | "location" | "path" | "kind">,
 ) {
   let current = root;
   let path = "";
@@ -181,6 +316,7 @@ function insertTreeItem(
         id: `folder:${path}`,
         label: part,
         location: null,
+        path,
         kind: "folder",
         children: [],
       };
@@ -195,6 +331,7 @@ function insertTreeItem(
   if (existing) {
     existing.label = value.label;
     existing.location = value.location;
+    existing.path = value.path;
     existing.kind = value.kind;
   } else {
     children.push({ ...value });
@@ -202,18 +339,19 @@ function insertTreeItem(
   }
 }
 
-function sortTreeItems(items: PageTreeItem[]) {
+function sortTreeItems(items: PageTreeItem[], sortDirection: SortDirection) {
   items.sort((left, right) => {
-    const labelComparison = left.label.localeCompare(right.label);
-    if (labelComparison !== 0) {
-      return labelComparison;
+    const kindComparison = itemKindOrder(left.kind) - itemKindOrder(right.kind);
+    if (kindComparison !== 0) {
+      return kindComparison;
     }
 
-    return itemKindOrder(left.kind) - itemKindOrder(right.kind);
+    const labelComparison = left.label.localeCompare(right.label);
+    return sortDirection === "asc" ? labelComparison : -labelComparison;
   });
   for (const item of items) {
     if (item.children) {
-      sortTreeItems(item.children);
+      sortTreeItems(item.children, sortDirection);
     }
   }
 }
@@ -241,19 +379,51 @@ function collectExpandableItemIds(items: PageTreeItem[]) {
   return ids;
 }
 
-function collectItemLocations(items: PageTreeItem[]) {
-  const locations = new Map<string, string>();
+function mergeExpandedItemIds(current: string[], expandableItemIds: string[]) {
+  const expandableSet = new Set(expandableItemIds);
+  const next = [
+    ...current.filter((itemId) => expandableSet.has(itemId)),
+    ...expandableItemIds.filter((itemId) => !current.includes(itemId)),
+  ];
+
+  if (next.length === current.length && next.every((itemId, index) => itemId === current[index])) {
+    return current;
+  }
+
+  return next;
+}
+
+function collectItemMetadata(items: PageTreeItem[]) {
+  const metadata = new Map<string, PageTreeItemMetadata>();
 
   for (const item of items) {
-    if (item.location) {
-      locations.set(item.id, item.location);
-    }
+    metadata.set(item.id, {
+      kind: item.kind,
+      location: item.location,
+      path: item.path,
+    });
     if (item.children) {
-      for (const [itemId, location] of collectItemLocations(item.children)) {
-        locations.set(itemId, location);
+      for (const [itemId, itemMetadata] of collectItemMetadata(item.children)) {
+        metadata.set(itemId, itemMetadata);
       }
     }
   }
 
-  return locations;
+  return metadata;
+}
+
+function parentDirectoryForItem(metadata: PageTreeItemMetadata | null) {
+  if (!metadata?.path) {
+    return "";
+  }
+  if (metadata.kind === "folder") {
+    return metadata.path;
+  }
+
+  return directoryName(metadata.path);
+}
+
+function directoryName(path: string) {
+  const separatorIndex = path.lastIndexOf("/");
+  return separatorIndex === -1 ? "" : path.slice(0, separatorIndex);
 }

@@ -18,6 +18,7 @@ pub fn run() {
             commands::save_page,
             commands::read_file,
             commands::upload_file,
+            commands::create_folder,
             commands::write_file_note,
             commands::list_content,
             commands::list_page_history,

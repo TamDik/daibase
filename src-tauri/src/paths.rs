@@ -18,6 +18,10 @@ pub fn validate_file_path(path: &str) -> Result<String, String> {
     Ok(normalized)
 }
 
+pub fn validate_folder_path(path: &str) -> Result<String, String> {
+    validate_managed_path(path)
+}
+
 pub fn resolve_namespace_path(root: &Path, relative_path: &str) -> Result<PathBuf, String> {
     let normalized = validate_page_path(relative_path)?;
     Ok(root.join(normalized))
@@ -25,6 +29,11 @@ pub fn resolve_namespace_path(root: &Path, relative_path: &str) -> Result<PathBu
 
 pub fn resolve_namespace_file_path(root: &Path, relative_path: &str) -> Result<PathBuf, String> {
     let normalized = validate_file_path(relative_path)?;
+    Ok(root.join(normalized))
+}
+
+pub fn resolve_namespace_folder_path(root: &Path, relative_path: &str) -> Result<PathBuf, String> {
+    let normalized = validate_folder_path(relative_path)?;
     Ok(root.join(normalized))
 }
 
@@ -95,6 +104,7 @@ mod tests {
         assert!(validate_page_path(".hidden.md").is_err());
         assert!(validate_file_path(".DS_Store").is_err());
         assert!(validate_file_path(".daibase/object").is_err());
+        assert!(validate_folder_path(".daibase").is_err());
     }
 
     #[test]

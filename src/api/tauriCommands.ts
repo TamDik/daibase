@@ -19,7 +19,14 @@ export type FileSummary = {
   display_path: string[];
 };
 
+export type FolderSummary = {
+  path: string;
+  title: string;
+  display_path: string[];
+};
+
 export type ContentTree = {
+  folders: FolderSummary[];
   pages: FileSummary[];
   files: FileSummary[];
 };
@@ -244,6 +251,13 @@ export function uploadFile(namespaceId: string, path: string, sourcePath: string
     namespaceId,
     path,
     sourcePath,
+  });
+}
+
+export function createFolder(namespaceId: string, path: string) {
+  return invoke<NamespaceDetail>("create_folder", {
+    namespaceId,
+    path,
   });
 }
 

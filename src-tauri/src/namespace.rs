@@ -1,9 +1,11 @@
 use crate::models::{
-    ContentTree, FileHistoryEntry, FileSummary, NamespaceDetail, NamespaceMetadata,
+    ContentTree, FileHistoryEntry, FileSummary, FolderSummary, NamespaceDetail, NamespaceMetadata,
     NamespaceRegistry, NamespaceSummary, PageHistorySnapshot, SaveFileResult, SideBySideDiffRow,
     SideBySideDiffSection, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
 };
-use crate::paths::{resolve_namespace_file_path, resolve_namespace_path};
+use crate::paths::{
+    resolve_namespace_file_path, resolve_namespace_folder_path, resolve_namespace_path,
+};
 use crate::versioning::{
     ensure_version_dirs, file_id_for_path, latest_revision_id, read_file_history, read_path_index,
     read_text_object, record_file_revision, record_file_revision_with_content_type,
@@ -211,6 +213,18 @@ pub fn upload_file(
         file,
         save,
     })
+}
+
+pub fn create_folder(
+    app: &AppHandle,
+    namespace_id: String,
+    path: String,
+) -> Result<NamespaceDetail, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let normalized_path = crate::paths::validate_folder_path(&path)?;
+    let resolved_path = resolve_namespace_folder_path(&namespace.root_path, &normalized_path)?;
+    fs::create_dir_all(&resolved_path).map_err(to_error)?;
+    open_namespace(app, namespace_id)
 }
 
 pub fn write_file_note(
@@ -520,6 +534,7 @@ fn split_content_lines(content: &str) -> Vec<&str> {
 }
 
 fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTree, String> {
+    let mut folders = Vec::new();
     let mut pages = Vec::new();
     let mut files = Vec::new();
     let path_index = read_path_index(&namespace.root_path)?;
@@ -528,12 +543,18 @@ fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTre
         &namespace.root_path,
         &namespace.root_path,
         &path_index.entries,
+        &mut folders,
         &mut pages,
         &mut files,
     )?;
+    folders.sort_by(|left, right| left.path.cmp(&right.path));
     pages.sort_by(|left, right| left.path.cmp(&right.path));
     files.sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(ContentTree { pages, files })
+    Ok(ContentTree {
+        folders,
+        pages,
+        files,
+    })
 }
 
 fn collect_content_entries(
@@ -541,6 +562,7 @@ fn collect_content_entries(
     root: &Path,
     current: &Path,
     path_index: &std::collections::BTreeMap<String, String>,
+    folders: &mut Vec<FolderSummary>,
     pages: &mut Vec<FileSummary>,
     files: &mut Vec<FileSummary>,
 ) -> Result<(), String> {
@@ -555,7 +577,17 @@ fn collect_content_entries(
             continue;
         }
         if path.is_dir() {
-            collect_content_entries(namespace, root, &path, path_index, pages, files)?;
+            let relative_path = path
+                .strip_prefix(root)
+                .map_err(to_error)?
+                .to_string_lossy()
+                .replace('\\', "/");
+            folders.push(FolderSummary {
+                title: folder_title(&relative_path),
+                display_path: folder_display_path(&relative_path),
+                path: relative_path,
+            });
+            collect_content_entries(namespace, root, &path, path_index, folders, pages, files)?;
             continue;
         }
 
@@ -749,6 +781,17 @@ fn file_display_path(path: &str) -> Vec<String> {
         .collect()
 }
 
+fn folder_title(path: &str) -> String {
+    path.split('/').next_back().unwrap_or(path).to_string()
+}
+
+fn folder_display_path(path: &str) -> Vec<String> {
+    path.split('/')
+        .filter(|part| !part.is_empty())
+        .map(ToString::to_string)
+        .collect()
+}
+
 fn is_hidden_path_entry(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
@@ -923,6 +966,34 @@ mod tests {
             .pages
             .iter()
             .any(|page| page.location == "Work:Guide/Intro.md"));
+
+        fs::remove_dir_all(root_path).unwrap();
+    }
+
+    #[test]
+    fn list_content_includes_empty_folders() {
+        let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
+        fs::create_dir_all(root_path.join("Notes/Daily")).unwrap();
+        fs::write(root_path.join("Main.md"), "# Main\n").unwrap();
+
+        let namespace = NamespaceSummary {
+            id: "ns-work".to_string(),
+            name: "Work".to_string(),
+            root_path: root_path.clone(),
+            default_page: DEFAULT_PAGE_PATH.to_string(),
+            default_location: "Work:Main.md".to_string(),
+            pages_location: "Work:Special:Pages".to_string(),
+            created_at: "2026-06-01T00:00:00Z".to_string(),
+            updated_at: "2026-06-01T00:00:00Z".to_string(),
+        };
+
+        let content = list_content_for_namespace(&namespace).unwrap();
+
+        assert_eq!(content.folders.len(), 2);
+        assert_eq!(content.folders[0].path, "Notes");
+        assert_eq!(content.folders[0].display_path, vec!["Notes"]);
+        assert_eq!(content.folders[1].path, "Notes/Daily");
+        assert_eq!(content.folders[1].display_path, vec!["Notes", "Daily"]);
 
         fs::remove_dir_all(root_path).unwrap();
     }

@@ -86,6 +86,15 @@ pub fn upload_file(
 }
 
 #[tauri::command]
+pub fn create_folder(
+    app: AppHandle,
+    namespace_id: String,
+    path: String,
+) -> Result<NamespaceDetail, String> {
+    crate::namespace::create_folder(&app, namespace_id, path)
+}
+
+#[tauri::command]
 pub fn write_file_note(
     app: AppHandle,
     namespace_id: String,

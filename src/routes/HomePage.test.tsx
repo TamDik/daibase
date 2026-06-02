@@ -26,6 +26,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 }));
 
 vi.mock("../api/tauriCommands", () => ({
+  createFolder: vi.fn(),
   createNamespace: vi.fn(),
   listFileHistory: vi.fn(),
   listPageHistory: vi.fn(),
@@ -45,6 +46,7 @@ const api = await import("../api/tauriCommands");
 
 const workNamespace = namespace("ns-work", "Work");
 const contentTree: ContentTree = {
+  folders: [],
   pages: [
     {
       file_id: "file-main",
@@ -89,10 +91,12 @@ const contentTree: ContentTree = {
 describe("HomePage", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     cleanup();
   });
 
   beforeEach(() => {
+    vi.mocked(api.createFolder).mockReset();
     vi.mocked(api.listNamespaces).mockReset();
     vi.mocked(api.listFileHistory).mockReset();
     vi.mocked(api.listPageHistory).mockReset();
@@ -141,6 +145,20 @@ describe("HomePage", () => {
         revision_id: "rev_file_saved",
         object_id: "sha256:file",
         saved_at: "2026-01-03T00:00:00Z",
+      },
+    }));
+    vi.mocked(api.createFolder).mockImplementation(async (_namespaceId, path) => ({
+      namespace: workNamespace,
+      content: {
+        ...contentTree,
+        folders: [
+          ...contentTree.folders,
+          {
+            path,
+            title: lastPathPart(path),
+            display_path: path.split("/"),
+          },
+        ],
       },
     }));
     vi.mocked(api.writeFileNote).mockImplementation(async (_namespaceId, path, note) =>
@@ -405,6 +423,85 @@ describe("HomePage", () => {
     expect(screen.getByText(/hello\s+world/)).toBeInTheDocument();
   });
 
+  it("サイドバーに操作ボタンを表示して Contents ラベルは表示しない", async () => {
+    renderHomePage();
+
+    await screen.findByRole("tree", { name: "ページ一覧" });
+
+    expect(screen.queryByText("Contents")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "新規作成" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "ファイル作成" })).not.toBeInTheDocument();
+    for (const label of ["フォルダー作成", "ページ作成", "ソート"]) {
+      expect(screen.getByRole("button", { name: label })).toBeEnabled();
+    }
+  });
+
+  it("サイドバーからページ名を入力してページを作成する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await screen.findByRole("tree", { name: "ページ一覧" });
+    await user.click(screen.getByRole("button", { name: "ページ作成" }));
+    const pageName = await screen.findByRole("textbox", { name: "ページ名" });
+    await user.clear(pageName);
+    await user.type(pageName, "Draft");
+    await user.click(screen.getByRole("button", { name: "作成" }));
+
+    expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Draft.md", "");
+    expect(await screen.findByDisplayValue("Work:Draft.md")).toBeInTheDocument();
+    await waitForElementToBeRemoved(() => screen.queryByRole("dialog", { name: "ページ作成" }));
+    expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue("");
+  });
+
+  it("選択中フォルダーの中にページを作成する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    await user.click(within(pageList).getByText("Guide"));
+    await user.click(screen.getByRole("button", { name: "ページ作成" }));
+    const pageName = await screen.findByRole("textbox", { name: "ページ名" });
+    await user.clear(pageName);
+    await user.type(pageName, "Draft.md");
+    await user.click(screen.getByRole("button", { name: "作成" }));
+
+    expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Guide/Draft.md", "");
+    expect(await screen.findByDisplayValue("Work:Guide/Draft.md")).toBeInTheDocument();
+  });
+
+  it("選択中フォルダーの中にフォルダーを作成して一覧に表示する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    await user.click(within(pageList).getByText("Guide"));
+    await user.click(screen.getByRole("button", { name: "フォルダー作成" }));
+    const folderName = await screen.findByRole("textbox", { name: "フォルダー名" });
+    await user.clear(folderName);
+    await user.type(folderName, "Daily");
+    await user.click(screen.getByRole("button", { name: "作成" }));
+
+    expect(api.createFolder).toHaveBeenCalledWith(workNamespace.id, "Guide/Daily");
+    expect(within(pageList).getByText("Daily")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Work:Main.md")).toBeInTheDocument();
+  });
+
+  it("サイドバーのソート順を切り替える", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    expect(textOrder(pageList.textContent ?? "", "aaa", "Guide")).toBeLessThan(0);
+
+    await user.click(screen.getByRole("button", { name: "ソート" }));
+
+    expect(screen.getByRole("button", { name: "ソート" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(textOrder(pageList.textContent ?? "", "Guide", "aaa")).toBeLessThan(0);
+  });
+
   it("サイドバーのフォルダークリックではページとして開かない", async () => {
     const user = userEvent.setup();
     renderHomePage();
@@ -645,4 +742,8 @@ function managedFile(path: string, note: string): ManagedFileContent {
 function lastPathPart(path: string) {
   const parts = path.split("/");
   return parts[parts.length - 1] ?? path;
+}
+
+function textOrder(text: string, left: string, right: string) {
+  return text.indexOf(left) - text.indexOf(right);
 }
