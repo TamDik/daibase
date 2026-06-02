@@ -43,8 +43,15 @@ export type PageContent = {
   title: string;
   location: string;
   content: string;
+  backlinks: BacklinkSummary[];
   latest_revision_id: string | null;
   is_virtual?: boolean;
+};
+
+export type BacklinkSummary = {
+  path: string;
+  title: string;
+  location: string;
 };
 
 export type SaveResult = {
@@ -71,6 +78,7 @@ export type ManagedFileContent = {
   title: string;
   location: string;
   note: string;
+  backlinks: BacklinkSummary[];
   content_type: string;
   text_content: string | null;
   data_url: string | null;

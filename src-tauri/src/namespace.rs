@@ -1,7 +1,7 @@
 use crate::models::{
-    ContentTree, FileHistoryEntry, FileSummary, FolderSummary, NamespaceDetail, NamespaceMetadata,
-    NamespaceRegistry, NamespaceSummary, PageHistorySnapshot, SaveFileResult, SideBySideDiffRow,
-    SideBySideDiffSection, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
+    BacklinkSummary, ContentTree, FileHistoryEntry, FileSummary, FolderSummary, NamespaceDetail,
+    NamespaceMetadata, NamespaceRegistry, NamespaceSummary, PageHistorySnapshot, SaveFileResult,
+    SideBySideDiffRow, SideBySideDiffSection, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
 };
 use crate::paths::{
     resolve_namespace_file_path, resolve_namespace_folder_path, resolve_namespace_path,
@@ -133,6 +133,7 @@ pub fn read_page(
 
     let title = page_title(&normalized_path);
     let location = page_location(&normalized_path, &namespace);
+    let backlinks = page_backlinks_for_namespace(&namespace, &normalized_path)?;
 
     Ok(crate::models::PageContent {
         namespace_id,
@@ -141,6 +142,7 @@ pub fn read_page(
         title,
         location,
         content,
+        backlinks,
         latest_revision_id,
         is_virtual: false,
     })
@@ -263,6 +265,61 @@ pub fn file_exists_for_namespace(namespace: &NamespaceSummary, path: &str) -> Re
     let normalized_path = crate::paths::validate_file_path(path)?;
     let resolved_path = resolve_namespace_file_path(&namespace.root_path, &normalized_path)?;
     Ok(resolved_path.is_file())
+}
+
+pub fn page_backlinks_for_namespace(
+    namespace: &NamespaceSummary,
+    path: &str,
+) -> Result<Vec<BacklinkSummary>, String> {
+    let normalized_path = crate::paths::validate_page_path(path)?;
+    let target_location = page_location(&normalized_path, namespace);
+    content_backlinks_for_namespace(namespace, &normalized_path, &target_location, false)
+}
+
+pub fn file_backlinks_for_namespace(
+    namespace: &NamespaceSummary,
+    path: &str,
+) -> Result<Vec<BacklinkSummary>, String> {
+    let normalized_path = crate::paths::validate_file_path(path)?;
+    let target_location = file_location(&normalized_path, namespace);
+    content_backlinks_for_namespace(namespace, &normalized_path, &target_location, true)
+}
+
+fn content_backlinks_for_namespace(
+    namespace: &NamespaceSummary,
+    normalized_path: &str,
+    target_location: &str,
+    include_images: bool,
+) -> Result<Vec<BacklinkSummary>, String> {
+    let content = list_content_for_namespace(namespace)?;
+    let mut backlinks = Vec::new();
+
+    for page in content.pages {
+        if page.path == normalized_path && target_location == page.location {
+            continue;
+        }
+
+        let page_path = resolve_namespace_path(&namespace.root_path, &page.path)?;
+        let page_content = fs::read_to_string(page_path).map_err(to_error)?;
+        let links_to_target = extract_markdown_reference_targets(&page_content, include_images)
+            .into_iter()
+            .filter(|target| !crate::location::is_external_markdown_link_target(target))
+            .any(|target| {
+                crate::location::resolve_markdown_link(namespace, &page.path, &target)
+                    == target_location
+            });
+
+        if links_to_target {
+            backlinks.push(BacklinkSummary {
+                path: page.path,
+                title: page.title,
+                location: page.location,
+            });
+        }
+    }
+
+    backlinks.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(backlinks)
 }
 
 pub fn list_file_history(
@@ -533,6 +590,59 @@ fn split_content_lines(content: &str) -> Vec<&str> {
     }
 }
 
+fn extract_markdown_reference_targets(content: &str, include_images: bool) -> Vec<String> {
+    let mut targets = Vec::new();
+    let chars = content.char_indices().collect::<Vec<_>>();
+    let mut index = 0;
+
+    while index < chars.len() {
+        let (byte_index, char) = chars[index];
+        if char != '[' || (!include_images && content[..byte_index].ends_with('!')) {
+            index += 1;
+            continue;
+        }
+
+        let Some(label_end_index) = find_next_char(&chars, index + 1, ']') else {
+            index += 1;
+            continue;
+        };
+        if chars.get(label_end_index + 1).map(|(_, char)| *char) != Some('(') {
+            index = label_end_index + 1;
+            continue;
+        }
+
+        let target_start_index = label_end_index + 2;
+        let Some(target_end_index) = find_next_char(&chars, target_start_index, ')') else {
+            index = label_end_index + 1;
+            continue;
+        };
+
+        let target_start_byte = chars
+            .get(target_start_index)
+            .map(|(byte_index, _)| *byte_index)
+            .unwrap_or(content.len());
+        let target_end_byte = chars
+            .get(target_end_index)
+            .map(|(byte_index, _)| *byte_index)
+            .unwrap_or(content.len());
+        let target = content[target_start_byte..target_end_byte].trim();
+        if !target.is_empty() {
+            targets.push(target.to_string());
+        }
+        index = target_end_index + 1;
+    }
+
+    targets
+}
+
+fn find_next_char(chars: &[(usize, char)], start_index: usize, target: char) -> Option<usize> {
+    chars
+        .iter()
+        .enumerate()
+        .skip(start_index)
+        .find_map(|(index, (_, char))| (*char == target).then_some(index))
+}
+
 fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTree, String> {
     let mut folders = Vec::new();
     let mut pages = Vec::new();
@@ -706,6 +816,7 @@ fn read_managed_file_for_namespace(
     let resolved_path = resolve_namespace_file_path(&namespace.root_path, &normalized_path)?;
     let title = file_title(&normalized_path);
     let location = file_location(&normalized_path, namespace);
+    let backlinks = file_backlinks_for_namespace(namespace, &normalized_path)?;
 
     if !resolved_path.exists() {
         return Ok(crate::models::ManagedFileContent {
@@ -715,6 +826,7 @@ fn read_managed_file_for_namespace(
             title,
             location,
             note: String::new(),
+            backlinks,
             content_type: guess_content_type(path),
             text_content: None,
             data_url: None,
@@ -752,6 +864,7 @@ fn read_managed_file_for_namespace(
         title,
         location,
         note,
+        backlinks,
         content_type,
         text_content,
         data_url,
@@ -1024,6 +1137,77 @@ mod tests {
         assert_eq!(content.files[0].path, "images/logo.png");
         assert_eq!(content.files[0].location, "Work:images/logo.png");
         assert_eq!(content.files[0].display_path, vec!["images", "logo.png"]);
+
+        fs::remove_dir_all(root_path).unwrap();
+    }
+
+    #[test]
+    fn page_backlinks_include_pages_that_link_to_target() {
+        let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
+        fs::create_dir_all(root_path.join("Guide")).unwrap();
+        fs::write(root_path.join("Main.md"), "[Intro](Guide/Intro.md)\n").unwrap();
+        fs::write(root_path.join("Notes.md"), "![Intro](Guide/Intro.md)\n").unwrap();
+        fs::write(root_path.join("Guide/Index.md"), "[Intro](Intro.md)\n").unwrap();
+        fs::write(root_path.join("Guide/Intro.md"), "# Intro\n").unwrap();
+
+        let namespace = NamespaceSummary {
+            id: "ns-work".to_string(),
+            name: "Work".to_string(),
+            root_path: root_path.clone(),
+            default_page: DEFAULT_PAGE_PATH.to_string(),
+            default_location: "Work:Main.md".to_string(),
+            pages_location: "Work:Special:Pages".to_string(),
+            created_at: "2026-06-01T00:00:00Z".to_string(),
+            updated_at: "2026-06-01T00:00:00Z".to_string(),
+        };
+
+        let backlinks = page_backlinks_for_namespace(&namespace, "Guide/Intro.md").unwrap();
+
+        assert_eq!(backlinks.len(), 2);
+        assert_eq!(backlinks[0].path, "Guide/Index.md");
+        assert_eq!(backlinks[0].location, "Work:Guide/Index.md");
+        assert_eq!(backlinks[1].path, "Main.md");
+        assert_eq!(backlinks[1].location, "Work:Main.md");
+
+        fs::remove_dir_all(root_path).unwrap();
+    }
+
+    #[test]
+    fn file_backlinks_include_pages_that_link_or_embed_target() {
+        let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
+        fs::create_dir_all(root_path.join("Guide")).unwrap();
+        fs::create_dir_all(root_path.join("images")).unwrap();
+        fs::write(root_path.join("Main.md"), "![Logo](images/logo.png)\n").unwrap();
+        fs::write(
+            root_path.join("Guide/Index.md"),
+            "[Logo](../images/logo.png)\n",
+        )
+        .unwrap();
+        fs::write(
+            root_path.join("Guide/Other.md"),
+            "[Other](../images/other.png)\n",
+        )
+        .unwrap();
+        fs::write(root_path.join("images/logo.png"), b"image").unwrap();
+
+        let namespace = NamespaceSummary {
+            id: "ns-work".to_string(),
+            name: "Work".to_string(),
+            root_path: root_path.clone(),
+            default_page: DEFAULT_PAGE_PATH.to_string(),
+            default_location: "Work:Main.md".to_string(),
+            pages_location: "Work:Special:Pages".to_string(),
+            created_at: "2026-06-01T00:00:00Z".to_string(),
+            updated_at: "2026-06-01T00:00:00Z".to_string(),
+        };
+
+        let backlinks = file_backlinks_for_namespace(&namespace, "images/logo.png").unwrap();
+
+        assert_eq!(backlinks.len(), 2);
+        assert_eq!(backlinks[0].path, "Guide/Index.md");
+        assert_eq!(backlinks[0].location, "Work:Guide/Index.md");
+        assert_eq!(backlinks[1].path, "Main.md");
+        assert_eq!(backlinks[1].location, "Work:Main.md");
 
         fs::remove_dir_all(root_path).unwrap();
     }

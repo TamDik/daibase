@@ -3,6 +3,7 @@ import {
   Box,
   Chip,
   CircularProgress,
+  Link,
   List,
   ListItemButton,
   ListItemText,
@@ -18,12 +19,13 @@ import {
 import { Article, Code } from "@mui/icons-material";
 import { useState } from "react";
 
-import type { FileHistoryEntry } from "../api/tauriCommands";
+import type { BacklinkSummary, FileHistoryEntry } from "../api/tauriCommands";
 import { MarkdownWysiwygEditor } from "./MarkdownWysiwygEditor";
 
 export type PageMode = "view" | "history";
 
 export function PageSurface({
+  backlinks,
   draft,
   editorKey,
   historyEntries,
@@ -35,12 +37,14 @@ export function PageSurface({
   mode,
   onDraftChange,
   onModeChange,
+  onOpenLocation,
   onOpenMarkdownLink,
   onResolveMarkdownImage,
   onResolveMarkdownLinkStatus,
   onSelectHistoryEntry,
   selectedHistoryRevisionId,
 }: {
+  backlinks: BacklinkSummary[];
   draft: string;
   editorKey: string;
   historyEntries: FileHistoryEntry[];
@@ -52,6 +56,7 @@ export function PageSurface({
   mode: PageMode;
   onDraftChange: (value: string) => void;
   onModeChange: (mode: PageMode) => void;
+  onOpenLocation: (location: string) => void;
   onOpenMarkdownLink: (target: string) => void;
   onResolveMarkdownImage: (target: string) => Promise<{
     content_type: string | null;
@@ -71,12 +76,92 @@ export function PageSurface({
 }) {
   const [editorView, setEditorView] = useState<"wysiwyg" | "source">("wysiwyg");
 
+  const viewToolbar = mode === "view" && (
+    <Stack
+      direction="row"
+      spacing={1}
+      sx={{
+        alignItems: "center",
+        bgcolor: "#ffffff",
+        border: "1px solid",
+        borderColor: "divider",
+        borderRadius: 1,
+        boxShadow: "0 4px 16px rgba(31, 35, 40, 0.12)",
+        justifyContent: "flex-end",
+        position: "absolute",
+        right: 16,
+        top: 46,
+        zIndex: 2,
+        px: 0.75,
+        py: 0.5,
+      }}
+    >
+      {isDirty && (
+        <Chip
+          aria-label="未保存"
+          label="未保存"
+          size="small"
+          variant="outlined"
+          sx={{
+            bgcolor: "#ffffff",
+            borderColor: "#cf222e",
+            color: "#a40e26",
+            fontWeight: 600,
+            minWidth: 72,
+          }}
+        />
+      )}
+      <ToggleButtonGroup
+        exclusive
+        size="small"
+        value={editorView}
+        onChange={(_, value: "wysiwyg" | "source" | null) => {
+          if (value) {
+            setEditorView(value);
+          }
+        }}
+      >
+        <Tooltip title="WYSIWYG">
+          <ToggleButton
+            aria-label="WYSIWYG"
+            value="wysiwyg"
+            disabled={isSaving}
+            sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+          >
+            <Article fontSize="small" />
+          </ToggleButton>
+        </Tooltip>
+        <Tooltip title="Markdownソース">
+          <ToggleButton
+            aria-label="Markdownソース"
+            value="source"
+            disabled={isSaving}
+            sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+          >
+            <Code fontSize="small" />
+          </ToggleButton>
+        </Tooltip>
+      </ToggleButtonGroup>
+    </Stack>
+  );
+
   return (
-    <Box sx={{ bgcolor: "#ffffff", flexGrow: 1, overflow: "visible" }}>
+    <Box
+      sx={{
+        bgcolor: "#ffffff",
+        display: "flex",
+        flexDirection: "column",
+        flexGrow: 1,
+        minHeight: 0,
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
       <Box
         sx={{
-          display: "flex",
           alignItems: "center",
+          display: "flex",
+          flex: "0 0 auto",
           px: 1.5,
           pt: 0.5,
         }}
@@ -97,8 +182,9 @@ export function PageSurface({
           </Tabs>
         </Box>
       </Box>
+      {viewToolbar}
 
-      <Box>
+      <Box sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}>
         {mode === "history" ? (
           <HistoryPanel
             entries={historyEntries}
@@ -114,90 +200,82 @@ export function PageSurface({
                 このページはまだ作成されていません。
               </Alert>
             )}
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: "center", justifyContent: "flex-end", px: 2, pt: 1 }}
-            >
-              {isDirty && (
-                <Chip
-                  aria-label="未保存"
-                  label="未保存"
-                  size="small"
-                  variant="outlined"
+            <>
+              {editorView === "source" ? (
+                <TextField
+                  label="Markdownソース"
+                  value={draft}
+                  onChange={(event) => onDraftChange(event.target.value)}
+                  disabled={isSaving}
+                  multiline
+                  minRows={24}
+                  fullWidth
                   sx={{
-                    bgcolor: "#ffffff",
-                    borderColor: "#cf222e",
-                    color: "#a40e26",
-                    fontWeight: 600,
-                    minWidth: 72,
+                    "& textarea": {
+                      fontFamily:
+                        'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+                      lineHeight: 1.6,
+                    },
                   }}
                 />
+              ) : (
+                <MarkdownWysiwygEditor
+                  key={editorKey}
+                  ariaLabel="Markdown"
+                  disabled={isSaving}
+                  value={draft}
+                  onChange={onDraftChange}
+                  onOpenMarkdownLink={onOpenMarkdownLink}
+                  onResolveMarkdownImage={onResolveMarkdownImage}
+                  onResolveMarkdownLinkStatus={onResolveMarkdownLinkStatus}
+                />
               )}
-              <ToggleButtonGroup
-                exclusive
-                size="small"
-                value={editorView}
-                onChange={(_, value: "wysiwyg" | "source" | null) => {
-                  if (value) {
-                    setEditorView(value);
-                  }
-                }}
-              >
-                <Tooltip title="WYSIWYG">
-                  <ToggleButton
-                    aria-label="WYSIWYG"
-                    value="wysiwyg"
-                    disabled={isSaving}
-                    sx={{ minHeight: 32, minWidth: 36, px: 1 }}
-                  >
-                    <Article fontSize="small" />
-                  </ToggleButton>
-                </Tooltip>
-                <Tooltip title="Markdownソース">
-                  <ToggleButton
-                    aria-label="Markdownソース"
-                    value="source"
-                    disabled={isSaving}
-                    sx={{ minHeight: 32, minWidth: 36, px: 1 }}
-                  >
-                    <Code fontSize="small" />
-                  </ToggleButton>
-                </Tooltip>
-              </ToggleButtonGroup>
-            </Stack>
-            {editorView === "source" ? (
-              <TextField
-                label="Markdownソース"
-                value={draft}
-                onChange={(event) => onDraftChange(event.target.value)}
-                disabled={isSaving}
-                multiline
-                minRows={24}
-                fullWidth
-                sx={{
-                  "& textarea": {
-                    fontFamily:
-                      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-                    lineHeight: 1.6,
-                  },
-                }}
-              />
-            ) : (
-              <MarkdownWysiwygEditor
-                key={editorKey}
-                ariaLabel="Markdown"
-                disabled={isSaving}
-                value={draft}
-                onChange={onDraftChange}
-                onOpenMarkdownLink={onOpenMarkdownLink}
-                onResolveMarkdownImage={onResolveMarkdownImage}
-                onResolveMarkdownLinkStatus={onResolveMarkdownLinkStatus}
-              />
-            )}
+              <BacklinksPanel backlinks={backlinks} onOpenLocation={onOpenLocation} />
+            </>
           </Box>
         )}
       </Box>
+    </Box>
+  );
+}
+
+function BacklinksPanel({
+  backlinks,
+  onOpenLocation,
+}: {
+  backlinks: BacklinkSummary[];
+  onOpenLocation: (location: string) => void;
+}) {
+  if (backlinks.length === 0) {
+    return null;
+  }
+
+  return (
+    <Box
+      sx={{
+        mx: 2,
+        pb: 2,
+        pt: 1,
+      }}
+    >
+      <Typography variant="caption" component="h2" color="text.secondary">
+        このページへのリンク
+      </Typography>
+      <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", mt: 0.5, rowGap: 0.5 }}>
+        {backlinks.map((backlink) => (
+          <Link
+            key={backlink.location}
+            component="button"
+            type="button"
+            underline="hover"
+            variant="body2"
+            onClick={() => onOpenLocation(backlink.location)}
+            sx={{ cursor: "pointer" }}
+          >
+            {backlink.title}
+          </Link>
+        ))}
+      </Stack>
     </Box>
   );
 }

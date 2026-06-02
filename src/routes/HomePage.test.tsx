@@ -225,6 +225,21 @@ describe("HomePage", () => {
       }
       const path = contentPath;
       const pageName = path.replace(/\.md$/, "");
+      if (path === "Guide/Intro.md") {
+        return {
+          kind: "page",
+          namespace,
+          location: "Work:Guide/Intro.md",
+          content: contentTree,
+          page: page(path, "# Intro", [
+            {
+              path: "Main.md",
+              title: "Main",
+              location: "Work:Main.md",
+            },
+          ]),
+        };
+      }
       return {
         kind: "page",
         namespace,
@@ -240,6 +255,7 @@ describe("HomePage", () => {
                 title: lastPathPart(pageName),
                 location: `Work:${path}`,
                 content: "",
+                backlinks: [],
                 latest_revision_id: null,
                 is_virtual: true,
               },
@@ -314,6 +330,20 @@ describe("HomePage", () => {
     expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
   });
 
+  it("ページ下部にこのページへリンクしているページを表示して開ける", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    await user.click(within(pageList).getByText("Intro"));
+
+    expect(await screen.findByDisplayValue("Work:Guide/Intro.md")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "このページへのリンク" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Main/ }));
+
+    expect(await screen.findByDisplayValue("Work:Main.md")).toBeInTheDocument();
+  });
+
   it("サイドバーにページを階層構造で表示してクリックで遷移する", async () => {
     const user = userEvent.setup();
     renderHomePage();
@@ -368,6 +398,20 @@ describe("HomePage", () => {
     );
   });
 
+  it("File ページ下部にこのファイルへリンクしているページを表示して開ける", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    await user.click(within(pageList).getByText("logo.png"));
+
+    expect(await screen.findByDisplayValue("Work:images/logo.png")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "このファイルへのリンク" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Main" }));
+
+    expect(await screen.findByDisplayValue("Work:Main.md")).toBeInTheDocument();
+  });
+
   it("File ページからアップロードする", async () => {
     const dialog = await import("@tauri-apps/plugin-dialog");
     vi.mocked(dialog.open).mockResolvedValue("/tmp/logo.png");
@@ -402,6 +446,7 @@ describe("HomePage", () => {
         title: "readme.txt",
         location: "Work:notes/readme.txt",
         note: "",
+        backlinks: [],
         content_type: "text/plain",
         text_content: "hello\nworld",
         data_url: null,
@@ -495,10 +540,7 @@ describe("HomePage", () => {
 
     await user.click(screen.getByRole("button", { name: "ソート" }));
 
-    expect(screen.getByRole("button", { name: "ソート" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "ソート" })).toHaveAttribute("aria-pressed", "true");
     expect(textOrder(pageList.textContent ?? "", "Guide", "aaa")).toBeLessThan(0);
   });
 
@@ -678,7 +720,11 @@ function namespace(id: string, name: string): NamespaceSummary {
   };
 }
 
-function page(path: string, content: string): PageContent {
+function page(
+  path: string,
+  content: string,
+  backlinks: PageContent["backlinks"] = [],
+): PageContent {
   return {
     namespace_id: workNamespace.id,
     file_id: `file-${path}`,
@@ -686,6 +732,7 @@ function page(path: string, content: string): PageContent {
     title: lastPathPart(path.replace(/\.md$/, "")),
     location: `Work:${path}`,
     content,
+    backlinks,
     latest_revision_id: "rev_01",
     is_virtual: false,
   };
@@ -722,7 +769,17 @@ function fileHistoryEntries(): FileHistoryEntry[] {
   ];
 }
 
-function managedFile(path: string, note: string): ManagedFileContent {
+function managedFile(
+  path: string,
+  note: string,
+  backlinks: ManagedFileContent["backlinks"] = [
+    {
+      path: "Main.md",
+      title: "Main",
+      location: "Work:Main.md",
+    },
+  ],
+): ManagedFileContent {
   return {
     namespace_id: workNamespace.id,
     file_id: "file-logo",
@@ -730,6 +787,7 @@ function managedFile(path: string, note: string): ManagedFileContent {
     title: lastPathPart(path),
     location: `Work:${path}`,
     note,
+    backlinks,
     content_type: "image/png",
     text_content: null,
     data_url: "data:image/png;base64,aW1hZ2U=",

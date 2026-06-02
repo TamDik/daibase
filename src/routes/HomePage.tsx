@@ -730,10 +730,10 @@ export function HomePage() {
             flexDirection: "column",
             minHeight: 0,
             minWidth: 0,
-            overflow: "auto",
+            overflow: "hidden",
           }}
         >
-          <Stack spacing={2} sx={{ flexGrow: 1 }}>
+          <Stack spacing={2} sx={{ flexGrow: 1, minHeight: 0 }}>
             {isLoading && <Alert severity="info">読み込み中</Alert>}
             {error && <Alert severity="error">{error}</Alert>}
 
@@ -767,6 +767,7 @@ export function HomePage() {
 
             {pageView && (
               <PageSurface
+                backlinks={pageView.page.backlinks}
                 draft={draft}
                 editorKey={`${pageView.namespace.id}:${pageView.page.path}`}
                 historyEntries={historyEntries}
@@ -778,6 +779,7 @@ export function HomePage() {
                 mode={pageMode}
                 onDraftChange={setDraft}
                 onModeChange={(mode) => void handleModeChange(mode)}
+                onOpenLocation={(location) => void navigate(location)}
                 onOpenMarkdownLink={(target) => void handleOpenPageMarkdownLink(target)}
                 onResolveMarkdownImage={handleResolvePageMarkdownImage}
                 onResolveMarkdownLinkStatus={handleResolvePageMarkdownLinkStatus}
@@ -798,6 +800,7 @@ export function HomePage() {
                 noteDraft={fileNoteDraft}
                 onModeChange={(mode) => void handleFileModeChange(mode)}
                 onNoteChange={setFileNoteDraft}
+                onOpenLocation={(location) => void navigate(location)}
                 onSaveNote={() => void handleSaveFileNote()}
                 onSelectHistoryEntry={handleSelectHistoryEntry}
                 onUpload={() => void handleUploadFile()}
@@ -817,7 +820,12 @@ export function HomePage() {
           {savedMessage}
         </Alert>
       </Snackbar>
-      <Dialog open={createDialog !== null} onClose={handleCloseCreateDialog} fullWidth maxWidth="xs">
+      <Dialog
+        open={createDialog !== null}
+        onClose={handleCloseCreateDialog}
+        fullWidth
+        maxWidth="xs"
+      >
         <DialogTitle>
           {createDialog?.kind === "folder" ? "フォルダー作成" : "ページ作成"}
         </DialogTitle>
@@ -885,8 +893,7 @@ function createPathFromDialog(dialog: CreateDialogState) {
     return "";
   }
 
-  const normalizedName =
-    dialog.kind === "page" && !name.endsWith(".md") ? `${name}.md` : name;
+  const normalizedName = dialog.kind === "page" && !name.endsWith(".md") ? `${name}.md` : name;
 
   return joinManagedPath(dialog.parentDirectory, normalizedName);
 }

@@ -59,8 +59,17 @@ pub struct PageContent {
     pub title: String,
     pub location: String,
     pub content: String,
+    #[serde(default)]
+    pub backlinks: Vec<BacklinkSummary>,
     pub latest_revision_id: Option<String>,
     pub is_virtual: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BacklinkSummary {
+    pub path: String,
+    pub title: String,
+    pub location: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -71,6 +80,8 @@ pub struct ManagedFileContent {
     pub title: String,
     pub location: String,
     pub note: String,
+    #[serde(default)]
+    pub backlinks: Vec<BacklinkSummary>,
     pub content_type: String,
     pub text_content: Option<String>,
     pub data_url: Option<String>,

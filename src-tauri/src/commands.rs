@@ -392,6 +392,7 @@ fn read_page_or_virtual(
                 .to_string(),
             location: crate::namespace::page_location(path, namespace),
             content: String::new(),
+            backlinks: crate::namespace::page_backlinks_for_namespace(namespace, path)?,
             latest_revision_id: None,
             is_virtual: true,
         }),
