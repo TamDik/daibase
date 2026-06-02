@@ -1,6 +1,7 @@
 import {
   Alert,
   Box,
+  Chip,
   CircularProgress,
   List,
   ListItemButton,
@@ -28,6 +29,7 @@ export function PageSurface({
   historyEntries,
   historyError,
   isHistoryLoading,
+  isDirty,
   isSaving,
   isVirtual,
   mode,
@@ -44,6 +46,7 @@ export function PageSurface({
   historyEntries: FileHistoryEntry[];
   historyError: string | null;
   isHistoryLoading: boolean;
+  isDirty: boolean;
   isSaving: boolean;
   isVirtual: boolean;
   mode: PageMode;
@@ -111,30 +114,26 @@ export function PageSurface({
                 このページはまだ作成されていません。
               </Alert>
             )}
-            {isSaving && (
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{
-                  alignItems: "center",
-                  bgcolor: "#f6f8fa",
-                  border: "1px solid #d0d7de",
-                  borderRadius: 3,
-                  m: 2,
-                  p: 1,
-                  position: "absolute",
-                  right: 0,
-                  top: 0,
-                  zIndex: 1,
-                }}
-              >
-                <CircularProgress size={16} />
-                <Typography variant="body2" color="text.secondary">
-                  保存中
-                </Typography>
-              </Stack>
-            )}
-            <Stack direction="row" sx={{ justifyContent: "flex-end", px: 2, pt: 1 }}>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: "center", justifyContent: "flex-end", px: 2, pt: 1 }}
+            >
+              {isDirty && (
+                <Chip
+                  aria-label="未保存"
+                  label="未保存"
+                  size="small"
+                  variant="outlined"
+                  sx={{
+                    bgcolor: "#ffffff",
+                    borderColor: "#cf222e",
+                    color: "#a40e26",
+                    fontWeight: 600,
+                    minWidth: 72,
+                  }}
+                />
+              )}
               <ToggleButtonGroup
                 exclusive
                 size="small"

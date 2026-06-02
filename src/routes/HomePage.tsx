@@ -673,6 +673,7 @@ export function HomePage() {
                 historyEntries={historyEntries}
                 historyError={historyError}
                 isHistoryLoading={isHistoryLoading}
+                isDirty={isDirty}
                 isSaving={isSaving}
                 isVirtual={pageView.page.is_virtual ?? false}
                 mode={pageMode}

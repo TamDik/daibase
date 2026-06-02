@@ -259,6 +259,7 @@ describe("HomePage", () => {
     expect(screen.getByRole("tab", { name: "閲覧" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "WYSIWYG" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Markdownソース" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("未保存")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Markdown" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "編集" })).not.toBeInTheDocument();
   });
@@ -274,6 +275,9 @@ describe("HomePage", () => {
 
     await user.clear(rawEditor);
     await user.type(rawEditor, "# Raw");
+
+    expect(screen.getByLabelText("未保存")).toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: "WYSIWYG" }));
 
     expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue("# Raw");
