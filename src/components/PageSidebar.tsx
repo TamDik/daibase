@@ -1,10 +1,11 @@
-import { Box, IconButton, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, Button, IconButton, Stack, Tooltip, Typography } from "@mui/material";
 import {
   ArticleOutlined,
   CreateNewFolderOutlined,
   InsertDriveFileOutlined,
   FolderOutlined,
   NoteAddOutlined,
+  PublicOutlined,
   SortByAlphaOutlined,
 } from "@mui/icons-material";
 import { RichTreeView } from "@mui/x-tree-view/RichTreeView";
@@ -133,6 +134,25 @@ export function PageSidebar({
             }}
           />
         )}
+      </Box>
+      <Box
+        sx={{
+          borderTop: "1px solid",
+          borderColor: "divider",
+          px: 1,
+          py: 0.75,
+        }}
+      >
+        <Button
+          fullWidth
+          disabled={namespace === null}
+          size="small"
+          startIcon={<PublicOutlined fontSize="small" />}
+          sx={{ justifyContent: "flex-start", textTransform: "none" }}
+          onClick={() => onOpenLocation("Special:SpecialPages")}
+        >
+          Special Pages
+        </Button>
       </Box>
     </ResizableSidebar>
   );

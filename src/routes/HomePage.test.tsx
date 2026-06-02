@@ -605,6 +605,23 @@ describe("HomePage", () => {
     expect(screen.queryByText(/Work namespace/)).not.toBeInTheDocument();
   });
 
+  it("サイドバーから Special:SpecialPages を開く", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    const specialPagesLink = screen.getByRole("button", { name: "Special Pages" });
+
+    expect(
+      pageList.compareDocumentPosition(specialPagesLink) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.click(specialPagesLink);
+
+    expect(await screen.findByDisplayValue("Work:Special:SpecialPages")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Special Pages" })).toBeInTheDocument();
+  });
+
   it("編集停止後に自動保存する", async () => {
     renderHomePage();
 
