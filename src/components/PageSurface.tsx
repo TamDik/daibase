@@ -82,18 +82,11 @@ export function PageSurface({
       spacing={1}
       sx={{
         alignItems: "center",
-        bgcolor: "#ffffff",
-        border: "1px solid",
-        borderColor: "divider",
-        borderRadius: 1,
-        boxShadow: "0 4px 16px rgba(31, 35, 40, 0.12)",
         justifyContent: "flex-end",
         position: "absolute",
-        right: 16,
-        top: 46,
+        right: 24,
+        top: 52,
         zIndex: 2,
-        px: 0.75,
-        py: 0.5,
       }}
     >
       {isDirty && (
