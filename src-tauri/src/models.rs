@@ -110,7 +110,6 @@ pub struct SaveFileResult {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ContentTree {
     pub pages: Vec<FileSummary>,
-    pub folders: Vec<FolderSummary>,
     #[serde(default)]
     pub files: Vec<FileSummary>,
 }
@@ -118,14 +117,6 @@ pub struct ContentTree {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileSummary {
     pub file_id: String,
-    pub path: String,
-    pub title: String,
-    pub location: String,
-    pub display_path: Vec<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct FolderSummary {
     pub path: String,
     pub title: String,
     pub location: String,

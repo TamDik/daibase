@@ -45,20 +45,6 @@ const api = await import("../api/tauriCommands");
 
 const workNamespace = namespace("ns-work", "Work");
 const contentTree: ContentTree = {
-  folders: [
-    {
-      path: "Guide.md",
-      title: "Guide",
-      location: "Work:Guide.md",
-      display_path: ["Guide"],
-    },
-    {
-      path: "aaa.md",
-      title: "aaa",
-      location: "Work:aaa.md",
-      display_path: ["aaa"],
-    },
-  ],
   pages: [
     {
       file_id: "file-main",
@@ -314,7 +300,7 @@ describe("HomePage", () => {
     expect(pageList).toHaveTextContent("Main");
     expect(pageList).toHaveTextContent("Guide");
     expect(pageList).toHaveTextContent("Intro");
-    expect(within(pageList).getAllByText("aaa")).toHaveLength(1);
+    expect(within(pageList).getAllByText("aaa")).toHaveLength(2);
     expect(pageList).toHaveTextContent("bbb");
     expect(pageList).toHaveTextContent("logo.png");
 
@@ -327,6 +313,10 @@ describe("HomePage", () => {
     await user.click(within(pageList).getByText("Intro"));
 
     expect(await screen.findByDisplayValue("Work:Guide/Intro.md")).toBeInTheDocument();
+
+    await user.click(within(pageList).getByText("logo.png"));
+
+    expect(await screen.findByDisplayValue("Work:images/logo.png")).toBeInTheDocument();
   });
 
   it("File ロケーションでファイル詳細を表示して説明を保存する", async () => {
@@ -411,7 +401,7 @@ describe("HomePage", () => {
     expect(screen.getByText(/hello\s+world/)).toBeInTheDocument();
   });
 
-  it("サイドバーのフォルダークリックで未作成ページとして表示する", async () => {
+  it("サイドバーのフォルダークリックではページとして開かない", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
@@ -420,8 +410,8 @@ describe("HomePage", () => {
 
     await user.click(within(guideItem).getByText("Guide"));
 
-    expect(await screen.findByDisplayValue("Work:Guide.md")).toBeInTheDocument();
-    expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Work:Main.md")).toBeInTheDocument();
+    expect(screen.queryByText("このページはまだ作成されていません。")).not.toBeInTheDocument();
     expect(pageList).toHaveTextContent("Intro");
   });
 

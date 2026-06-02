@@ -1,5 +1,5 @@
 use crate::models::{
-    ContentTree, FileHistoryEntry, FileSummary, FolderSummary, NamespaceDetail, NamespaceMetadata,
+    ContentTree, FileHistoryEntry, FileSummary, NamespaceDetail, NamespaceMetadata,
     NamespaceRegistry, NamespaceSummary, PageHistorySnapshot, SaveFileResult, SideBySideDiffRow,
     SideBySideDiffSection, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
 };
@@ -521,7 +521,6 @@ fn split_content_lines(content: &str) -> Vec<&str> {
 
 fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTree, String> {
     let mut pages = Vec::new();
-    let mut folders = Vec::new();
     let mut files = Vec::new();
     let path_index = read_path_index(&namespace.root_path)?;
     collect_content_entries(
@@ -530,17 +529,11 @@ fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTre
         &namespace.root_path,
         &path_index.entries,
         &mut pages,
-        &mut folders,
         &mut files,
     )?;
     pages.sort_by(|left, right| left.path.cmp(&right.path));
-    folders.sort_by(|left, right| left.path.cmp(&right.path));
     files.sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(ContentTree {
-        pages,
-        folders,
-        files,
-    })
+    Ok(ContentTree { pages, files })
 }
 
 fn collect_content_entries(
@@ -549,7 +542,6 @@ fn collect_content_entries(
     current: &Path,
     path_index: &std::collections::BTreeMap<String, String>,
     pages: &mut Vec<FileSummary>,
-    folders: &mut Vec<FolderSummary>,
     files: &mut Vec<FileSummary>,
 ) -> Result<(), String> {
     if !current.exists() {
@@ -563,22 +555,7 @@ fn collect_content_entries(
             continue;
         }
         if path.is_dir() {
-            collect_content_entries(namespace, root, &path, path_index, pages, folders, files)?;
-            if !directory_contains_markdown_page(&path)? {
-                continue;
-            }
-            let folder_relative_path = path
-                .strip_prefix(root)
-                .map_err(to_error)?
-                .to_string_lossy()
-                .replace('\\', "/");
-            let folder_page_path = format!("{folder_relative_path}.md");
-            folders.push(FolderSummary {
-                path: folder_page_path.clone(),
-                title: page_title(&folder_page_path),
-                location: page_location(&folder_page_path, namespace),
-                display_path: page_display_path(&folder_page_path),
-            });
+            collect_content_entries(namespace, root, &path, path_index, pages, files)?;
             continue;
         }
 
@@ -611,24 +588,6 @@ fn collect_content_entries(
     }
 
     Ok(())
-}
-
-fn directory_contains_markdown_page(path: &Path) -> Result<bool, String> {
-    for entry in fs::read_dir(path).map_err(to_error)? {
-        let entry = entry.map_err(to_error)?;
-        let path = entry.path();
-        if is_hidden_path_entry(&path) {
-            continue;
-        }
-        if path.is_dir() && directory_contains_markdown_page(&path)? {
-            return Ok(true);
-        }
-        if path.extension().and_then(|value| value.to_str()) == Some("md") {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
 }
 
 fn ensure_namespace_ready(namespace: &NamespaceSummary) -> Result<(), String> {
@@ -936,10 +895,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn list_content_includes_folder_page_locations() {
+    fn list_content_does_not_create_folder_page_locations() {
         let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
         fs::create_dir_all(root_path.join("Guide")).unwrap();
         fs::write(root_path.join("Guide/Intro.md"), "# Intro\n").unwrap();
+        fs::write(root_path.join("Guide.md"), "# Guide\n").unwrap();
 
         let namespace = NamespaceSummary {
             id: "ns-work".to_string(),
@@ -954,12 +914,15 @@ mod tests {
 
         let content = list_content_for_namespace(&namespace).unwrap();
 
-        assert_eq!(content.pages.len(), 1);
-        assert_eq!(content.pages[0].location, "Work:Guide/Intro.md");
-        assert_eq!(content.folders.len(), 1);
-        assert_eq!(content.folders[0].path, "Guide.md");
-        assert_eq!(content.folders[0].location, "Work:Guide.md");
-        assert_eq!(content.folders[0].display_path, vec!["Guide"]);
+        assert_eq!(content.pages.len(), 2);
+        assert!(content
+            .pages
+            .iter()
+            .any(|page| page.location == "Work:Guide.md"));
+        assert!(content
+            .pages
+            .iter()
+            .any(|page| page.location == "Work:Guide/Intro.md"));
 
         fs::remove_dir_all(root_path).unwrap();
     }
@@ -1017,7 +980,6 @@ mod tests {
 
         assert_eq!(content.pages.len(), 1);
         assert_eq!(content.pages[0].path, "Main.md");
-        assert!(content.folders.is_empty());
 
         fs::remove_dir_all(root_path).unwrap();
     }

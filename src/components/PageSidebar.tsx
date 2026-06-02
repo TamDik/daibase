@@ -5,12 +5,7 @@ import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import type { TreeItemProps } from "@mui/x-tree-view/TreeItem";
 import { useMemo } from "react";
 
-import type {
-  ContentTree,
-  FileSummary,
-  FolderSummary,
-  NamespaceSummary,
-} from "../api/tauriCommands";
+import type { ContentTree, FileSummary, NamespaceSummary } from "../api/tauriCommands";
 import { ResizableSidebar } from "./ResizableSidebar";
 
 type PageTreeItem = {
@@ -32,9 +27,8 @@ export function PageSidebar({
   onOpenLocation: (location: string) => void;
 }) {
   const pages = content?.pages ?? [];
-  const folders = content?.folders ?? [];
   const files = content?.files ?? [];
-  const treeItems = useMemo(() => buildTreeItems(pages, folders, files), [files, folders, pages]);
+  const treeItems = useMemo(() => buildTreeItems(pages, files), [files, pages]);
   const itemLocations = useMemo(() => collectItemLocations(treeItems), [treeItems]);
   const selectedItem = useMemo(() => {
     for (const [itemId, location] of itemLocations) {
@@ -49,13 +43,13 @@ export function PageSidebar({
     <ResizableSidebar>
       <Box sx={{ px: 2, py: 1.5 }}>
         <Typography component="div" variant="subtitle2" sx={{ fontWeight: 700 }}>
-          Pages
+          Contents
         </Typography>
       </Box>
       <Box sx={{ flexGrow: 1, minHeight: 0, overflow: "auto", py: 1 }}>
         {treeItems.length === 0 ? (
           <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>
-            ページはまだありません。
+            コンテンツはまだありません。
           </Typography>
         ) : (
           <RichTreeView
@@ -139,7 +133,7 @@ function PageTreeViewItem(props: TreeItemProps) {
   );
 }
 
-function buildTreeItems(pages: FileSummary[], folders: FolderSummary[], files: FileSummary[]) {
+function buildTreeItems(pages: FileSummary[], files: FileSummary[]) {
   const root: PageTreeItem = {
     id: "__root__",
     label: "",
@@ -148,18 +142,9 @@ function buildTreeItems(pages: FileSummary[], folders: FolderSummary[], files: F
     children: [],
   };
 
-  for (const folder of folders) {
-    upsertTreeItem(root, folder.display_path, {
-      id: `folder:${folder.location}`,
-      label: folder.title,
-      location: folder.location,
-      kind: "folder",
-    });
-  }
-
   for (const page of pages) {
-    upsertTreeItem(root, page.display_path.length > 0 ? page.display_path : [page.title], {
-      id: page.location,
+    insertTreeItem(root, page.display_path.length > 0 ? page.display_path : [page.title], {
+      id: `page:${page.location}`,
       label: page.title,
       location: page.location,
       kind: "page",
@@ -167,7 +152,7 @@ function buildTreeItems(pages: FileSummary[], folders: FolderSummary[], files: F
   }
 
   for (const file of files) {
-    upsertTreeItem(root, file.display_path.length > 0 ? file.display_path : [file.title], {
+    insertTreeItem(root, file.display_path.length > 0 ? file.display_path : [file.title], {
       id: `file:${file.location}`,
       label: file.title,
       location: file.location,
@@ -179,7 +164,7 @@ function buildTreeItems(pages: FileSummary[], folders: FolderSummary[], files: F
   return root.children ?? [];
 }
 
-function upsertTreeItem(
+function insertTreeItem(
   root: PageTreeItem,
   parts: string[],
   value: Pick<PageTreeItem, "id" | "label" | "location" | "kind">,
@@ -187,31 +172,60 @@ function upsertTreeItem(
   let current = root;
   let path = "";
 
-  for (const part of parts) {
+  for (const part of parts.slice(0, -1)) {
     path = path ? `${path}/${part}` : part;
     const children = current.children ?? [];
-    let child = children.find((item) => item.label === part);
+    let child = children.find((item) => item.kind === "folder" && item.label === part);
     if (!child) {
-      child = { id: `folder:${path}`, label: part, location: null, kind: "folder", children: [] };
+      child = {
+        id: `folder:${path}`,
+        label: part,
+        location: null,
+        kind: "folder",
+        children: [],
+      };
       children.push(child);
       current.children = children;
     }
     current = child;
   }
 
-  current.id = value.id;
-  current.label = value.label;
-  current.location = value.location;
-  current.kind = value.kind;
+  const children = current.children ?? [];
+  const existing = children.find((item) => item.id === value.id);
+  if (existing) {
+    existing.label = value.label;
+    existing.location = value.location;
+    existing.kind = value.kind;
+  } else {
+    children.push({ ...value });
+    current.children = children;
+  }
 }
 
 function sortTreeItems(items: PageTreeItem[]) {
-  items.sort((left, right) => left.label.localeCompare(right.label));
+  items.sort((left, right) => {
+    const labelComparison = left.label.localeCompare(right.label);
+    if (labelComparison !== 0) {
+      return labelComparison;
+    }
+
+    return itemKindOrder(left.kind) - itemKindOrder(right.kind);
+  });
   for (const item of items) {
     if (item.children) {
       sortTreeItems(item.children);
     }
   }
+}
+
+function itemKindOrder(kind: PageTreeItem["kind"]) {
+  if (kind === "folder") {
+    return 0;
+  }
+  if (kind === "page") {
+    return 1;
+  }
+  return 2;
 }
 
 function collectExpandableItemIds(items: PageTreeItem[]) {

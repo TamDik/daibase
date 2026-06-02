@@ -21,15 +21,7 @@ export type FileSummary = {
 
 export type ContentTree = {
   pages: FileSummary[];
-  folders: FolderSummary[];
   files: FileSummary[];
-};
-
-export type FolderSummary = {
-  path: string;
-  title: string;
-  location: string;
-  display_path: string[];
 };
 
 export type NamespaceDetail = {
