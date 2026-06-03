@@ -2,6 +2,7 @@ import { Box, Button, IconButton, Stack, Tooltip, Typography } from "@mui/materi
 import {
   ArticleOutlined,
   CreateNewFolderOutlined,
+  DeleteOutlined,
   InsertDriveFileOutlined,
   FolderOutlined,
   NoteAddOutlined,
@@ -42,6 +43,7 @@ export function PageSidebar({
   namespace,
   onCreateFolder,
   onCreatePage,
+  onDeleteContent,
   onOpenLocation,
 }: {
   content: ContentTree | null;
@@ -49,6 +51,7 @@ export function PageSidebar({
   namespace: NamespaceSummary | null;
   onCreateFolder: (parentDirectory: string) => void;
   onCreatePage: (parentDirectory: string) => void;
+  onDeleteContent: (path: string, kind: "page" | "folder" | "file") => void;
   onOpenLocation: (location: string) => void;
 }) {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -75,6 +78,19 @@ export function PageSidebar({
   const createParentDirectory = selectedItem
     ? parentDirectoryForItem(itemMetadata.get(selectedItem) ?? null)
     : "";
+  const TreeViewItem = useMemo(
+    () =>
+      function TreeViewItemWithActions(props: TreeItemProps) {
+        return (
+          <PageTreeViewItem
+            {...props}
+            metadata={itemMetadata.get(props.itemId) ?? null}
+            onDeleteContent={onDeleteContent}
+          />
+        );
+      },
+    [itemMetadata, onDeleteContent],
+  );
 
   useEffect(() => {
     setExpandedItems((current) => mergeExpandedItemIds(current, expandableItemIds));
@@ -110,7 +126,7 @@ export function PageSidebar({
             itemChildrenIndentation={18}
             items={treeItems}
             selectedItems={selectedItem}
-            slots={{ item: PageTreeViewItem }}
+            slots={{ item: TreeViewItem }}
             onExpandedItemsChange={(_, itemIds) => setExpandedItems(itemIds)}
             onItemClick={(_, itemId) => {
               setActiveItemId(itemId);
@@ -223,9 +239,19 @@ function SidebarToolbar({
   );
 }
 
-function PageTreeViewItem(props: TreeItemProps) {
+function PageTreeViewItem({
+  metadata,
+  onDeleteContent,
+  ...props
+}: TreeItemProps & {
+  metadata: PageTreeItemMetadata | null;
+  onDeleteContent: (path: string, kind: "page" | "folder" | "file") => void;
+}) {
   const isFolderOnly = props.itemId.startsWith("folder:");
   const isFile = props.itemId.startsWith("file:");
+  const canDelete =
+    metadata?.path &&
+    (metadata.kind === "page" || metadata.kind === "folder" || metadata.kind === "file");
   return (
     <TreeItem
       {...props}
@@ -234,9 +260,16 @@ function PageTreeViewItem(props: TreeItemProps) {
           component="span"
           sx={{
             alignItems: "center",
-            display: "inline-flex",
+            display: "flex",
             gap: 0.75,
             minWidth: 0,
+            width: "100%",
+            "& .sidebar-delete-action": {
+              opacity: 0,
+            },
+            "&:hover .sidebar-delete-action, &:focus-within .sidebar-delete-action": {
+              opacity: 1,
+            },
           }}
         >
           <Box
@@ -261,9 +294,42 @@ function PageTreeViewItem(props: TreeItemProps) {
               <ArticleOutlined />
             )}
           </Box>
-          <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+          <Box
+            component="span"
+            sx={{ flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}
+          >
             {props.label}
           </Box>
+          {canDelete && (
+            <Tooltip title="削除">
+              <IconButton
+                aria-label="削除"
+                className="sidebar-delete-action"
+                size="small"
+                sx={{
+                  flex: "0 0 auto",
+                  height: 22,
+                  transition: "opacity 120ms ease",
+                  width: 22,
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (
+                    !metadata?.path ||
+                    (metadata.kind !== "page" &&
+                      metadata.kind !== "folder" &&
+                      metadata.kind !== "file")
+                  ) {
+                    return;
+                  }
+                  onDeleteContent(metadata.path, metadata.kind);
+                }}
+              >
+                <DeleteOutlined sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
       }
     />

@@ -3,6 +3,7 @@ use serde::Serialize;
 
 pub const NAMESPACES_LOCATION: &str = "Special:Namespaces";
 pub const SPECIAL_PAGES_LOCATION: &str = "Special:SpecialPages";
+pub const DELETED_PAGES_LOCATION: &str = "Special:DeletedPages";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -27,6 +28,10 @@ pub enum ResolvedLocation {
         location: String,
     },
     SpecialPagesList {
+        namespace: NamespaceSummary,
+        location: String,
+    },
+    SpecialDeletedPages {
         namespace: NamespaceSummary,
         location: String,
     },
@@ -63,6 +68,13 @@ pub fn resolve_location(
         return Ok(ResolvedLocation::SpecialPagesList {
             namespace: namespace.clone(),
             location: format!("{}:Special:Pages", namespace.name),
+        });
+    }
+
+    if path == DELETED_PAGES_LOCATION || path == "Special:DeletedPages" {
+        return Ok(ResolvedLocation::SpecialDeletedPages {
+            namespace: namespace.clone(),
+            location: format!("{}:{DELETED_PAGES_LOCATION}", namespace.name),
         });
     }
 
@@ -327,6 +339,40 @@ mod tests {
             ResolvedLocation::SpecialPagesList {
                 namespace: namespaces[1].clone(),
                 location: "Work:Special:Pages".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_deleted_pages_special_page_from_source_namespace() {
+        let namespaces = namespaces();
+        let resolved =
+            resolve_location("Special:DeletedPages", &namespaces, Some(&namespaces[1])).unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedLocation::SpecialDeletedPages {
+                namespace: namespaces[1].clone(),
+                location: "Work:Special:DeletedPages".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_deleted_pages_special_page_from_explicit_namespace() {
+        let namespaces = namespaces();
+        let resolved = resolve_location(
+            "Work:Special:DeletedPages",
+            &namespaces,
+            Some(&namespaces[0]),
+        )
+        .unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedLocation::SpecialDeletedPages {
+                namespace: namespaces[1].clone(),
+                location: "Work:Special:DeletedPages".to_string(),
             }
         );
     }

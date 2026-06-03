@@ -109,6 +109,73 @@ pub fn record_file_revision_with_content_type(
     })
 }
 
+pub fn record_file_deletion(
+    root: &Path,
+    namespace_id: &str,
+    path: &str,
+    content_type: &str,
+    message: &str,
+) -> Result<SaveResult, String> {
+    ensure_version_dirs(root)?;
+
+    let path_index = read_path_index(root)?;
+    let file_id = path_index
+        .entries
+        .get(path)
+        .cloned()
+        .ok_or_else(|| "削除対象の履歴 ID が見つかりません。".to_string())?;
+    let previous_revision_id = latest_revision_id(root, &file_id)?
+        .ok_or_else(|| "削除対象の履歴が見つかりません。".to_string())?;
+    let history = read_file_history(root, &file_id)?
+        .ok_or_else(|| "削除対象の履歴が見つかりません。".to_string())?;
+    let previous_entry = history
+        .revisions
+        .iter()
+        .find(|entry| entry.revision_id == previous_revision_id)
+        .ok_or_else(|| "削除対象の最新 revision が見つかりません。".to_string())?;
+
+    let now = Utc::now();
+    let created_at = now.to_rfc3339();
+    let revision_id = format!("rev_{}", Ulid::new());
+    let device_id = ensure_device_id(root)?;
+
+    let revision = Revision {
+        schema_version: 1,
+        revision_id: revision_id.clone(),
+        created_at: created_at.clone(),
+        device_id,
+        parent_revision_ids: vec![previous_revision_id],
+        message: message.to_string(),
+        changes: vec![RevisionChange {
+            file_id: file_id.clone(),
+            path: path.to_string(),
+            kind: "deleted".to_string(),
+            content_type: content_type.to_string(),
+            object_id: previous_entry.object_id.clone(),
+            size: 0,
+        }],
+    };
+
+    write_revision(root, &revision, &now)?;
+    update_file_history_with_kind(
+        root,
+        &file_id,
+        path,
+        &revision_id,
+        &previous_entry.object_id,
+        &created_at,
+        "deleted",
+    )?;
+    Ok(SaveResult {
+        namespace_id: namespace_id.to_string(),
+        file_id,
+        path: path.to_string(),
+        revision_id,
+        object_id: previous_entry.object_id.clone(),
+        saved_at: created_at,
+    })
+}
+
 pub fn latest_revision_id(root: &Path, file_id: &str) -> Result<Option<String>, String> {
     let Some(history) = read_file_history(root, file_id)? else {
         return Ok(None);
@@ -133,6 +200,10 @@ pub fn read_file_history(root: &Path, file_id: &str) -> Result<Option<FileHistor
 }
 
 pub fn read_text_object(root: &Path, object_id: &str) -> Result<String, String> {
+    String::from_utf8(read_object(root, object_id)?).map_err(to_error)
+}
+
+pub fn read_object(root: &Path, object_id: &str) -> Result<Vec<u8>, String> {
     let hex = object_id
         .strip_prefix("sha256:")
         .ok_or_else(|| "未対応の object ID です。".to_string())?;
@@ -144,7 +215,7 @@ pub fn read_text_object(root: &Path, object_id: &str) -> Result<String, String> 
         .join(".daibase/versions/objects")
         .join(&hex[0..2])
         .join(hex);
-    fs::read_to_string(object_path).map_err(to_error)
+    fs::read(object_path).map_err(to_error)
 }
 
 fn update_file_history(
@@ -154,6 +225,26 @@ fn update_file_history(
     revision_id: &str,
     object_id: &str,
     created_at: &str,
+) -> Result<(), String> {
+    update_file_history_with_kind(
+        root,
+        file_id,
+        path,
+        revision_id,
+        object_id,
+        created_at,
+        "modified",
+    )
+}
+
+fn update_file_history_with_kind(
+    root: &Path,
+    file_id: &str,
+    path: &str,
+    revision_id: &str,
+    object_id: &str,
+    created_at: &str,
+    kind: &str,
 ) -> Result<(), String> {
     let mut history = read_file_history(root, file_id)?.unwrap_or(FileHistoryIndex {
         schema_version: 1,
@@ -167,7 +258,7 @@ fn update_file_history(
         revision_id: revision_id.to_string(),
         object_id: object_id.to_string(),
         created_at: created_at.to_string(),
-        kind: "modified".to_string(),
+        kind: kind.to_string(),
         path: path.to_string(),
     });
 
@@ -271,6 +362,27 @@ mod tests {
 
         assert!(read_text_object(&root, "sha256:../secret").is_err());
         assert!(read_text_object(&root, "md5:abc").is_err());
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn deleting_file_records_deleted_revision_and_keeps_path_index_entry() {
+        let root = std::env::temp_dir().join(format!("daibase-test-{}", Ulid::new()));
+        fs::create_dir_all(&root).unwrap();
+
+        let saved = record_file_revision(&root, "namespace", "Main.md", b"# Main", "Save").unwrap();
+        let deleted =
+            record_file_deletion(&root, "namespace", "Main.md", "text/markdown", "Delete").unwrap();
+
+        assert_eq!(saved.file_id, deleted.file_id);
+        assert_eq!(
+            file_id_for_path(&root, "Main.md").unwrap().as_deref(),
+            Some(saved.file_id.as_str())
+        );
+        let history = read_file_history(&root, &saved.file_id).unwrap().unwrap();
+        assert_eq!(history.revisions.last().unwrap().kind, "deleted");
+        assert_eq!(history.revisions.last().unwrap().object_id, saved.object_id);
 
         fs::remove_dir_all(root).unwrap();
     }

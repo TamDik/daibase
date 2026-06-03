@@ -24,13 +24,21 @@ import {
   type SpecialPageSummary,
   createFolder,
   createNamespace,
+  deleteFile,
+  deleteFolder,
+  deletePage,
+  type DeletedContentSummary,
+  listDeletedContent,
   listFileHistory,
   listPageHistory,
   listNamespaces,
   openInitialLocation,
   openLocation,
+  readDeletedFile,
+  readDeletedPage,
   resolveMarkdownImage,
   resolveMarkdownLinkStatus,
+  restoreDeletedContent,
   savePage,
   uploadFile,
   writeFileNote,
@@ -40,6 +48,7 @@ import { FileSurface, type FileMode } from "../components/FileSurface";
 import { PageSidebar } from "../components/PageSidebar";
 import { PageSurface, type PageMode } from "../components/PageSurface";
 import {
+  DeletedPagesSpecialPage,
   PagesSpecialPage,
   NamespacesSpecialPage,
   SpecialPagesIndex,
@@ -50,12 +59,14 @@ type PageView = {
   kind: "page";
   namespace: NamespaceSummary;
   page: PageContent;
+  isReadOnly?: boolean;
 };
 
 type FileView = {
   kind: "file";
   namespace: NamespaceSummary;
   file: ManagedFileContent;
+  isReadOnly?: boolean;
 };
 
 type SpecialView =
@@ -74,6 +85,13 @@ type SpecialView =
       location: string;
       namespace: NamespaceSummary;
       content: ContentTree;
+    }
+  | {
+      kind: "deletedPages";
+      location: string;
+      namespace: NamespaceSummary;
+      content: ContentTree;
+      items: DeletedContentSummary[];
     };
 
 type CreateDialogState = {
@@ -184,6 +202,24 @@ export function HomePage() {
       return nextLocation;
     }
 
+    if (opened.kind === "specialDeletedPages") {
+      setActiveNamespace(opened.namespace);
+      setSidebarContent(opened.content);
+      setPageView(null);
+      setFileView(null);
+      setSpecialView({
+        kind: "deletedPages",
+        location: opened.location,
+        namespace: opened.namespace,
+        content: opened.content,
+        items: opened.items,
+      });
+      setDraft("");
+      setLocationInput(opened.location);
+      setPageMode("view");
+      return nextLocation;
+    }
+
     if (opened.kind === "file") {
       setActiveNamespace(opened.namespace);
       setSidebarContent(opened.content);
@@ -227,7 +263,11 @@ export function HomePage() {
       const currentPageView = pageViewRef.current;
       const nextContent = draftRef.current;
 
-      if (!currentPageView || currentPageView.page.content === nextContent) {
+      if (
+        !currentPageView ||
+        currentPageView.isReadOnly ||
+        currentPageView.page.content === nextContent
+      ) {
         return true;
       }
 
@@ -325,6 +365,126 @@ export function HomePage() {
       });
     },
     [historyIndex],
+  );
+
+  const handleDeleteContent = useCallback(
+    async (path: string, kind: "page" | "folder" | "file") => {
+      if (!activeNamespace) {
+        return;
+      }
+      const title = path.split("/").pop() ?? path;
+      if (!window.confirm(`${title} を削除しますか？`)) {
+        return;
+      }
+      if (!(await saveCurrentDraft())) {
+        return;
+      }
+
+      setError(null);
+      setSavedMessage(null);
+      try {
+        const detail =
+          kind === "page"
+            ? await deletePage(activeNamespace.id, path)
+            : kind === "folder"
+              ? await deleteFolder(activeNamespace.id, path)
+              : await deleteFile(activeNamespace.id, path);
+        setActiveNamespace(detail.namespace);
+        setSidebarContent(detail.content);
+        setSavedMessage("削除しました");
+
+        const isCurrentPage = pageView?.page.path === path;
+        const isCurrentFile = fileView?.file.path === path;
+        const isCurrentInFolder =
+          kind === "folder" &&
+          ((pageView?.page.path.startsWith(`${path}/`) ?? false) ||
+            (fileView?.file.path.startsWith(`${path}/`) ?? false));
+        if (
+          (kind === "page" && isCurrentPage) ||
+          (kind === "file" && isCurrentFile) ||
+          isCurrentInFolder
+        ) {
+          await navigate(detail.namespace.pages_location, "replace", detail.namespace);
+        } else if (specialView?.kind === "pages") {
+          setSpecialView({ ...specialView, namespace: detail.namespace, content: detail.content });
+        }
+      } catch (caught) {
+        setError(errorMessage(caught));
+      }
+    },
+    [activeNamespace, fileView, navigate, pageView, saveCurrentDraft, specialView],
+  );
+
+  const handleOpenDeletedContent = useCallback(
+    async (item: DeletedContentSummary) => {
+      if (!activeNamespace) {
+        return;
+      }
+      setError(null);
+      setSavedMessage(null);
+      try {
+        if (item.content_kind === "page") {
+          const page = await readDeletedPage(activeNamespace.id, item.file_id);
+          setPageView({ kind: "page", namespace: activeNamespace, page, isReadOnly: true });
+          pageViewRef.current = { kind: "page", namespace: activeNamespace, page, isReadOnly: true };
+          setFileView(null);
+          setSpecialView(null);
+          setDraft(page.content);
+          draftRef.current = page.content;
+          setPageMode("view");
+        } else {
+          const file = await readDeletedFile(activeNamespace.id, item.file_id);
+          setFileView({ kind: "file", namespace: activeNamespace, file, isReadOnly: true });
+          setPageView(null);
+          pageViewRef.current = null;
+          setSpecialView(null);
+          setDraft("");
+          draftRef.current = "";
+          setFileNoteDraft(file.note);
+          setFileMode("detail");
+        }
+        setLocationInput(item.location);
+        setHistoryEntries([]);
+        setHistoryError(null);
+        setSelectedHistoryRevisionId(null);
+      } catch (caught) {
+        setError(errorMessage(caught));
+      }
+    },
+    [activeNamespace],
+  );
+
+  const handleRestoreDeletedContent = useCallback(
+    async (item: DeletedContentSummary) => {
+      if (!activeNamespace) {
+        return;
+      }
+      setError(null);
+      setSavedMessage(null);
+      try {
+        const detail = await restoreDeletedContent(activeNamespace.id, item.file_id);
+        const items = await listDeletedContent(detail.namespace.id);
+        setActiveNamespace(detail.namespace);
+        setSidebarContent(detail.content);
+        setSpecialView({
+          kind: "deletedPages",
+          location: `${detail.namespace.name}:Special:DeletedPages`,
+          namespace: detail.namespace,
+          content: detail.content,
+          items,
+        });
+        setPageView(null);
+        setFileView(null);
+        pageViewRef.current = null;
+        setDraft("");
+        draftRef.current = "";
+        setLocationInput(`${detail.namespace.name}:Special:DeletedPages`);
+        setSavedMessage("復活しました");
+      } catch (caught) {
+        setError(errorMessage(caught));
+      }
+    },
+    [activeNamespace],
   );
 
   useEffect(() => {
@@ -720,6 +880,7 @@ export function HomePage() {
           namespace={activeNamespace}
           onCreateFolder={(parentDirectory) => handleOpenCreateDialog("folder", parentDirectory)}
           onCreatePage={(parentDirectory) => handleOpenCreateDialog("page", parentDirectory)}
+          onDeleteContent={(path, kind) => void handleDeleteContent(path, kind)}
           onOpenLocation={(location) => void navigate(location)}
         />
 
@@ -765,6 +926,15 @@ export function HomePage() {
               />
             )}
 
+            {specialView?.kind === "deletedPages" && (
+              <DeletedPagesSpecialPage
+                items={specialView.items}
+                namespace={specialView.namespace}
+                onOpenDeletedContent={(item) => void handleOpenDeletedContent(item)}
+                onRestoreDeletedContent={(item) => void handleRestoreDeletedContent(item)}
+              />
+            )}
+
             {pageView && (
               <PageSurface
                 backlinks={pageView.page.backlinks}
@@ -777,6 +947,7 @@ export function HomePage() {
                 isSaving={isSaving}
                 isVirtual={pageView.page.is_virtual ?? false}
                 mode={pageMode}
+                readOnly={pageView.isReadOnly ?? false}
                 onDraftChange={setDraft}
                 onModeChange={(mode) => void handleModeChange(mode)}
                 onOpenLocation={(location) => void navigate(location)}
@@ -798,6 +969,7 @@ export function HomePage() {
                 isUploading={isFileUploading}
                 mode={fileMode}
                 noteDraft={fileNoteDraft}
+                readOnly={fileView.isReadOnly ?? false}
                 onModeChange={(mode) => void handleFileModeChange(mode)}
                 onNoteChange={setFileNoteDraft}
                 onOpenLocation={(location) => void navigate(location)}

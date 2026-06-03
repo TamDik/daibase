@@ -28,6 +28,7 @@ export function FileSurface({
   isUploading,
   mode,
   noteDraft,
+  readOnly = false,
   onModeChange,
   onNoteChange,
   onOpenLocation,
@@ -44,6 +45,7 @@ export function FileSurface({
   isUploading: boolean;
   mode: FileMode;
   noteDraft: string;
+  readOnly?: boolean;
   onModeChange: (mode: FileMode) => void;
   onNoteChange: (value: string) => void;
   onOpenLocation: (location: string) => void;
@@ -54,7 +56,7 @@ export function FileSurface({
 }) {
   const isVirtual = file.is_virtual ?? false;
   const isNoteDirty = file.note !== noteDraft;
-  const previewSrc = !isVirtual ? file.data_url : null;
+  const previewSrc = !isVirtual || readOnly ? file.data_url : null;
   const textContent = file.text_content;
 
   return (
@@ -98,7 +100,11 @@ export function FileSurface({
         ) : (
           <Stack spacing={2} sx={{ maxWidth: 920, p: 2 }}>
             {isVirtual && (
-              <Alert severity="info">このファイルはまだアップロードされていません。</Alert>
+              <Alert severity="info">
+                {readOnly
+                  ? "削除済みファイルの内容を表示しています。"
+                  : "このファイルはまだアップロードされていません。"}
+              </Alert>
             )}
             <Stack
               direction={{ xs: "column", sm: "row" }}
@@ -117,14 +123,18 @@ export function FileSurface({
                   {file.path}
                 </Typography>
               </Box>
-              <Button
-                startIcon={isUploading ? <CircularProgress size={16} /> : <CloudUploadOutlined />}
-                variant="contained"
-                disabled={isUploading}
-                onClick={onUpload}
-              >
-                {isVirtual ? "アップロード" : "置き換え"}
-              </Button>
+              {!readOnly && (
+                <Button
+                  startIcon={
+                    isUploading ? <CircularProgress size={16} /> : <CloudUploadOutlined />
+                  }
+                  variant="contained"
+                  disabled={isUploading}
+                  onClick={onUpload}
+                >
+                  {isVirtual ? "アップロード" : "置き換え"}
+                </Button>
+              )}
             </Stack>
 
             <Box
@@ -153,7 +163,7 @@ export function FileSurface({
               </Typography>
             </Box>
 
-            {!isVirtual && (
+            {(!isVirtual || readOnly) && (
               <Stack spacing={1}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                   内容
@@ -225,34 +235,36 @@ export function FileSurface({
               </Stack>
             )}
 
-            <Stack spacing={1}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                説明
-              </Typography>
-              <TextField
-                multiline
-                minRows={8}
-                value={noteDraft}
-                disabled={isVirtual || isNoteSaving}
-                onChange={(event) => onNoteChange(event.target.value)}
-                placeholder={isVirtual ? "アップロード後に説明を書けます。" : ""}
-                slotProps={{
-                  htmlInput: {
-                    "aria-label": "ファイル説明",
-                  },
-                }}
-              />
-              <Box>
-                <Button
-                  startIcon={isNoteSaving ? <CircularProgress size={16} /> : <SaveOutlined />}
-                  variant="outlined"
-                  disabled={isVirtual || isNoteSaving || !isNoteDirty}
-                  onClick={onSaveNote}
-                >
-                  説明を保存
-                </Button>
-              </Box>
-            </Stack>
+            {!readOnly && (
+              <Stack spacing={1}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                  説明
+                </Typography>
+                <TextField
+                  multiline
+                  minRows={8}
+                  value={noteDraft}
+                  disabled={isVirtual || isNoteSaving}
+                  onChange={(event) => onNoteChange(event.target.value)}
+                  placeholder={isVirtual ? "アップロード後に説明を書けます。" : ""}
+                  slotProps={{
+                    htmlInput: {
+                      "aria-label": "ファイル説明",
+                    },
+                  }}
+                />
+                <Box>
+                  <Button
+                    startIcon={isNoteSaving ? <CircularProgress size={16} /> : <SaveOutlined />}
+                    variant="outlined"
+                    disabled={isVirtual || isNoteSaving || !isNoteDirty}
+                    onClick={onSaveNote}
+                  >
+                    説明を保存
+                  </Button>
+                </Box>
+              </Stack>
+            )}
             <BacklinksPanel backlinks={file.backlinks} onOpenLocation={onOpenLocation} />
           </Stack>
         )}

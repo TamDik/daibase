@@ -28,15 +28,22 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 vi.mock("../api/tauriCommands", () => ({
   createFolder: vi.fn(),
   createNamespace: vi.fn(),
+  deleteFile: vi.fn(),
+  deleteFolder: vi.fn(),
+  deletePage: vi.fn(),
+  listDeletedContent: vi.fn(),
   listFileHistory: vi.fn(),
   listPageHistory: vi.fn(),
   listNamespaces: vi.fn(),
   openInitialLocation: vi.fn(),
   openLocation: vi.fn(),
+  readDeletedFile: vi.fn(),
+  readDeletedPage: vi.fn(),
   readPageHistorySnapshot: vi.fn(),
   resolveMarkdownLink: vi.fn(),
   resolveMarkdownImage: vi.fn(),
   resolveMarkdownLinkStatus: vi.fn(),
+  restoreDeletedContent: vi.fn(),
   savePage: vi.fn(),
   uploadFile: vi.fn(),
   writeFileNote: vi.fn(),
@@ -97,20 +104,28 @@ describe("HomePage", () => {
 
   beforeEach(() => {
     vi.mocked(api.createFolder).mockReset();
+    vi.mocked(api.deleteFile).mockReset();
+    vi.mocked(api.deleteFolder).mockReset();
+    vi.mocked(api.deletePage).mockReset();
+    vi.mocked(api.listDeletedContent).mockReset();
     vi.mocked(api.listNamespaces).mockReset();
     vi.mocked(api.listFileHistory).mockReset();
     vi.mocked(api.listPageHistory).mockReset();
     vi.mocked(api.openInitialLocation).mockReset();
     vi.mocked(api.openLocation).mockReset();
+    vi.mocked(api.readDeletedFile).mockReset();
+    vi.mocked(api.readDeletedPage).mockReset();
     vi.mocked(api.readPageHistorySnapshot).mockReset();
     vi.mocked(api.resolveMarkdownLink).mockReset();
     vi.mocked(api.resolveMarkdownImage).mockReset();
     vi.mocked(api.resolveMarkdownLinkStatus).mockReset();
+    vi.mocked(api.restoreDeletedContent).mockReset();
     vi.mocked(api.savePage).mockReset();
     vi.mocked(api.uploadFile).mockReset();
     vi.mocked(api.writeFileNote).mockReset();
 
     vi.mocked(api.listNamespaces).mockResolvedValue([workNamespace]);
+    vi.mocked(api.listDeletedContent).mockResolvedValue(deletedContentItems());
     vi.mocked(api.listFileHistory).mockResolvedValue(fileHistoryEntries());
     vi.mocked(api.listPageHistory).mockResolvedValue(historyEntries());
     vi.mocked(api.readPageHistorySnapshot).mockResolvedValue({
@@ -118,6 +133,18 @@ describe("HomePage", () => {
       previous_content: "# Main\n\nBefore\n",
       content: "# Main\n\nAfter\n",
       diff_sections: [],
+    });
+    vi.mocked(api.readDeletedPage).mockResolvedValue({
+      ...page("Old.md", "# Old\n\n削除済み本文"),
+      file_id: "file-old-page",
+      latest_revision_id: "rev_deleted_page",
+      is_virtual: true,
+    });
+    vi.mocked(api.readDeletedFile).mockResolvedValue({
+      ...managedFile("images/old-logo.png", ""),
+      file_id: "file-old-logo",
+      latest_revision_id: "rev_deleted_file",
+      is_virtual: true,
     });
     vi.mocked(api.savePage).mockImplementation(async (namespaceId, path, content) => ({
       namespace: workNamespace,
@@ -161,6 +188,44 @@ describe("HomePage", () => {
         ],
       },
     }));
+    vi.mocked(api.deletePage).mockImplementation(async (_namespaceId, path) => ({
+      namespace: workNamespace,
+      content: {
+        ...contentTree,
+        pages: contentTree.pages.filter((page) => page.path !== path),
+      },
+    }));
+    vi.mocked(api.deleteFile).mockImplementation(async (_namespaceId, path) => ({
+      namespace: workNamespace,
+      content: {
+        ...contentTree,
+        files: contentTree.files.filter((file) => file.path !== path),
+      },
+    }));
+    vi.mocked(api.deleteFolder).mockImplementation(async (_namespaceId, path) => ({
+      namespace: workNamespace,
+      content: {
+        ...contentTree,
+        pages: contentTree.pages.filter((page) => !page.path.startsWith(`${path}/`)),
+        files: contentTree.files.filter((file) => !file.path.startsWith(`${path}/`)),
+      },
+    }));
+    vi.mocked(api.restoreDeletedContent).mockResolvedValue({
+      namespace: workNamespace,
+      content: {
+        ...contentTree,
+        pages: [
+          ...contentTree.pages,
+          {
+            file_id: "file-old-page",
+            path: "Old.md",
+            title: "Old",
+            location: "Work:Old.md",
+            display_path: ["Old"],
+          },
+        ],
+      },
+    });
     vi.mocked(api.writeFileNote).mockImplementation(async (_namespaceId, path, note) =>
       managedFile(path, note),
     );
@@ -202,6 +267,11 @@ describe("HomePage", () => {
               description: "namespace 内の全ページを表示します。",
               location: "Work:Special:Pages",
             },
+            {
+              title: "Deleted Pages",
+              description: "削除済みのページとファイルを表示します。",
+              location: "Work:Special:DeletedPages",
+            },
           ],
         };
       }
@@ -211,6 +281,15 @@ describe("HomePage", () => {
           namespace,
           location: "Work:Special:Pages",
           content: contentTree,
+        };
+      }
+      if (location === "Special:DeletedPages" || location === "Work:Special:DeletedPages") {
+        return {
+          kind: "specialDeletedPages",
+          namespace,
+          location: "Work:Special:DeletedPages",
+          content: contentTree,
+          items: deletedContentItems(),
         };
       }
       const contentPath = location.replace(/^Work:/, "");
@@ -481,6 +560,53 @@ describe("HomePage", () => {
     }
   });
 
+  it("サイドバーの削除ボタンからページを削除する", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderHomePage();
+
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    const introItems = within(pageList).getAllByRole("treeitem", { name: /Intro/ });
+    const introItem = introItems[introItems.length - 1];
+    await user.click(within(introItem).getByRole("button", { name: "削除" }));
+
+    await waitFor(() =>
+      expect(api.deletePage).toHaveBeenCalledWith(workNamespace.id, "Guide/Intro.md"),
+    );
+    expect(within(pageList).queryByText("Intro")).not.toBeInTheDocument();
+    expect(screen.getByText("削除しました")).toBeInTheDocument();
+  });
+
+  it("サイドバーの削除ボタンからファイルを削除する", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderHomePage();
+
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    const fileItems = within(pageList).getAllByRole("treeitem", { name: /logo\.png/ });
+    const fileItem = fileItems[fileItems.length - 1];
+    await user.click(within(fileItem).getByRole("button", { name: "削除" }));
+
+    await waitFor(() =>
+      expect(api.deleteFile).toHaveBeenCalledWith(workNamespace.id, "images/logo.png"),
+    );
+    expect(within(pageList).queryByText("logo.png")).not.toBeInTheDocument();
+  });
+
+  it("サイドバーの削除ボタンからフォルダーを削除する", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderHomePage();
+
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    const guideItem = within(pageList).getByRole("treeitem", { name: "Guide Intro" });
+    await user.click(within(guideItem).getAllByRole("button", { name: "削除" })[0]);
+
+    await waitFor(() => expect(api.deleteFolder).toHaveBeenCalledWith(workNamespace.id, "Guide"));
+    expect(within(pageList).queryByText("Guide")).not.toBeInTheDocument();
+    expect(within(pageList).queryByText("Intro")).not.toBeInTheDocument();
+  });
+
   it("サイドバーからページ名を入力してページを作成する", async () => {
     const user = userEvent.setup();
     renderHomePage();
@@ -602,7 +728,57 @@ describe("HomePage", () => {
     expect(screen.getByText(/登録済み namespace の確認と新規作成を行います。/)).toBeInTheDocument();
     expect(screen.getAllByText("Pages").length).toBeGreaterThan(0);
     expect(screen.getByText("namespace 内の全ページを表示します。")).toBeInTheDocument();
+    expect(screen.getByText("Deleted Pages")).toBeInTheDocument();
     expect(screen.queryByText(/Work namespace/)).not.toBeInTheDocument();
+  });
+
+  it("Special:DeletedPages で削除済みページとファイルを表示する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:DeletedPages");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    expect(await screen.findByDisplayValue("Work:Special:DeletedPages")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Deleted Pages" })).toBeInTheDocument();
+    expect(screen.getByText("Old")).toBeInTheDocument();
+    expect(screen.getByText(/Page \/ Old.md/)).toBeInTheDocument();
+    expect(screen.getByText("old-logo.png")).toBeInTheDocument();
+    expect(screen.getByText(/File \/ images\/old-logo.png/)).toBeInTheDocument();
+  });
+
+  it("削除済みページをクリックすると削除時点の内容を表示する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:DeletedPages");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+    await user.click(await screen.findByRole("button", { name: /Old.*Page/ }));
+
+    expect(api.readDeletedPage).toHaveBeenCalledWith(workNamespace.id, "file-old-page");
+    expect(await screen.findByDisplayValue("Work:Old.md")).toBeInTheDocument();
+    expect(screen.getByText("削除済みページの内容を表示しています。")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue("# Old\n\n削除済み本文");
+  });
+
+  it("削除済みリストからページを復活する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:DeletedPages");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+    await user.click(await screen.findByRole("button", { name: "Old を復活" }));
+
+    await waitFor(() =>
+      expect(api.restoreDeletedContent).toHaveBeenCalledWith(workNamespace.id, "file-old-page"),
+    );
+    expect(screen.getByText("復活しました")).toBeInTheDocument();
   });
 
   it("サイドバーから Special:SpecialPages を開く", async () => {
@@ -782,6 +958,29 @@ function fileHistoryEntries(): FileHistoryEntry[] {
       created_at: "2026-01-03T00:00:00Z",
       kind: "modified",
       path: "images/logo.png",
+    },
+  ];
+}
+
+function deletedContentItems() {
+  return [
+    {
+      file_id: "file-old-page",
+      path: "Old.md",
+      title: "Old",
+      location: "Work:Old.md",
+      content_kind: "page",
+      deleted_at: "2026-01-04T00:00:00Z",
+      latest_revision_id: "rev_deleted_page",
+    },
+    {
+      file_id: "file-old-logo",
+      path: "images/old-logo.png",
+      title: "old-logo.png",
+      location: "Work:images/old-logo.png",
+      content_kind: "file",
+      deleted_at: "2026-01-03T00:00:00Z",
+      latest_revision_id: "rev_deleted_file",
     },
   ];
 }

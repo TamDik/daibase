@@ -2,16 +2,24 @@ import {
   Box,
   Button,
   Divider,
+  IconButton,
   List,
   ListItemButton,
   ListItemText,
   Paper,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import { RestoreOutlined } from "@mui/icons-material";
 
-import type { ContentTree, NamespaceSummary, SpecialPageSummary } from "../api/tauriCommands";
+import type {
+  ContentTree,
+  DeletedContentSummary,
+  NamespaceSummary,
+  SpecialPageSummary,
+} from "../api/tauriCommands";
 
 export function SpecialPagesIndex({
   location,
@@ -179,4 +187,82 @@ export function PagesSpecialPage({
       </Box>
     </Paper>
   );
+}
+
+export function DeletedPagesSpecialPage({
+  items,
+  namespace,
+  onOpenDeletedContent,
+  onRestoreDeletedContent,
+}: {
+  items: DeletedContentSummary[];
+  namespace: NamespaceSummary;
+  onOpenDeletedContent: (item: DeletedContentSummary) => void;
+  onRestoreDeletedContent: (item: DeletedContentSummary) => void;
+}) {
+  return (
+    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
+      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+        <Typography variant="h5" component="h2">
+          Deleted Pages
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {namespace.name}:Special:DeletedPages
+        </Typography>
+      </Box>
+      <Box sx={{ p: 3 }}>
+        {items.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            削除済みのページやファイルはありません。
+          </Typography>
+        ) : (
+          <List dense disablePadding>
+            {items.map((item) => (
+              <Box
+                key={`${item.file_id}:${item.latest_revision_id}`}
+                sx={{
+                  alignItems: "center",
+                  borderRadius: 1,
+                  display: "flex",
+                  gap: 0.5,
+                }}
+              >
+                <ListItemButton
+                  onClick={() => onOpenDeletedContent(item)}
+                  sx={{ borderRadius: 1, minWidth: 0 }}
+                >
+                  <ListItemText
+                    primary={item.title}
+                    secondary={`${item.content_kind === "page" ? "Page" : "File"} / ${item.path} / ${formatDeletedTime(item.deleted_at)}`}
+                  />
+                </ListItemButton>
+                <Tooltip title="復活">
+                  <IconButton
+                    aria-label={`${item.title} を復活`}
+                    size="small"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onRestoreDeletedContent(item);
+                    }}
+                  >
+                    <RestoreOutlined fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            ))}
+          </List>
+        )}
+      </Box>
+    </Paper>
+  );
+}
+
+function formatDeletedTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString();
 }

@@ -130,6 +130,16 @@ export type SpecialPageSummary = {
   location: string;
 };
 
+export type DeletedContentSummary = {
+  file_id: string;
+  path: string;
+  title: string;
+  location: string;
+  content_kind: "page" | "file" | string;
+  deleted_at: string;
+  latest_revision_id: string;
+};
+
 export type MarkdownLinkStatus = {
   location: string;
   exists: boolean;
@@ -171,6 +181,11 @@ export type ResolvedLocation =
       kind: "specialPagesList";
       namespace: NamespaceSummary;
       location: string;
+    }
+  | {
+      kind: "specialDeletedPages";
+      namespace: NamespaceSummary;
+      location: string;
     };
 
 export type OpenLocationResult =
@@ -205,6 +220,13 @@ export type OpenLocationResult =
       location: string;
       namespace: NamespaceSummary;
       content: ContentTree;
+    }
+  | {
+      kind: "specialDeletedPages";
+      location: string;
+      namespace: NamespaceSummary;
+      content: ContentTree;
+      items: DeletedContentSummary[];
     };
 
 export function listNamespaces() {
@@ -269,6 +291,34 @@ export function createFolder(namespaceId: string, path: string) {
   });
 }
 
+export function deletePage(namespaceId: string, path: string) {
+  return invoke<NamespaceDetail>("delete_page", {
+    namespaceId,
+    path,
+  });
+}
+
+export function deleteFile(namespaceId: string, path: string) {
+  return invoke<NamespaceDetail>("delete_file", {
+    namespaceId,
+    path,
+  });
+}
+
+export function deleteFolder(namespaceId: string, path: string) {
+  return invoke<NamespaceDetail>("delete_folder", {
+    namespaceId,
+    path,
+  });
+}
+
+export function restoreDeletedContent(namespaceId: string, fileId: string) {
+  return invoke<NamespaceDetail>("restore_deleted_content", {
+    namespaceId,
+    fileId,
+  });
+}
+
 export function writeFileNote(namespaceId: string, path: string, note: string) {
   return invoke<ManagedFileContent>("write_file_note", {
     namespaceId,
@@ -294,6 +344,26 @@ export function listFileHistory(namespaceId: string, path: string) {
   return invoke<FileHistoryEntry[]>("list_file_history", {
     namespaceId,
     path,
+  });
+}
+
+export function listDeletedContent(namespaceId: string) {
+  return invoke<DeletedContentSummary[]>("list_deleted_content", {
+    namespaceId,
+  });
+}
+
+export function readDeletedPage(namespaceId: string, fileId: string) {
+  return invoke<PageContent>("read_deleted_page", {
+    namespaceId,
+    fileId,
+  });
+}
+
+export function readDeletedFile(namespaceId: string, fileId: string) {
+  return invoke<ManagedFileContent>("read_deleted_file", {
+    namespaceId,
+    fileId,
   });
 }
 

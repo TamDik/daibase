@@ -35,6 +35,7 @@ export function PageSurface({
   isSaving,
   isVirtual,
   mode,
+  readOnly = false,
   onDraftChange,
   onModeChange,
   onOpenLocation,
@@ -54,6 +55,7 @@ export function PageSurface({
   isSaving: boolean;
   isVirtual: boolean;
   mode: PageMode;
+  readOnly?: boolean;
   onDraftChange: (value: string) => void;
   onModeChange: (mode: PageMode) => void;
   onOpenLocation: (location: string) => void;
@@ -190,7 +192,7 @@ export function PageSurface({
           <Box sx={{ position: "relative" }}>
             {isVirtual && (
               <Alert severity="info" sx={{ m: 2 }}>
-                このページはまだ作成されていません。
+                {readOnly ? "削除済みページの内容を表示しています。" : "このページはまだ作成されていません。"}
               </Alert>
             )}
             <>
@@ -199,7 +201,7 @@ export function PageSurface({
                   label="Markdownソース"
                   value={draft}
                   onChange={(event) => onDraftChange(event.target.value)}
-                  disabled={isSaving}
+                  disabled={isSaving || readOnly}
                   multiline
                   minRows={24}
                   fullWidth
@@ -215,7 +217,7 @@ export function PageSurface({
                 <MarkdownWysiwygEditor
                   key={editorKey}
                   ariaLabel="Markdown"
-                  disabled={isSaving}
+                  disabled={isSaving || readOnly}
                   value={draft}
                   onChange={onDraftChange}
                   onOpenMarkdownLink={onOpenMarkdownLink}

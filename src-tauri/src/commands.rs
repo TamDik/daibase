@@ -1,8 +1,8 @@
 use crate::location::ResolvedLocation;
 use crate::models::{
-    ContentTree, FileHistoryEntry, MarkdownImageResolution, MarkdownLinkStatus, NamespaceDetail,
-    NamespaceSummary, OpenLocationResult, PageContent, PageHistorySnapshot, SaveFileResult,
-    SavePageResult, SaveResult, SpecialPageSummary,
+    ContentTree, DeletedContentSummary, FileHistoryEntry, MarkdownImageResolution,
+    MarkdownLinkStatus, NamespaceDetail, NamespaceSummary, OpenLocationResult, PageContent,
+    PageHistorySnapshot, SaveFileResult, SavePageResult, SaveResult, SpecialPageSummary,
 };
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -95,6 +95,42 @@ pub fn create_folder(
 }
 
 #[tauri::command]
+pub fn delete_page(
+    app: AppHandle,
+    namespace_id: String,
+    path: String,
+) -> Result<NamespaceDetail, String> {
+    crate::namespace::delete_page(&app, namespace_id, path)
+}
+
+#[tauri::command]
+pub fn delete_file(
+    app: AppHandle,
+    namespace_id: String,
+    path: String,
+) -> Result<NamespaceDetail, String> {
+    crate::namespace::delete_file(&app, namespace_id, path)
+}
+
+#[tauri::command]
+pub fn delete_folder(
+    app: AppHandle,
+    namespace_id: String,
+    path: String,
+) -> Result<NamespaceDetail, String> {
+    crate::namespace::delete_folder(&app, namespace_id, path)
+}
+
+#[tauri::command]
+pub fn restore_deleted_content(
+    app: AppHandle,
+    namespace_id: String,
+    file_id: String,
+) -> Result<NamespaceDetail, String> {
+    crate::namespace::restore_deleted_content(&app, namespace_id, file_id)
+}
+
+#[tauri::command]
 pub fn write_file_note(
     app: AppHandle,
     namespace_id: String,
@@ -125,6 +161,32 @@ pub fn list_file_history(
     path: String,
 ) -> Result<Vec<FileHistoryEntry>, String> {
     crate::namespace::list_file_history(&app, namespace_id, path)
+}
+
+#[tauri::command]
+pub fn list_deleted_content(
+    app: AppHandle,
+    namespace_id: String,
+) -> Result<Vec<DeletedContentSummary>, String> {
+    crate::namespace::list_deleted_content(&app, namespace_id)
+}
+
+#[tauri::command]
+pub fn read_deleted_page(
+    app: AppHandle,
+    namespace_id: String,
+    file_id: String,
+) -> Result<PageContent, String> {
+    crate::namespace::read_deleted_page(&app, namespace_id, file_id)
+}
+
+#[tauri::command]
+pub fn read_deleted_file(
+    app: AppHandle,
+    namespace_id: String,
+    file_id: String,
+) -> Result<crate::models::ManagedFileContent, String> {
+    crate::namespace::read_deleted_file(&app, namespace_id, file_id)
 }
 
 #[tauri::command]
@@ -214,7 +276,8 @@ pub fn resolve_markdown_link_status(
         } => crate::namespace::file_exists_for_namespace(&namespace, &file_path)?,
         ResolvedLocation::SpecialNamespaces { .. }
         | ResolvedLocation::SpecialPages { .. }
-        | ResolvedLocation::SpecialPagesList { .. } => true,
+        | ResolvedLocation::SpecialPagesList { .. }
+        | ResolvedLocation::SpecialDeletedPages { .. } => true,
     };
 
     Ok(MarkdownLinkStatus {
@@ -369,6 +432,19 @@ pub fn open_location(
                 content: detail.content,
             })
         }
+        ResolvedLocation::SpecialDeletedPages {
+            namespace,
+            location,
+        } => {
+            let detail = crate::namespace::open_namespace(&app, namespace.id.clone())?;
+            let items = crate::namespace::list_deleted_content(&app, detail.namespace.id.clone())?;
+            Ok(OpenLocationResult::SpecialDeletedPages {
+                location,
+                namespace: detail.namespace,
+                content: detail.content,
+                items,
+            })
+        }
     }
 }
 
@@ -416,6 +492,11 @@ fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialPageS
             title: "Pages".to_string(),
             description: "namespace 内の全ページを表示します。".to_string(),
             location: format!("{}:Special:Pages", namespace.name),
+        },
+        SpecialPageSummary {
+            title: "Deleted Pages".to_string(),
+            description: "削除済みのページとファイルを表示します。".to_string(),
+            location: format!("{}:Special:DeletedPages", namespace.name),
         },
     ]
 }

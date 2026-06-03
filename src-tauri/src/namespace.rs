@@ -1,14 +1,16 @@
 use crate::models::{
-    BacklinkSummary, ContentTree, FileHistoryEntry, FileSummary, FolderSummary, NamespaceDetail,
-    NamespaceMetadata, NamespaceRegistry, NamespaceSummary, PageHistorySnapshot, SaveFileResult,
-    SideBySideDiffRow, SideBySideDiffSection, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
+    BacklinkSummary, ContentTree, DeletedContentSummary, FileHistoryEntry, FileSummary,
+    FolderSummary, NamespaceDetail, NamespaceMetadata, NamespaceRegistry, NamespaceSummary,
+    PageHistorySnapshot, SaveFileResult, SideBySideDiffRow, SideBySideDiffSection,
+    DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
 };
 use crate::paths::{
     resolve_namespace_file_path, resolve_namespace_folder_path, resolve_namespace_path,
 };
 use crate::versioning::{
-    ensure_version_dirs, file_id_for_path, latest_revision_id, read_file_history, read_path_index,
-    read_text_object, record_file_revision, record_file_revision_with_content_type,
+    ensure_version_dirs, file_id_for_path, latest_revision_id, read_file_history, read_object,
+    read_path_index, read_text_object, record_file_deletion, record_file_revision,
+    record_file_revision_with_content_type, write_path_index,
 };
 use chrono::Utc;
 use std::fs;
@@ -127,9 +129,12 @@ pub fn read_page(
     }
 
     let content = fs::read_to_string(&resolved_path).map_err(to_error)?;
-    let file_id = file_id_for_path(&namespace.root_path, &normalized_path)?
-        .ok_or_else(|| "ページの履歴 ID が見つかりません。".to_string())?;
-    let latest_revision_id = latest_revision_id(&namespace.root_path, &file_id)?;
+    let file_id = file_id_for_path(&namespace.root_path, &normalized_path)?.unwrap_or_default();
+    let latest_revision_id = if file_id.is_empty() {
+        None
+    } else {
+        latest_revision_id(&namespace.root_path, &file_id)?
+    };
 
     let title = page_title(&normalized_path);
     let location = page_location(&normalized_path, &namespace);
@@ -226,6 +231,159 @@ pub fn create_folder(
     let normalized_path = crate::paths::validate_folder_path(&path)?;
     let resolved_path = resolve_namespace_folder_path(&namespace.root_path, &normalized_path)?;
     fs::create_dir_all(&resolved_path).map_err(to_error)?;
+    open_namespace(app, namespace_id)
+}
+
+pub fn delete_page(
+    app: &AppHandle,
+    namespace_id: String,
+    path: String,
+) -> Result<NamespaceDetail, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let normalized_path = crate::paths::validate_page_path(&path)?;
+    let resolved_path = resolve_namespace_path(&namespace.root_path, &normalized_path)?;
+    if !resolved_path.is_file() {
+        return Err("削除対象のページが見つかりません。".to_string());
+    }
+
+    if file_id_for_path(&namespace.root_path, &normalized_path)?.is_some() {
+        record_file_deletion(
+            &namespace.root_path,
+            &namespace.id,
+            &normalized_path,
+            "text/markdown",
+            &format!("Delete {}", display_page_name(&normalized_path)),
+        )?;
+    }
+    fs::remove_file(resolved_path).map_err(to_error)?;
+    open_namespace(app, namespace_id)
+}
+
+pub fn delete_file(
+    app: &AppHandle,
+    namespace_id: String,
+    path: String,
+) -> Result<NamespaceDetail, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let normalized_path = crate::paths::validate_file_path(&path)?;
+    let resolved_path = resolve_namespace_file_path(&namespace.root_path, &normalized_path)?;
+    if !resolved_path.is_file() {
+        return Err("削除対象のファイルが見つかりません。".to_string());
+    }
+    let content = fs::read(&resolved_path).map_err(to_error)?;
+    let content_type = guess_content_type_from_bytes(&content, Some(Path::new(&normalized_path)));
+
+    if file_id_for_path(&namespace.root_path, &normalized_path)?.is_some() {
+        record_file_deletion(
+            &namespace.root_path,
+            &namespace.id,
+            &normalized_path,
+            &content_type,
+            &format!("Delete {}", display_file_name(&normalized_path)),
+        )?;
+    }
+    fs::remove_file(resolved_path).map_err(to_error)?;
+    open_namespace(app, namespace_id)
+}
+
+pub fn delete_folder(
+    app: &AppHandle,
+    namespace_id: String,
+    path: String,
+) -> Result<NamespaceDetail, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let normalized_path = crate::paths::validate_folder_path(&path)?;
+    let resolved_path = resolve_namespace_folder_path(&namespace.root_path, &normalized_path)?;
+    if !resolved_path.is_dir() {
+        return Err("削除対象のフォルダーが見つかりません。".to_string());
+    }
+
+    let mut file_paths = Vec::new();
+    collect_visible_file_paths(&namespace.root_path, &resolved_path, &mut file_paths)?;
+    file_paths.sort();
+    for file_path in file_paths {
+        if file_id_for_path(&namespace.root_path, &file_path)?.is_none() {
+            continue;
+        }
+        if file_path.ends_with(".md") {
+            record_file_deletion(
+                &namespace.root_path,
+                &namespace.id,
+                &file_path,
+                "text/markdown",
+                &format!("Delete {}", display_page_name(&file_path)),
+            )?;
+        } else {
+            let resolved_file_path = resolve_namespace_file_path(&namespace.root_path, &file_path)?;
+            let content = fs::read(&resolved_file_path).map_err(to_error)?;
+            let content_type = guess_content_type_from_bytes(&content, Some(Path::new(&file_path)));
+            record_file_deletion(
+                &namespace.root_path,
+                &namespace.id,
+                &file_path,
+                &content_type,
+                &format!("Delete {}", display_file_name(&file_path)),
+            )?;
+        }
+    }
+
+    fs::remove_dir_all(resolved_path).map_err(to_error)?;
+    open_namespace(app, namespace_id)
+}
+
+pub fn restore_deleted_content(
+    app: &AppHandle,
+    namespace_id: String,
+    file_id: String,
+) -> Result<NamespaceDetail, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let history = read_file_history(&namespace.root_path, &file_id)?
+        .ok_or_else(|| "削除済みコンテンツの履歴が見つかりません。".to_string())?;
+    let latest = history
+        .revisions
+        .last()
+        .ok_or_else(|| "削除済みコンテンツの revision が見つかりません。".to_string())?;
+    let content = read_object(&namespace.root_path, &latest.object_id)?;
+    let normalized_path = latest.path.clone();
+    if normalized_path.ends_with(".md") {
+        let resolved_path = resolve_namespace_path(&namespace.root_path, &normalized_path)?;
+        if resolved_path.exists() {
+            return Err("復活先に同名のページが存在します。".to_string());
+        }
+        if let Some(parent) = resolved_path.parent() {
+            fs::create_dir_all(parent).map_err(to_error)?;
+        }
+        fs::write(&resolved_path, &content).map_err(to_error)?;
+        restore_path_index_entry(&namespace.root_path, &normalized_path, &file_id)?;
+        record_file_revision(
+            &namespace.root_path,
+            &namespace.id,
+            &normalized_path,
+            &content,
+            &format!("Restore {}", display_page_name(&normalized_path)),
+        )?;
+    } else {
+        let resolved_path = resolve_namespace_file_path(&namespace.root_path, &normalized_path)?;
+        if resolved_path.exists() {
+            return Err("復活先に同名のファイルが存在します。".to_string());
+        }
+        if let Some(parent) = resolved_path.parent() {
+            fs::create_dir_all(parent).map_err(to_error)?;
+        }
+        fs::write(&resolved_path, &content).map_err(to_error)?;
+        let content_type =
+            guess_content_type_from_bytes(&content, Some(Path::new(&normalized_path)));
+        restore_path_index_entry(&namespace.root_path, &normalized_path, &file_id)?;
+        record_file_revision_with_content_type(
+            &namespace.root_path,
+            &namespace.id,
+            &normalized_path,
+            &content,
+            &content_type,
+            &format!("Restore {}", display_file_name(&normalized_path)),
+        )?;
+    }
+
     open_namespace(app, namespace_id)
 }
 
@@ -352,6 +510,130 @@ pub fn list_page_history(
     };
 
     Ok(history.revisions.into_iter().rev().collect())
+}
+
+pub fn list_deleted_content(
+    app: &AppHandle,
+    namespace_id: String,
+) -> Result<Vec<DeletedContentSummary>, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let path_index = read_path_index(&namespace.root_path)?;
+    let mut items = Vec::new();
+    for (indexed_path, file_id) in path_index.entries {
+        let resolved_path = if indexed_path.ends_with(".md") {
+            match resolve_namespace_path(&namespace.root_path, &indexed_path) {
+                Ok(path) => path,
+                Err(_) => continue,
+            }
+        } else {
+            match resolve_namespace_file_path(&namespace.root_path, &indexed_path) {
+                Ok(path) => path,
+                Err(_) => continue,
+            }
+        };
+        if resolved_path.is_file() {
+            continue;
+        }
+
+        let Some(history) = read_file_history(&namespace.root_path, &file_id)? else {
+            continue;
+        };
+        let Some(latest) = history.revisions.last() else {
+            continue;
+        };
+        let content_kind = if indexed_path.ends_with(".md") {
+            "page"
+        } else {
+            "file"
+        };
+        items.push(DeletedContentSummary {
+            file_id: history.file_id.clone(),
+            path: indexed_path.clone(),
+            title: if content_kind == "page" {
+                page_title(&indexed_path)
+            } else {
+                file_title(&indexed_path)
+            },
+            location: file_location(&indexed_path, &namespace),
+            content_kind: content_kind.to_string(),
+            deleted_at: latest.created_at.clone(),
+            latest_revision_id: latest.revision_id.clone(),
+        });
+    }
+
+    items.sort_by(|left, right| {
+        right
+            .deleted_at
+            .cmp(&left.deleted_at)
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    Ok(items)
+}
+
+pub fn read_deleted_page(
+    app: &AppHandle,
+    namespace_id: String,
+    file_id: String,
+) -> Result<crate::models::PageContent, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let (entry, content) = read_deleted_entry_object(&namespace, &file_id)?;
+    let normalized_path = crate::paths::validate_page_path(&entry.path)?;
+    let title = page_title(&normalized_path);
+    let location = page_location(&normalized_path, &namespace);
+
+    Ok(crate::models::PageContent {
+        namespace_id,
+        file_id,
+        path: normalized_path.clone(),
+        title,
+        location,
+        content: String::from_utf8(content).map_err(to_error)?,
+        backlinks: Vec::new(),
+        latest_revision_id: Some(entry.revision_id),
+        is_virtual: true,
+    })
+}
+
+pub fn read_deleted_file(
+    app: &AppHandle,
+    namespace_id: String,
+    file_id: String,
+) -> Result<crate::models::ManagedFileContent, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let (entry, content) = read_deleted_entry_object(&namespace, &file_id)?;
+    let normalized_path = crate::paths::validate_file_path(&entry.path)?;
+    let title = file_title(&normalized_path);
+    let location = file_location(&normalized_path, &namespace);
+    let content_type = guess_content_type_from_bytes(&content, Some(Path::new(&normalized_path)));
+    let text_content = if is_text_content_type(&content_type) {
+        Some(String::from_utf8(content.clone()).map_err(to_error)?)
+    } else {
+        None
+    };
+    let data_url = if is_embeddable_content_type(&content_type) {
+        Some(format!(
+            "data:{content_type};base64,{}",
+            encode_base64(&content)
+        ))
+    } else {
+        None
+    };
+
+    Ok(crate::models::ManagedFileContent {
+        namespace_id,
+        file_id,
+        path: normalized_path,
+        title,
+        location,
+        note: String::new(),
+        backlinks: Vec::new(),
+        content_type,
+        text_content,
+        data_url,
+        size: content.len() as u64,
+        latest_revision_id: Some(entry.revision_id),
+        is_virtual: true,
+    })
 }
 
 pub fn read_page_history_snapshot(
@@ -732,6 +1014,61 @@ fn collect_content_entries(
     Ok(())
 }
 
+fn collect_visible_file_paths(
+    root: &Path,
+    current: &Path,
+    file_paths: &mut Vec<String>,
+) -> Result<(), String> {
+    if !current.exists() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(current).map_err(to_error)? {
+        let entry = entry.map_err(to_error)?;
+        let path = entry.path();
+        if is_hidden_path_entry(&path) {
+            continue;
+        }
+        if path.is_dir() {
+            collect_visible_file_paths(root, &path, file_paths)?;
+            continue;
+        }
+
+        let relative_path = path
+            .strip_prefix(root)
+            .map_err(to_error)?
+            .to_string_lossy()
+            .replace('\\', "/");
+        file_paths.push(relative_path);
+    }
+
+    Ok(())
+}
+
+fn read_deleted_entry_object(
+    namespace: &NamespaceSummary,
+    file_id: &str,
+) -> Result<(FileHistoryEntry, Vec<u8>), String> {
+    let history = read_file_history(&namespace.root_path, file_id)?
+        .ok_or_else(|| "削除済みコンテンツの履歴が見つかりません。".to_string())?;
+    let entry = history
+        .revisions
+        .last()
+        .cloned()
+        .ok_or_else(|| "削除済みコンテンツの revision が見つかりません。".to_string())?;
+    let content = read_object(&namespace.root_path, &entry.object_id)?;
+
+    Ok((entry, content))
+}
+
+fn restore_path_index_entry(root: &Path, path: &str, file_id: &str) -> Result<(), String> {
+    let mut path_index = read_path_index(root)?;
+    path_index
+        .entries
+        .insert(path.to_string(), file_id.to_string());
+    write_path_index(root, &path_index)
+}
+
 fn ensure_namespace_ready(namespace: &NamespaceSummary) -> Result<(), String> {
     if !namespace.root_path.exists() {
         return Err("ネームスペースの保存先フォルダが見つかりません。".to_string());
@@ -836,11 +1173,18 @@ fn read_managed_file_for_namespace(
         });
     }
 
-    let file_id = file_id_for_path(&namespace.root_path, &normalized_path)?
-        .ok_or_else(|| "ファイルの履歴 ID が見つかりません。".to_string())?;
-    let latest_revision_id = latest_revision_id(&namespace.root_path, &file_id)?;
+    let file_id = file_id_for_path(&namespace.root_path, &normalized_path)?.unwrap_or_default();
+    let latest_revision_id = if file_id.is_empty() {
+        None
+    } else {
+        latest_revision_id(&namespace.root_path, &file_id)?
+    };
     let metadata = fs::metadata(&resolved_path).map_err(to_error)?;
-    let note = read_file_note(&namespace.root_path, &file_id)?;
+    let note = if file_id.is_empty() {
+        String::new()
+    } else {
+        read_file_note(&namespace.root_path, &file_id)?
+    };
     let content = fs::read(&resolved_path).map_err(to_error)?;
     let content_type = guess_content_type_from_bytes(&content, Some(Path::new(&normalized_path)));
     let text_content = if is_text_content_type(&content_type) {

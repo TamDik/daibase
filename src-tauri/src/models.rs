@@ -150,6 +150,17 @@ pub struct SpecialPageSummary {
     pub location: String,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct DeletedContentSummary {
+    pub file_id: String,
+    pub path: String,
+    pub title: String,
+    pub location: String,
+    pub content_kind: String,
+    pub deleted_at: String,
+    pub latest_revision_id: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct MarkdownLinkStatus {
     pub location: String,
@@ -196,6 +207,12 @@ pub enum OpenLocationResult {
         location: String,
         namespace: NamespaceSummary,
         content: ContentTree,
+    },
+    SpecialDeletedPages {
+        location: String,
+        namespace: NamespaceSummary,
+        content: ContentTree,
+        items: Vec<DeletedContentSummary>,
     },
 }
 
