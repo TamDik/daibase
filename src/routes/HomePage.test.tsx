@@ -1033,16 +1033,19 @@ describe("HomePage", () => {
     expect(screen.getAllByText("modified / Main.md")).toHaveLength(2);
   });
 
-  it("履歴行を選択すると履歴詳細ページへ遷移する", async () => {
+  it("履歴行を選択するとタブ下のコンテンツで履歴詳細を表示する", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
     await user.click(await screen.findByRole("tab", { name: "履歴" }));
     await user.click(await screen.findByRole("button", { name: /2026\/01\/02.*modified/ }));
 
-    expect(await screen.findByTestId("current-route")).toHaveTextContent(
-      "/history?namespaceId=ns-work&path=Main.md&revisionId=rev_02",
+    await waitFor(() =>
+      expect(api.readPageHistorySnapshot).toHaveBeenCalledWith("ns-work", "Main.md", "rev_02"),
     );
+    expect(await screen.findByText("差分はありません。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "一覧へ戻る" })).toBeInTheDocument();
+    expect(screen.getByTestId("current-route")).toHaveTextContent("/");
   });
 });
 

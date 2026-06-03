@@ -2,6 +2,7 @@ import {
   Alert,
   Autocomplete,
   Box,
+  Button,
   Chip,
   CircularProgress,
   IconButton,
@@ -18,16 +19,17 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { Article, Code, Star, StarBorder } from "@mui/icons-material";
+import { ArrowBackRounded, Article, Code, Star, StarBorder } from "@mui/icons-material";
 import { useEffect, useState } from "react";
 
-import type { BacklinkSummary, FileHistoryEntry } from "../api/tauriCommands";
+import type { BacklinkSummary, FileHistoryEntry, PageHistorySnapshot } from "../api/tauriCommands";
 import {
   categoriesFromMarkdown,
   markdownBodyFromMarkdown,
   updateMarkdownBodyPreservingFrontmatter,
 } from "../lib/pageCategories";
 import { MarkdownWysiwygEditor } from "./MarkdownWysiwygEditor";
+import { SideBySideDiffView } from "./SideBySideDiffView";
 
 export type PageMode = "view" | "history";
 
@@ -53,7 +55,11 @@ export function PageSurface({
   onResolveMarkdownImage,
   onResolveMarkdownLinkStatus,
   onSelectHistoryEntry,
+  onCloseHistorySnapshot,
   selectedHistoryRevisionId,
+  selectedHistorySnapshot,
+  selectedHistoryError,
+  isSelectedHistoryLoading,
 }: {
   backlinks: BacklinkSummary[];
   draft: string;
@@ -87,7 +93,11 @@ export function PageSurface({
     location: string;
   }>;
   onSelectHistoryEntry: (entry: FileHistoryEntry) => void;
+  onCloseHistorySnapshot: () => void;
   selectedHistoryRevisionId: string | null;
+  selectedHistorySnapshot: PageHistorySnapshot | null;
+  selectedHistoryError: string | null;
+  isSelectedHistoryLoading: boolean;
 }) {
   const [editorView, setEditorView] = useState<"wysiwyg" | "source">("wysiwyg");
   const [categoryInput, setCategoryInput] = useState("");
@@ -248,7 +258,11 @@ export function PageSurface({
             error={historyError}
             isLoading={isHistoryLoading}
             onSelectEntry={onSelectHistoryEntry}
+            onCloseSnapshot={onCloseHistorySnapshot}
             selectedRevisionId={selectedHistoryRevisionId}
+            selectedSnapshot={selectedHistorySnapshot}
+            selectedError={selectedHistoryError}
+            isSelectedLoading={isSelectedHistoryLoading}
           />
         ) : (
           <Box sx={{ position: "relative" }}>
@@ -400,14 +414,65 @@ function HistoryPanel({
   error,
   isLoading,
   onSelectEntry,
+  onCloseSnapshot,
   selectedRevisionId,
+  selectedSnapshot,
+  selectedError,
+  isSelectedLoading,
 }: {
   entries: FileHistoryEntry[];
   error: string | null;
   isLoading: boolean;
   onSelectEntry: (entry: FileHistoryEntry) => void;
+  onCloseSnapshot: () => void;
   selectedRevisionId: string | null;
+  selectedSnapshot: PageHistorySnapshot | null;
+  selectedError: string | null;
+  isSelectedLoading: boolean;
 }) {
+  if (selectedRevisionId) {
+    return (
+      <Box sx={{ px: 2, py: 1.5 }}>
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", mb: 1.5 }}>
+          <Button
+            startIcon={<ArrowBackRounded />}
+            variant="text"
+            onClick={onCloseSnapshot}
+            sx={{ flex: "0 0 auto" }}
+          >
+            一覧へ戻る
+          </Button>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle2" component="h2" sx={{ fontWeight: 700 }}>
+              編集履歴
+            </Typography>
+            <Typography variant="body2" color="text.secondary" noWrap>
+              {selectedRevisionId}
+            </Typography>
+          </Box>
+        </Stack>
+        {isSelectedLoading ? (
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <CircularProgress size={16} />
+            <Typography variant="body2" color="text.secondary">
+              読み込み中
+            </Typography>
+          </Stack>
+        ) : selectedError ? (
+          <Alert severity="error">{selectedError}</Alert>
+        ) : selectedSnapshot ? (
+          <Stack spacing={1.5}>
+            <Typography variant="body2" color="text.secondary">
+              {formatHistoryTime(selectedSnapshot.entry.created_at)} /{" "}
+              {shortenHash(selectedSnapshot.entry.object_id)}
+            </Typography>
+            <SideBySideDiffView sections={selectedSnapshot.diff_sections} />
+          </Stack>
+        ) : null}
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ px: 2, py: 1.5 }}>
       <Typography variant="subtitle2" component="h2" sx={{ fontWeight: 700 }}>

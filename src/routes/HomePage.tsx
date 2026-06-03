@@ -12,7 +12,6 @@ import {
 } from "@mui/material";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
 
 import {
   type CategoryGroupSummary,
@@ -24,6 +23,7 @@ import {
   type NamespaceSummary,
   type OpenLocationResult,
   type PageContent,
+  type PageHistorySnapshot,
   type SpecialPageSummary,
   createFolder,
   createNamespace,
@@ -40,6 +40,7 @@ import {
   openLocation,
   readDeletedFile,
   readDeletedPage,
+  readPageHistorySnapshot,
   resolveMarkdownImage,
   resolveMarkdownLinkStatus,
   restoreDeletedContent,
@@ -124,7 +125,6 @@ type CreateDialogState = {
 };
 
 export function HomePage() {
-  const routerNavigate = useNavigate();
   const [namespaces, setNamespaces] = useState<NamespaceSummary[]>([]);
   const [activeNamespace, setActiveNamespace] = useState<NamespaceSummary | null>(null);
   const [sidebarContent, setSidebarContent] = useState<ContentTree | null>(null);
@@ -151,6 +151,11 @@ export function HomePage() {
   const [historyEntries, setHistoryEntries] = useState<FileHistoryEntry[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [selectedHistoryRevisionId, setSelectedHistoryRevisionId] = useState<string | null>(null);
+  const [selectedHistorySnapshot, setSelectedHistorySnapshot] = useState<PageHistorySnapshot | null>(
+    null,
+  );
+  const [selectedHistoryError, setSelectedHistoryError] = useState<string | null>(null);
+  const [isSelectedHistoryLoading, setIsSelectedHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [createDialog, setCreateDialog] = useState<CreateDialogState | null>(null);
@@ -297,6 +302,9 @@ export function HomePage() {
       setHistoryEntries([]);
       setHistoryError(null);
       setSelectedHistoryRevisionId(null);
+      setSelectedHistorySnapshot(null);
+      setSelectedHistoryError(null);
+      setIsSelectedHistoryLoading(false);
       return nextLocation;
     }
 
@@ -315,6 +323,9 @@ export function HomePage() {
     setHistoryEntries([]);
     setHistoryError(null);
     setSelectedHistoryRevisionId(null);
+    setSelectedHistorySnapshot(null);
+    setSelectedHistoryError(null);
+    setIsSelectedHistoryLoading(false);
     return nextLocation;
   }, []);
 
@@ -370,6 +381,9 @@ export function HomePage() {
           const entries = await listPageHistory(saved.namespace.id, saved.page.path);
           setHistoryEntries(entries);
           setSelectedHistoryRevisionId(null);
+          setSelectedHistorySnapshot(null);
+          setSelectedHistoryError(null);
+          setIsSelectedHistoryLoading(false);
         }
         return true;
       } catch (caught) {
@@ -512,6 +526,9 @@ export function HomePage() {
         setHistoryEntries([]);
         setHistoryError(null);
         setSelectedHistoryRevisionId(null);
+        setSelectedHistorySnapshot(null);
+        setSelectedHistoryError(null);
+        setIsSelectedHistoryLoading(false);
       } catch (caught) {
         setError(errorMessage(caught));
       }
@@ -906,20 +923,37 @@ export function HomePage() {
     }
   };
 
-  const handleSelectHistoryEntry = (entry: FileHistoryEntry) => {
+  const handleSelectHistoryEntry = async (entry: FileHistoryEntry) => {
     if (!pageView && !fileView) {
       return;
     }
 
     setSelectedHistoryRevisionId(entry.revision_id);
-    const namespaceId = pageView?.namespace.id ?? fileView?.namespace.id;
-    const path = pageView?.page.path ?? fileView?.file.path;
-    if (!namespaceId || !path) {
+
+    if (!pageView) {
+      setSelectedHistorySnapshot(null);
+      setSelectedHistoryError(null);
       return;
     }
-    routerNavigate(
-      `/history?namespaceId=${encodeURIComponent(namespaceId)}&path=${encodeURIComponent(path)}&revisionId=${encodeURIComponent(entry.revision_id)}`,
-    );
+
+    setSelectedHistorySnapshot(null);
+    setSelectedHistoryError(null);
+    setIsSelectedHistoryLoading(true);
+    try {
+      setSelectedHistorySnapshot(
+        await readPageHistorySnapshot(pageView.namespace.id, pageView.page.path, entry.revision_id),
+      );
+    } catch (caught) {
+      setSelectedHistoryError(errorMessage(caught));
+    } finally {
+      setIsSelectedHistoryLoading(false);
+    }
+  };
+
+  const handleCloseHistorySnapshot = () => {
+    setSelectedHistoryRevisionId(null);
+    setSelectedHistorySnapshot(null);
+    setSelectedHistoryError(null);
   };
 
   const handleResolvePageMarkdownLinkStatus = useCallback(
@@ -1117,7 +1151,11 @@ export function HomePage() {
                 onResolveMarkdownImage={handleResolvePageMarkdownImage}
                 onResolveMarkdownLinkStatus={handleResolvePageMarkdownLinkStatus}
                 onSelectHistoryEntry={handleSelectHistoryEntry}
+                onCloseHistorySnapshot={handleCloseHistorySnapshot}
                 selectedHistoryRevisionId={selectedHistoryRevisionId}
+                selectedHistorySnapshot={selectedHistorySnapshot}
+                selectedHistoryError={selectedHistoryError}
+                isSelectedHistoryLoading={isSelectedHistoryLoading}
               />
             )}
 
