@@ -46,7 +46,9 @@ pub fn install_plugin_from_folder(
         manifest,
     };
     registry.plugins.push(plugin.clone());
-    registry.plugins.sort_by(|left, right| left.name.cmp(&right.name));
+    registry
+        .plugins
+        .sort_by(|left, right| left.name.cmp(&right.name));
     write_registry(app, &registry)?;
 
     Ok(plugin)
@@ -129,7 +131,9 @@ fn validate_plugin_id(id: &str) -> Result<(), String> {
             .chars()
             .all(|char| char.is_ascii_alphanumeric() || matches!(char, '.' | '-' | '_'))
     {
-        return Err("plugin id には英数字、ドット、ハイフン、アンダースコアだけ使えます。".to_string());
+        return Err(
+            "plugin id には英数字、ドット、ハイフン、アンダースコアだけ使えます。".to_string(),
+        );
     }
 
     Ok(())

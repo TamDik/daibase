@@ -181,6 +181,49 @@ export type CategoryGroupSummary = {
   pages: CategoryPageSummary[];
 };
 
+export type PluginInstallSource = {
+  kind: "localFolder";
+  path: string;
+};
+
+export type PluginManifest = {
+  schemaVersion: number;
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  entry: string;
+  contributions: PluginContribution[];
+  permissions: PluginPermission[];
+};
+
+export type PluginContribution = {
+  kind: "markdownRenderer";
+  id: string;
+  name: string;
+  frontmatter?: unknown;
+};
+
+export type PluginPermission =
+  | "page-read"
+  | "page-write"
+  | "file-read"
+  | "file-write"
+  | "namespace-read"
+  | "history-read"
+  | "location-open"
+  | "ui-notify";
+
+export type InstalledPluginSummary = {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  enabled: boolean;
+  source: PluginInstallSource;
+  manifest: PluginManifest;
+};
+
 export type MarkdownLinkStatus = {
   location: string;
   exists: boolean;
@@ -235,6 +278,11 @@ export type ResolvedLocation =
     }
   | {
       kind: "specialCategories";
+      namespace: NamespaceSummary;
+      location: string;
+    }
+  | {
+      kind: "specialPlugins";
       namespace: NamespaceSummary;
       location: string;
     };
@@ -293,6 +341,13 @@ export type OpenLocationResult =
       content: ContentTree;
       categories: CategoryGroupSummary[];
       uncategorized_pages: CategoryPageSummary[];
+    }
+  | {
+      kind: "specialPlugins";
+      location: string;
+      namespace: NamespaceSummary;
+      content: ContentTree;
+      plugins: InstalledPluginSummary[];
     };
 
 export function listNamespaces() {
@@ -301,6 +356,23 @@ export function listNamespaces() {
 
 export function getMcpServerStatus() {
   return invoke<McpServerStatus>("get_mcp_server_status");
+}
+
+export function listPlugins() {
+  return invoke<InstalledPluginSummary[]>("list_plugins");
+}
+
+export function installPluginFromFolder(sourcePath: string) {
+  return invoke<InstalledPluginSummary>("install_plugin_from_folder", {
+    sourcePath,
+  });
+}
+
+export function setPluginEnabled(pluginId: string, enabled: boolean) {
+  return invoke<InstalledPluginSummary>("set_plugin_enabled", {
+    pluginId,
+    enabled,
+  });
 }
 
 export function startTerminal(columns?: number, rows?: number) {

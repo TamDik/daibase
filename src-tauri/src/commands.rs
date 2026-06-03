@@ -362,7 +362,8 @@ pub fn resolve_markdown_link_status(
         | ResolvedLocation::SpecialPagesList { .. }
         | ResolvedLocation::SpecialDeletedPages { .. }
         | ResolvedLocation::SpecialFavorites { .. }
-        | ResolvedLocation::SpecialCategories { .. } => true,
+        | ResolvedLocation::SpecialCategories { .. }
+        | ResolvedLocation::SpecialPlugins { .. } => true,
     };
 
     Ok(MarkdownLinkStatus {
@@ -558,6 +559,19 @@ pub fn open_location(
                 uncategorized_pages,
             })
         }
+        ResolvedLocation::SpecialPlugins {
+            namespace,
+            location,
+        } => {
+            let detail = crate::namespace::open_namespace(&app, namespace.id.clone())?;
+            let plugins = crate::plugins::list_plugins(&app)?;
+            Ok(OpenLocationResult::SpecialPlugins {
+                location,
+                namespace: detail.namespace,
+                content: detail.content,
+                plugins,
+            })
+        }
     }
 }
 
@@ -622,6 +636,11 @@ fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialPageS
             title: "Categories".to_string(),
             description: "カテゴリ別にページを表示します。".to_string(),
             location: format!("{}:Special:Categories", namespace.name),
+        },
+        SpecialPageSummary {
+            title: "Plugins".to_string(),
+            description: "インストール済みプラグインの確認と有効化を行います。".to_string(),
+            location: format!("{}:Special:Plugins", namespace.name),
         },
     ]
 }

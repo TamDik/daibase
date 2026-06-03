@@ -3,8 +3,8 @@ mod location;
 mod mcp;
 mod models;
 mod namespace;
-mod plugins;
 mod paths;
+mod plugins;
 mod terminal;
 mod versioning;
 

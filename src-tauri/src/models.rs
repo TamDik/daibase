@@ -338,6 +338,12 @@ pub enum OpenLocationResult {
         categories: Vec<CategoryGroupSummary>,
         uncategorized_pages: Vec<CategoryPageSummary>,
     },
+    SpecialPlugins {
+        location: String,
+        namespace: NamespaceSummary,
+        content: ContentTree,
+        plugins: Vec<InstalledPluginSummary>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,6 +1,7 @@
 import {
   Box,
   Button,
+  Chip,
   Divider,
   IconButton,
   List,
@@ -8,11 +9,12 @@ import {
   ListItemText,
   Paper,
   Stack,
+  Switch,
   TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
-import { RestoreOutlined } from "@mui/icons-material";
+import { ExtensionOutlined, FolderOpenOutlined, RestoreOutlined } from "@mui/icons-material";
 
 import type {
   CategoryGroupSummary,
@@ -20,6 +22,7 @@ import type {
   ContentTree,
   DeletedContentSummary,
   FavoriteContentSummary,
+  InstalledPluginSummary,
   NamespaceSummary,
   SpecialPageSummary,
 } from "../api/tauriCommands";
@@ -359,6 +362,105 @@ export function CategoriesSpecialPage({
   );
 }
 
+export function PluginsSpecialPage({
+  plugins,
+  namespace,
+  onInstallFromFolder,
+  onTogglePlugin,
+}: {
+  plugins: InstalledPluginSummary[];
+  namespace: NamespaceSummary;
+  onInstallFromFolder: () => void;
+  onTogglePlugin: (plugin: InstalledPluginSummary, enabled: boolean) => void;
+}) {
+  return (
+    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
+      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+        <Typography variant="h5" component="h2">
+          Plugins
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {namespace.name}:Special:Plugins
+        </Typography>
+      </Box>
+      <Stack spacing={2.5} sx={{ p: 3 }}>
+        <Box>
+          <Button
+            variant="contained"
+            startIcon={<FolderOpenOutlined fontSize="small" />}
+            onClick={onInstallFromFolder}
+          >
+            フォルダからインストール
+          </Button>
+        </Box>
+
+        <Divider />
+
+        {plugins.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            インストール済みプラグインはありません。
+          </Typography>
+        ) : (
+          <List dense disablePadding>
+            {plugins.map((plugin) => (
+              <Box
+                key={plugin.id}
+                sx={{
+                  alignItems: "center",
+                  borderRadius: 1,
+                  display: "flex",
+                  gap: 1,
+                  px: 1,
+                  py: 0.75,
+                  "&:hover": { bgcolor: "action.hover" },
+                }}
+              >
+                <ExtensionOutlined color="action" fontSize="small" />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: "center", flexWrap: "wrap" }}
+                  >
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                      {plugin.name}
+                    </Typography>
+                    <Chip size="small" label={plugin.version} />
+                    <Chip
+                      color={plugin.enabled ? "success" : "default"}
+                      size="small"
+                      label={plugin.enabled ? "有効" : "無効"}
+                    />
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary" noWrap>
+                    {plugin.description || plugin.id}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap component="div">
+                    {sourceLabel(plugin)}
+                  </Typography>
+                  {plugin.manifest.permissions.length > 0 && (
+                    <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", mt: 0.5 }}>
+                      {plugin.manifest.permissions.map((permission) => (
+                        <Chip key={permission} size="small" variant="outlined" label={permission} />
+                      ))}
+                    </Stack>
+                  )}
+                </Box>
+                <Switch
+                  edge="end"
+                  checked={plugin.enabled}
+                  slotProps={{ input: { "aria-label": `${plugin.name} を有効化` } }}
+                  onChange={(event) => onTogglePlugin(plugin, event.target.checked)}
+                />
+              </Box>
+            ))}
+          </List>
+        )}
+      </Stack>
+    </Paper>
+  );
+}
+
 function CategoryPageList({
   pages,
   onOpenLocation,
@@ -379,6 +481,13 @@ function CategoryPageList({
       ))}
     </List>
   );
+}
+
+function sourceLabel(plugin: InstalledPluginSummary) {
+  if (plugin.source.kind === "localFolder") {
+    return `Local folder / ${plugin.source.path}`;
+  }
+  return plugin.source.kind;
 }
 
 function formatDeletedTime(value: string) {

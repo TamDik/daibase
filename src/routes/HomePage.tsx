@@ -19,6 +19,7 @@ import {
   type ContentTree,
   type FavoriteContentSummary,
   type FileHistoryEntry,
+  type InstalledPluginSummary,
   type ManagedFileContent,
   type NamespaceSummary,
   type OpenLocationResult,
@@ -31,10 +32,12 @@ import {
   deleteFolder,
   deletePage,
   type DeletedContentSummary,
+  installPluginFromFolder,
   listDeletedContent,
   listFavoriteContent,
   listFileHistory,
   listPageHistory,
+  listPlugins,
   listNamespaces,
   openInitialLocation,
   openLocation,
@@ -46,6 +49,7 @@ import {
   restoreDeletedContent,
   savePage,
   setFavoriteContent,
+  setPluginEnabled,
   uploadFile,
   writeFileNote,
 } from "../api/tauriCommands";
@@ -59,6 +63,7 @@ import {
   FavoritesSpecialPage,
   PagesSpecialPage,
   NamespacesSpecialPage,
+  PluginsSpecialPage,
   SpecialPagesIndex,
 } from "../components/SpecialPages";
 import { TerminalPanel } from "../components/TerminalPanel";
@@ -117,6 +122,13 @@ type SpecialView =
       content: ContentTree;
       categories: CategoryGroupSummary[];
       uncategorizedPages: CategoryPageSummary[];
+    }
+  | {
+      kind: "plugins";
+      location: string;
+      namespace: NamespaceSummary;
+      content: ContentTree;
+      plugins: InstalledPluginSummary[];
     };
 
 type CreateDialogState = {
@@ -280,6 +292,24 @@ export function HomePage() {
         content: opened.content,
         categories: opened.categories,
         uncategorizedPages: opened.uncategorized_pages,
+      });
+      setDraft("");
+      setLocationInput(opened.location);
+      setPageMode("view");
+      return nextLocation;
+    }
+
+    if (opened.kind === "specialPlugins") {
+      setActiveNamespace(opened.namespace);
+      setSidebarContent(opened.content);
+      setPageView(null);
+      setFileView(null);
+      setSpecialView({
+        kind: "plugins",
+        location: opened.location,
+        namespace: opened.namespace,
+        content: opened.content,
+        plugins: opened.plugins,
       });
       setDraft("");
       setLocationInput(opened.location);
@@ -700,6 +730,59 @@ export function HomePage() {
       setError(errorMessage(caught));
     }
   };
+
+  const handleInstallPluginFromFolder = useCallback(async () => {
+    setError(null);
+    setSavedMessage(null);
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "プラグインフォルダを選択",
+      });
+
+      if (typeof selected !== "string") {
+        return;
+      }
+
+      await installPluginFromFolder(selected);
+      const plugins = await listPlugins();
+      setSpecialView((current) =>
+        current?.kind === "plugins"
+          ? {
+              ...current,
+              plugins,
+            }
+          : current,
+      );
+      setSavedMessage("プラグインをインストールしました");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }, []);
+
+  const handleTogglePlugin = useCallback(
+    async (plugin: InstalledPluginSummary, enabled: boolean) => {
+      setError(null);
+      setSavedMessage(null);
+      try {
+        await setPluginEnabled(plugin.id, enabled);
+        const plugins = await listPlugins();
+        setSpecialView((current) =>
+          current?.kind === "plugins"
+            ? {
+                ...current,
+                plugins,
+              }
+            : current,
+        );
+        setSavedMessage(enabled ? "プラグインを有効化しました" : "プラグインを無効化しました");
+      } catch (caught) {
+        setError(errorMessage(caught));
+      }
+    },
+    [],
+  );
 
   const handleLocationSubmit = async () => {
     try {
@@ -1130,6 +1213,15 @@ export function HomePage() {
                 namespace={specialView.namespace}
                 uncategorizedPages={specialView.uncategorizedPages}
                 onOpenLocation={(location) => void navigate(location)}
+              />
+            )}
+
+            {specialView?.kind === "plugins" && (
+              <PluginsSpecialPage
+                namespace={specialView.namespace}
+                plugins={specialView.plugins}
+                onInstallFromFolder={() => void handleInstallPluginFromFolder()}
+                onTogglePlugin={(plugin, enabled) => void handleTogglePlugin(plugin, enabled)}
               />
             )}
 
