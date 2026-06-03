@@ -28,6 +28,8 @@ pub fn run() {
             commands::list_page_history,
             commands::list_file_history,
             commands::list_deleted_content,
+            commands::set_favorite_content,
+            commands::list_favorite_content,
             commands::read_deleted_page,
             commands::read_deleted_file,
             commands::read_page_history_snapshot,

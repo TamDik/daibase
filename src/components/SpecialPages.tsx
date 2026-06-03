@@ -17,6 +17,7 @@ import { RestoreOutlined } from "@mui/icons-material";
 import type {
   ContentTree,
   DeletedContentSummary,
+  FavoriteContentSummary,
   NamespaceSummary,
   SpecialPageSummary,
 } from "../api/tauriCommands";
@@ -250,6 +251,51 @@ export function DeletedPagesSpecialPage({
                   </IconButton>
                 </Tooltip>
               </Box>
+            ))}
+          </List>
+        )}
+      </Box>
+    </Paper>
+  );
+}
+
+export function FavoritesSpecialPage({
+  items,
+  namespace,
+  onOpenLocation,
+}: {
+  items: FavoriteContentSummary[];
+  namespace: NamespaceSummary;
+  onOpenLocation: (location: string) => void;
+}) {
+  return (
+    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
+      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+        <Typography variant="h5" component="h2">
+          Favorites
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {namespace.name}:Special:Favorites
+        </Typography>
+      </Box>
+      <Box sx={{ p: 3 }}>
+        {items.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            お気に入りのページやファイルはありません。
+          </Typography>
+        ) : (
+          <List dense disablePadding>
+            {items.map((item) => (
+              <ListItemButton
+                key={`${item.content_kind}:${item.path}`}
+                onClick={() => onOpenLocation(item.location)}
+                sx={{ borderRadius: 1 }}
+              >
+                <ListItemText
+                  primary={item.title}
+                  secondary={`${item.content_kind === "page" ? "Page" : "File"} / ${item.path}`}
+                />
+              </ListItemButton>
             ))}
           </List>
         )}

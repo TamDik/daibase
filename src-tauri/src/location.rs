@@ -4,6 +4,7 @@ use serde::Serialize;
 pub const NAMESPACES_LOCATION: &str = "Special:Namespaces";
 pub const SPECIAL_PAGES_LOCATION: &str = "Special:SpecialPages";
 pub const DELETED_PAGES_LOCATION: &str = "Special:DeletedPages";
+pub const FAVORITES_LOCATION: &str = "Special:Favorites";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -32,6 +33,10 @@ pub enum ResolvedLocation {
         location: String,
     },
     SpecialDeletedPages {
+        namespace: NamespaceSummary,
+        location: String,
+    },
+    SpecialFavorites {
         namespace: NamespaceSummary,
         location: String,
     },
@@ -75,6 +80,13 @@ pub fn resolve_location(
         return Ok(ResolvedLocation::SpecialDeletedPages {
             namespace: namespace.clone(),
             location: format!("{}:{DELETED_PAGES_LOCATION}", namespace.name),
+        });
+    }
+
+    if path == FAVORITES_LOCATION || path == "Special:Favorites" {
+        return Ok(ResolvedLocation::SpecialFavorites {
+            namespace: namespace.clone(),
+            location: format!("{}:{FAVORITES_LOCATION}", namespace.name),
         });
     }
 
@@ -373,6 +385,36 @@ mod tests {
             ResolvedLocation::SpecialDeletedPages {
                 namespace: namespaces[1].clone(),
                 location: "Work:Special:DeletedPages".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_favorites_special_page_from_source_namespace() {
+        let namespaces = namespaces();
+        let resolved =
+            resolve_location("Special:Favorites", &namespaces, Some(&namespaces[1])).unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedLocation::SpecialFavorites {
+                namespace: namespaces[1].clone(),
+                location: "Work:Special:Favorites".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_favorites_special_page_from_explicit_namespace() {
+        let namespaces = namespaces();
+        let resolved =
+            resolve_location("Work:Special:Favorites", &namespaces, Some(&namespaces[0])).unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedLocation::SpecialFavorites {
+                namespace: namespaces[1].clone(),
+                location: "Work:Special:Favorites".to_string(),
             }
         );
     }

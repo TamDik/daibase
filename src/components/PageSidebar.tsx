@@ -8,6 +8,8 @@ import {
   NoteAddOutlined,
   PublicOutlined,
   SortByAlphaOutlined,
+  Star,
+  StarBorder,
 } from "@mui/icons-material";
 import { RichTreeView } from "@mui/x-tree-view/RichTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
@@ -28,6 +30,7 @@ type PageTreeItem = {
   location: string | null;
   path: string | null;
   kind: "page" | "folder" | "file";
+  isFavorite: boolean;
   children?: PageTreeItem[];
 };
 
@@ -35,6 +38,7 @@ type PageTreeItemMetadata = {
   kind: PageTreeItem["kind"];
   location: string | null;
   path: string | null;
+  isFavorite: boolean;
 };
 
 export function PageSidebar({
@@ -45,6 +49,7 @@ export function PageSidebar({
   onCreatePage,
   onDeleteContent,
   onOpenLocation,
+  onToggleFavorite,
 }: {
   content: ContentTree | null;
   currentLocation: string;
@@ -53,6 +58,7 @@ export function PageSidebar({
   onCreatePage: (parentDirectory: string) => void;
   onDeleteContent: (path: string, kind: "page" | "folder" | "file") => void;
   onOpenLocation: (location: string) => void;
+  onToggleFavorite: (path: string, isFavorite: boolean) => void;
 }) {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const folders = content?.folders ?? [];
@@ -61,6 +67,10 @@ export function PageSidebar({
   const treeItems = useMemo(
     () => buildTreeItems(folders, pages, files, sortDirection),
     [files, folders, pages, sortDirection],
+  );
+  const favoriteItems = useMemo(
+    () => collectFavoriteItems(pages, files, sortDirection),
+    [files, pages, sortDirection],
   );
   const expandableItemIds = useMemo(() => collectExpandableItemIds(treeItems), [treeItems]);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
@@ -86,10 +96,11 @@ export function PageSidebar({
             {...props}
             metadata={itemMetadata.get(props.itemId) ?? null}
             onDeleteContent={onDeleteContent}
+            onToggleFavorite={onToggleFavorite}
           />
         );
       },
-    [itemMetadata, onDeleteContent],
+    [itemMetadata, onDeleteContent, onToggleFavorite],
   );
 
   useEffect(() => {
@@ -151,6 +162,49 @@ export function PageSidebar({
           />
         )}
       </Box>
+      {namespace !== null && favoriteItems.length > 0 && (
+        <Box
+          sx={{
+            borderTop: "1px solid",
+            borderColor: "divider",
+            px: 1,
+            py: 0.75,
+          }}
+        >
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: "block", fontWeight: 700, px: 1, pb: 0.25 }}
+          >
+            お気に入り
+          </Typography>
+          <Stack spacing={0.25}>
+            {favoriteItems.map((item) => (
+              <Button
+                key={`${item.contentKind}:${item.path}`}
+                fullWidth
+                size="small"
+                startIcon={<Star fontSize="small" />}
+                sx={{
+                  justifyContent: "flex-start",
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textTransform: "none",
+                  "& .MuiButton-startIcon": { flex: "0 0 auto" },
+                }}
+                onClick={() => onOpenLocation(item.location)}
+              >
+                <Box
+                  component="span"
+                  sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}
+                >
+                  {item.title}
+                </Box>
+              </Button>
+            ))}
+          </Stack>
+        </Box>
+      )}
       <Box
         sx={{
           borderTop: "1px solid",
@@ -242,16 +296,20 @@ function SidebarToolbar({
 function PageTreeViewItem({
   metadata,
   onDeleteContent,
+  onToggleFavorite,
   ...props
 }: TreeItemProps & {
   metadata: PageTreeItemMetadata | null;
   onDeleteContent: (path: string, kind: "page" | "folder" | "file") => void;
+  onToggleFavorite: (path: string, isFavorite: boolean) => void;
 }) {
   const isFolderOnly = props.itemId.startsWith("folder:");
   const isFile = props.itemId.startsWith("file:");
   const canDelete =
     metadata?.path &&
     (metadata.kind === "page" || metadata.kind === "folder" || metadata.kind === "file");
+  const canFavorite =
+    metadata?.path && (metadata.kind === "page" || metadata.kind === "file");
   return (
     <TreeItem
       {...props}
@@ -264,10 +322,10 @@ function PageTreeViewItem({
             gap: 0.75,
             minWidth: 0,
             width: "100%",
-            "& .sidebar-delete-action": {
+            "& .sidebar-row-action": {
               opacity: 0,
             },
-            "&:hover .sidebar-delete-action, &:focus-within .sidebar-delete-action": {
+            "&:hover .sidebar-row-action, &:focus-within .sidebar-row-action": {
               opacity: 1,
             },
           }}
@@ -300,11 +358,41 @@ function PageTreeViewItem({
           >
             {props.label}
           </Box>
+          {canFavorite && (
+            <Tooltip title={metadata.isFavorite ? "お気に入り解除" : "お気に入り"}>
+              <IconButton
+                aria-label={metadata.isFavorite ? "お気に入り解除" : "お気に入り"}
+                className="sidebar-row-action"
+                size="small"
+                sx={{
+                  flex: "0 0 auto",
+                  height: 22,
+                  opacity: metadata.isFavorite ? 1 : undefined,
+                  transition: "opacity 120ms ease",
+                  width: 22,
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (!metadata?.path || (metadata.kind !== "page" && metadata.kind !== "file")) {
+                    return;
+                  }
+                  onToggleFavorite(metadata.path, !metadata.isFavorite);
+                }}
+              >
+                {metadata.isFavorite ? (
+                  <Star sx={{ color: "#bf8700", fontSize: 16 }} />
+                ) : (
+                  <StarBorder sx={{ fontSize: 16 }} />
+                )}
+              </IconButton>
+            </Tooltip>
+          )}
           {canDelete && (
             <Tooltip title="削除">
               <IconButton
                 aria-label="削除"
-                className="sidebar-delete-action"
+                className="sidebar-row-action"
                 size="small"
                 sx={{
                   flex: "0 0 auto",
@@ -348,6 +436,7 @@ function buildTreeItems(
     location: null,
     path: null,
     kind: "folder",
+    isFavorite: false,
     children: [],
   };
 
@@ -358,6 +447,7 @@ function buildTreeItems(
       location: null,
       path: folder.path,
       kind: "folder",
+      isFavorite: false,
     });
   }
 
@@ -368,6 +458,7 @@ function buildTreeItems(
       location: page.location,
       path: page.path,
       kind: "page",
+      isFavorite: page.is_favorite,
     });
   }
 
@@ -378,6 +469,7 @@ function buildTreeItems(
       location: file.location,
       path: file.path,
       kind: "file",
+      isFavorite: file.is_favorite,
     });
   }
 
@@ -388,7 +480,7 @@ function buildTreeItems(
 function insertTreeItem(
   root: PageTreeItem,
   parts: string[],
-  value: Pick<PageTreeItem, "id" | "label" | "location" | "path" | "kind">,
+  value: Pick<PageTreeItem, "id" | "label" | "location" | "path" | "kind" | "isFavorite">,
 ) {
   let current = root;
   let path = "";
@@ -404,6 +496,7 @@ function insertTreeItem(
         location: null,
         path,
         kind: "folder",
+        isFavorite: false,
         children: [],
       };
       children.push(child);
@@ -419,10 +512,49 @@ function insertTreeItem(
     existing.location = value.location;
     existing.path = value.path;
     existing.kind = value.kind;
+    existing.isFavorite = value.isFavorite;
   } else {
     children.push({ ...value });
     current.children = children;
   }
+}
+
+type FavoriteSidebarItem = {
+  contentKind: "page" | "file";
+  location: string;
+  path: string;
+  title: string;
+};
+
+function collectFavoriteItems(
+  pages: FileSummary[],
+  files: FileSummary[],
+  sortDirection: SortDirection,
+): FavoriteSidebarItem[] {
+  const items = [
+    ...pages
+      .filter((page) => page.is_favorite)
+      .map((page) => ({
+        contentKind: "page" as const,
+        location: page.location,
+        path: page.path,
+        title: page.title,
+      })),
+    ...files
+      .filter((file) => file.is_favorite)
+      .map((file) => ({
+        contentKind: "file" as const,
+        location: file.location,
+        path: file.path,
+        title: file.title,
+      })),
+  ];
+
+  items.sort((left, right) => {
+    const comparison = left.path.localeCompare(right.path);
+    return sortDirection === "asc" ? comparison : -comparison;
+  });
+  return items;
 }
 
 function sortTreeItems(items: PageTreeItem[], sortDirection: SortDirection) {
@@ -485,6 +617,7 @@ function collectItemMetadata(items: PageTreeItem[]) {
   for (const item of items) {
     metadata.set(item.id, {
       kind: item.kind,
+      isFavorite: item.isFavorite,
       location: item.location,
       path: item.path,
     });

@@ -1,16 +1,17 @@
 use crate::models::{
-    BacklinkSummary, ContentTree, DeletedContentSummary, FileHistoryEntry, FileSummary,
-    FolderSummary, NamespaceDetail, NamespaceMetadata, NamespaceRegistry, NamespaceSummary,
-    PageHistorySnapshot, SaveFileResult, SideBySideDiffRow, SideBySideDiffSection,
-    DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
+    BacklinkSummary, ContentTree, DeletedContentSummary, FavoriteContentSummary, FileHistoryEntry,
+    FileSummary, FolderSummary, NamespaceDetail, NamespaceMetadata, NamespaceRegistry,
+    NamespaceSummary, PageHistorySnapshot, SaveFileResult, SideBySideDiffRow,
+    SideBySideDiffSection, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
 };
 use crate::paths::{
     resolve_namespace_file_path, resolve_namespace_folder_path, resolve_namespace_path,
 };
 use crate::versioning::{
-    ensure_version_dirs, file_id_for_path, latest_revision_id, read_file_history, read_object,
-    read_path_index, read_text_object, record_file_deletion, record_file_revision,
-    record_file_revision_with_content_type, write_path_index,
+    ensure_version_dirs, file_id_for_path, is_favorite_path, latest_revision_id,
+    read_favorite_index, read_file_history, read_object, read_path_index, read_text_object,
+    record_file_deletion, record_file_revision, record_file_revision_with_content_type,
+    set_favorite_path, write_path_index,
 };
 use chrono::Utc;
 use std::fs;
@@ -140,16 +141,19 @@ pub fn read_page(
     let location = page_location(&normalized_path, &namespace);
     let backlinks = page_backlinks_for_namespace(&namespace, &normalized_path)?;
 
+    let is_favorite = is_favorite_path(&namespace.root_path, &normalized_path)?;
+
     Ok(crate::models::PageContent {
         namespace_id,
         file_id,
-        path: normalized_path,
+        path: normalized_path.clone(),
         title,
         location,
         content,
         backlinks,
         latest_revision_id,
         is_virtual: false,
+        is_favorite,
     })
 }
 
@@ -570,6 +574,69 @@ pub fn list_deleted_content(
     Ok(items)
 }
 
+pub fn set_favorite_content(
+    app: &AppHandle,
+    namespace_id: String,
+    path: String,
+    is_favorite: bool,
+) -> Result<NamespaceDetail, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let normalized_path = validate_existing_content_path(&namespace, &path)?;
+    set_favorite_path(&namespace.root_path, &normalized_path, is_favorite)?;
+    open_namespace(app, namespace_id)
+}
+
+pub fn list_favorite_content(
+    app: &AppHandle,
+    namespace_id: String,
+) -> Result<Vec<FavoriteContentSummary>, String> {
+    let namespace = find_namespace(app, &namespace_id)?;
+    let favorite_index = read_favorite_index(&namespace.root_path)?;
+    let path_index = read_path_index(&namespace.root_path)?;
+    let mut items = Vec::new();
+
+    for indexed_path in favorite_index.paths {
+        let resolved_path = if indexed_path.ends_with(".md") {
+            match resolve_namespace_path(&namespace.root_path, &indexed_path) {
+                Ok(path) => path,
+                Err(_) => continue,
+            }
+        } else {
+            match resolve_namespace_file_path(&namespace.root_path, &indexed_path) {
+                Ok(path) => path,
+                Err(_) => continue,
+            }
+        };
+        if !resolved_path.is_file() {
+            continue;
+        }
+
+        let content_kind = if indexed_path.ends_with(".md") {
+            "page"
+        } else {
+            "file"
+        };
+        items.push(FavoriteContentSummary {
+            file_id: path_index
+                .entries
+                .get(&indexed_path)
+                .cloned()
+                .unwrap_or_default(),
+            path: indexed_path.clone(),
+            title: if content_kind == "page" {
+                page_title(&indexed_path)
+            } else {
+                file_title(&indexed_path)
+            },
+            location: file_location(&indexed_path, &namespace),
+            content_kind: content_kind.to_string(),
+        });
+    }
+
+    items.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(items)
+}
+
 pub fn read_deleted_page(
     app: &AppHandle,
     namespace_id: String,
@@ -591,7 +658,29 @@ pub fn read_deleted_page(
         backlinks: Vec::new(),
         latest_revision_id: Some(entry.revision_id),
         is_virtual: true,
+        is_favorite: false,
     })
+}
+
+fn validate_existing_content_path(
+    namespace: &NamespaceSummary,
+    path: &str,
+) -> Result<String, String> {
+    if path.ends_with(".md") {
+        let normalized_path = crate::paths::validate_page_path(path)?;
+        let resolved_path = resolve_namespace_path(&namespace.root_path, &normalized_path)?;
+        if !resolved_path.is_file() {
+            return Err("お気に入り対象のページが見つかりません。".to_string());
+        }
+        return Ok(normalized_path);
+    }
+
+    let normalized_path = crate::paths::validate_file_path(path)?;
+    let resolved_path = resolve_namespace_file_path(&namespace.root_path, &normalized_path)?;
+    if !resolved_path.is_file() {
+        return Err("お気に入り対象のファイルが見つかりません。".to_string());
+    }
+    Ok(normalized_path)
 }
 
 pub fn read_deleted_file(
@@ -633,6 +722,7 @@ pub fn read_deleted_file(
         size: content.len() as u64,
         latest_revision_id: Some(entry.revision_id),
         is_virtual: true,
+        is_favorite: false,
     })
 }
 
@@ -930,11 +1020,16 @@ fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTre
     let mut pages = Vec::new();
     let mut files = Vec::new();
     let path_index = read_path_index(&namespace.root_path)?;
-    collect_content_entries(
+    let favorite_index = read_favorite_index(&namespace.root_path)?;
+    let context = ContentCollectionContext {
         namespace,
+        root: &namespace.root_path,
+        path_index: &path_index.entries,
+        favorite_paths: &favorite_index.paths,
+    };
+    collect_content_entries(
+        &context,
         &namespace.root_path,
-        &namespace.root_path,
-        &path_index.entries,
         &mut folders,
         &mut pages,
         &mut files,
@@ -949,11 +1044,16 @@ fn list_content_for_namespace(namespace: &NamespaceSummary) -> Result<ContentTre
     })
 }
 
+struct ContentCollectionContext<'a> {
+    namespace: &'a NamespaceSummary,
+    root: &'a Path,
+    path_index: &'a std::collections::BTreeMap<String, String>,
+    favorite_paths: &'a [String],
+}
+
 fn collect_content_entries(
-    namespace: &NamespaceSummary,
-    root: &Path,
+    context: &ContentCollectionContext<'_>,
     current: &Path,
-    path_index: &std::collections::BTreeMap<String, String>,
     folders: &mut Vec<FolderSummary>,
     pages: &mut Vec<FileSummary>,
     files: &mut Vec<FileSummary>,
@@ -970,7 +1070,7 @@ fn collect_content_entries(
         }
         if path.is_dir() {
             let relative_path = path
-                .strip_prefix(root)
+                .strip_prefix(context.root)
                 .map_err(to_error)?
                 .to_string_lossy()
                 .replace('\\', "/");
@@ -979,34 +1079,41 @@ fn collect_content_entries(
                 display_path: folder_display_path(&relative_path),
                 path: relative_path,
             });
-            collect_content_entries(namespace, root, &path, path_index, folders, pages, files)?;
+            collect_content_entries(context, &path, folders, pages, files)?;
             continue;
         }
 
         let relative_path = path
-            .strip_prefix(root)
+            .strip_prefix(context.root)
             .map_err(to_error)?
             .to_string_lossy()
             .replace('\\', "/");
-        let file_id = path_index
+        let file_id = context
+            .path_index
             .get(&relative_path)
             .cloned()
             .unwrap_or_else(|| "".to_string());
+        let is_favorite = context
+            .favorite_paths
+            .iter()
+            .any(|favorite_path| favorite_path == &relative_path);
         if relative_path.ends_with(".md") {
             pages.push(FileSummary {
                 file_id,
                 title: page_title(&relative_path),
-                location: page_location(&relative_path, namespace),
+                location: page_location(&relative_path, context.namespace),
                 display_path: page_display_path(&relative_path),
                 path: relative_path,
+                is_favorite,
             });
         } else {
             files.push(FileSummary {
                 file_id,
                 title: file_title(&relative_path),
-                location: file_location(&relative_path, namespace),
+                location: file_location(&relative_path, context.namespace),
                 display_path: file_display_path(&relative_path),
                 path: relative_path,
+                is_favorite,
             });
         }
     }
@@ -1159,7 +1266,7 @@ fn read_managed_file_for_namespace(
         return Ok(crate::models::ManagedFileContent {
             namespace_id: namespace.id.clone(),
             file_id: String::new(),
-            path: normalized_path,
+            path: normalized_path.clone(),
             title,
             location,
             note: String::new(),
@@ -1170,6 +1277,7 @@ fn read_managed_file_for_namespace(
             size: 0,
             latest_revision_id: None,
             is_virtual: true,
+            is_favorite: is_favorite_path(&namespace.root_path, &normalized_path)?,
         });
     }
 
@@ -1215,6 +1323,7 @@ fn read_managed_file_for_namespace(
         size: metadata.len(),
         latest_revision_id,
         is_virtual: false,
+        is_favorite: is_favorite_path(&namespace.root_path, &normalized_path)?,
     })
 }
 
@@ -1481,6 +1590,35 @@ mod tests {
         assert_eq!(content.files[0].path, "images/logo.png");
         assert_eq!(content.files[0].location, "Work:images/logo.png");
         assert_eq!(content.files[0].display_path, vec!["images", "logo.png"]);
+
+        fs::remove_dir_all(root_path).unwrap();
+    }
+
+    #[test]
+    fn list_content_marks_favorite_pages_and_files() {
+        let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
+        fs::create_dir_all(root_path.join("images")).unwrap();
+        fs::write(root_path.join("Main.md"), "# Main\n").unwrap();
+        fs::write(root_path.join("images/logo.png"), b"image").unwrap();
+
+        set_favorite_path(&root_path, "Main.md", true).unwrap();
+        set_favorite_path(&root_path, "images/logo.png", true).unwrap();
+
+        let namespace = NamespaceSummary {
+            id: "ns-work".to_string(),
+            name: "Work".to_string(),
+            root_path: root_path.clone(),
+            default_page: DEFAULT_PAGE_PATH.to_string(),
+            default_location: "Work:Main.md".to_string(),
+            pages_location: "Work:Special:Pages".to_string(),
+            created_at: "2026-06-01T00:00:00Z".to_string(),
+            updated_at: "2026-06-01T00:00:00Z".to_string(),
+        };
+
+        let content = list_content_for_namespace(&namespace).unwrap();
+
+        assert!(content.pages[0].is_favorite);
+        assert!(content.files[0].is_favorite);
 
         fs::remove_dir_all(root_path).unwrap();
     }

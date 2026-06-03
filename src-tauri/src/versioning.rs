@@ -1,5 +1,6 @@
 use crate::models::{
-    FileHistoryEntry, FileHistoryIndex, PathIndex, Revision, RevisionChange, SaveResult,
+    FavoriteIndex, FileHistoryEntry, FileHistoryIndex, PathIndex, Revision, RevisionChange,
+    SaveResult,
 };
 use chrono::Utc;
 use sha2::{Digest, Sha256};
@@ -26,6 +27,46 @@ pub fn read_path_index(root: &Path) -> Result<PathIndex, String> {
 
     let content = fs::read_to_string(path).map_err(to_error)?;
     serde_json::from_str(&content).map_err(to_error)
+}
+
+pub fn read_favorite_index(root: &Path) -> Result<FavoriteIndex, String> {
+    let path = root.join(".daibase/versions/favorites.json");
+    if !path.exists() {
+        return Ok(FavoriteIndex::default());
+    }
+
+    let content = fs::read_to_string(path).map_err(to_error)?;
+    serde_json::from_str(&content).map_err(to_error)
+}
+
+pub fn write_favorite_index(root: &Path, index: &FavoriteIndex) -> Result<(), String> {
+    write_json_atomic(&root.join(".daibase/versions/favorites.json"), index)
+}
+
+pub fn is_favorite_path(root: &Path, path: &str) -> Result<bool, String> {
+    Ok(read_favorite_index(root)?
+        .paths
+        .iter()
+        .any(|favorite_path| favorite_path == path))
+}
+
+pub fn set_favorite_path(root: &Path, path: &str, is_favorite: bool) -> Result<(), String> {
+    ensure_version_dirs(root)?;
+    let mut index = read_favorite_index(root)?;
+    if is_favorite {
+        if !index
+            .paths
+            .iter()
+            .any(|favorite_path| favorite_path == path)
+        {
+            index.paths.push(path.to_string());
+        }
+    } else {
+        index.paths.retain(|favorite_path| favorite_path != path);
+    }
+    index.paths.sort();
+    index.paths.dedup();
+    write_favorite_index(root, &index)
 }
 
 pub fn write_path_index(root: &Path, index: &PathIndex) -> Result<(), String> {

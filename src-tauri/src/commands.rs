@@ -1,8 +1,9 @@
 use crate::location::ResolvedLocation;
 use crate::models::{
-    ContentTree, DeletedContentSummary, FileHistoryEntry, MarkdownImageResolution,
-    MarkdownLinkStatus, NamespaceDetail, NamespaceSummary, OpenLocationResult, PageContent,
-    PageHistorySnapshot, SaveFileResult, SavePageResult, SaveResult, SpecialPageSummary,
+    ContentTree, DeletedContentSummary, FavoriteContentSummary, FileHistoryEntry,
+    MarkdownImageResolution, MarkdownLinkStatus, NamespaceDetail, NamespaceSummary,
+    OpenLocationResult, PageContent, PageHistorySnapshot, SaveFileResult, SavePageResult,
+    SaveResult, SpecialPageSummary,
 };
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -172,6 +173,24 @@ pub fn list_deleted_content(
 }
 
 #[tauri::command]
+pub fn set_favorite_content(
+    app: AppHandle,
+    namespace_id: String,
+    path: String,
+    is_favorite: bool,
+) -> Result<NamespaceDetail, String> {
+    crate::namespace::set_favorite_content(&app, namespace_id, path, is_favorite)
+}
+
+#[tauri::command]
+pub fn list_favorite_content(
+    app: AppHandle,
+    namespace_id: String,
+) -> Result<Vec<FavoriteContentSummary>, String> {
+    crate::namespace::list_favorite_content(&app, namespace_id)
+}
+
+#[tauri::command]
 pub fn read_deleted_page(
     app: AppHandle,
     namespace_id: String,
@@ -277,7 +296,8 @@ pub fn resolve_markdown_link_status(
         ResolvedLocation::SpecialNamespaces { .. }
         | ResolvedLocation::SpecialPages { .. }
         | ResolvedLocation::SpecialPagesList { .. }
-        | ResolvedLocation::SpecialDeletedPages { .. } => true,
+        | ResolvedLocation::SpecialDeletedPages { .. }
+        | ResolvedLocation::SpecialFavorites { .. } => true,
     };
 
     Ok(MarkdownLinkStatus {
@@ -445,6 +465,19 @@ pub fn open_location(
                 items,
             })
         }
+        ResolvedLocation::SpecialFavorites {
+            namespace,
+            location,
+        } => {
+            let detail = crate::namespace::open_namespace(&app, namespace.id.clone())?;
+            let items = crate::namespace::list_favorite_content(&app, detail.namespace.id.clone())?;
+            Ok(OpenLocationResult::SpecialFavorites {
+                location,
+                namespace: detail.namespace,
+                content: detail.content,
+                items,
+            })
+        }
     }
 }
 
@@ -471,6 +504,7 @@ fn read_page_or_virtual(
             backlinks: crate::namespace::page_backlinks_for_namespace(namespace, path)?,
             latest_revision_id: None,
             is_virtual: true,
+            is_favorite: false,
         }),
         Err(error) => Err(error),
     }
@@ -497,6 +531,11 @@ fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialPageS
             title: "Deleted Pages".to_string(),
             description: "削除済みのページとファイルを表示します。".to_string(),
             location: format!("{}:Special:DeletedPages", namespace.name),
+        },
+        SpecialPageSummary {
+            title: "Favorites".to_string(),
+            description: "お気に入りのページとファイルを表示します。".to_string(),
+            location: format!("{}:Special:Favorites", namespace.name),
         },
     ]
 }

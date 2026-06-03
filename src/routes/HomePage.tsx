@@ -16,6 +16,7 @@ import { useNavigate } from "react-router";
 
 import {
   type ContentTree,
+  type FavoriteContentSummary,
   type FileHistoryEntry,
   type ManagedFileContent,
   type NamespaceSummary,
@@ -29,6 +30,7 @@ import {
   deletePage,
   type DeletedContentSummary,
   listDeletedContent,
+  listFavoriteContent,
   listFileHistory,
   listPageHistory,
   listNamespaces,
@@ -40,6 +42,7 @@ import {
   resolveMarkdownLinkStatus,
   restoreDeletedContent,
   savePage,
+  setFavoriteContent,
   uploadFile,
   writeFileNote,
 } from "../api/tauriCommands";
@@ -49,6 +52,7 @@ import { PageSidebar } from "../components/PageSidebar";
 import { PageSurface, type PageMode } from "../components/PageSurface";
 import {
   DeletedPagesSpecialPage,
+  FavoritesSpecialPage,
   PagesSpecialPage,
   NamespacesSpecialPage,
   SpecialPagesIndex,
@@ -92,6 +96,13 @@ type SpecialView =
       namespace: NamespaceSummary;
       content: ContentTree;
       items: DeletedContentSummary[];
+    }
+  | {
+      kind: "favorites";
+      location: string;
+      namespace: NamespaceSummary;
+      content: ContentTree;
+      items: FavoriteContentSummary[];
     };
 
 type CreateDialogState = {
@@ -209,6 +220,24 @@ export function HomePage() {
       setFileView(null);
       setSpecialView({
         kind: "deletedPages",
+        location: opened.location,
+        namespace: opened.namespace,
+        content: opened.content,
+        items: opened.items,
+      });
+      setDraft("");
+      setLocationInput(opened.location);
+      setPageMode("view");
+      return nextLocation;
+    }
+
+    if (opened.kind === "specialFavorites") {
+      setActiveNamespace(opened.namespace);
+      setSidebarContent(opened.content);
+      setPageView(null);
+      setFileView(null);
+      setSpecialView({
+        kind: "favorites",
         location: opened.location,
         namespace: opened.namespace,
         content: opened.content,
@@ -485,6 +514,73 @@ export function HomePage() {
       }
     },
     [activeNamespace],
+  );
+
+  const handleToggleFavoriteContent = useCallback(
+    async (path: string, isFavorite: boolean) => {
+      if (!activeNamespace) {
+        return;
+      }
+
+      setError(null);
+      setSavedMessage(null);
+      try {
+        const detail = await setFavoriteContent(activeNamespace.id, path, isFavorite);
+        setActiveNamespace(detail.namespace);
+        setSidebarContent(detail.content);
+        setSavedMessage(isFavorite ? "お気に入りに追加しました" : "お気に入りを解除しました");
+
+        setPageView((current) => {
+          if (!current || current.page.path !== path) {
+            return current;
+          }
+          const next = {
+            ...current,
+            namespace: detail.namespace,
+            page: { ...current.page, is_favorite: isFavorite },
+          };
+          pageViewRef.current = next;
+          return next;
+        });
+        setFileView((current) => {
+          if (!current || current.file.path !== path) {
+            return current;
+          }
+          return {
+            ...current,
+            namespace: detail.namespace,
+            file: { ...current.file, is_favorite: isFavorite },
+          };
+        });
+
+        if (specialView?.kind === "favorites") {
+          const items = await listFavoriteContent(detail.namespace.id);
+          setSpecialView({
+            kind: "favorites",
+            location: specialView.location,
+            namespace: detail.namespace,
+            content: detail.content,
+            items,
+          });
+        } else if (specialView?.kind === "pages") {
+          setSpecialView({
+            kind: "pages",
+            location: specialView.location,
+            namespace: detail.namespace,
+            content: detail.content,
+          });
+        } else if (specialView?.kind === "deletedPages") {
+          setSpecialView({
+            ...specialView,
+            namespace: detail.namespace,
+            content: detail.content,
+          });
+        }
+      } catch (caught) {
+        setError(errorMessage(caught));
+      }
+    },
+    [activeNamespace, specialView],
   );
 
   useEffect(() => {
@@ -882,6 +978,9 @@ export function HomePage() {
           onCreatePage={(parentDirectory) => handleOpenCreateDialog("page", parentDirectory)}
           onDeleteContent={(path, kind) => void handleDeleteContent(path, kind)}
           onOpenLocation={(location) => void navigate(location)}
+          onToggleFavorite={(path, isFavorite) =>
+            void handleToggleFavoriteContent(path, isFavorite)
+          }
         />
 
         <Box
@@ -935,6 +1034,14 @@ export function HomePage() {
               />
             )}
 
+            {specialView?.kind === "favorites" && (
+              <FavoritesSpecialPage
+                items={specialView.items}
+                namespace={specialView.namespace}
+                onOpenLocation={(location) => void navigate(location)}
+              />
+            )}
+
             {pageView && (
               <PageSurface
                 backlinks={pageView.page.backlinks}
@@ -946,10 +1053,17 @@ export function HomePage() {
                 isDirty={isDirty}
                 isSaving={isSaving}
                 isVirtual={pageView.page.is_virtual ?? false}
+                isFavorite={pageView.page.is_favorite ?? false}
                 mode={pageMode}
                 readOnly={pageView.isReadOnly ?? false}
                 onDraftChange={setDraft}
                 onModeChange={(mode) => void handleModeChange(mode)}
+                onToggleFavorite={() =>
+                  void handleToggleFavoriteContent(
+                    pageView.page.path,
+                    !(pageView.page.is_favorite ?? false),
+                  )
+                }
                 onOpenLocation={(location) => void navigate(location)}
                 onOpenMarkdownLink={(target) => void handleOpenPageMarkdownLink(target)}
                 onResolveMarkdownImage={handleResolvePageMarkdownImage}
@@ -975,6 +1089,12 @@ export function HomePage() {
                 onOpenLocation={(location) => void navigate(location)}
                 onSaveNote={() => void handleSaveFileNote()}
                 onSelectHistoryEntry={handleSelectHistoryEntry}
+                onToggleFavorite={() =>
+                  void handleToggleFavoriteContent(
+                    fileView.file.path,
+                    !(fileView.file.is_favorite ?? false),
+                  )
+                }
                 onUpload={() => void handleUploadFile()}
                 selectedHistoryRevisionId={selectedHistoryRevisionId}
               />

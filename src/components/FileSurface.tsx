@@ -3,6 +3,7 @@ import {
   Box,
   Button,
   CircularProgress,
+  IconButton,
   Link,
   List,
   ListItemButton,
@@ -13,7 +14,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { CloudUploadOutlined, SaveOutlined } from "@mui/icons-material";
+import { CloudUploadOutlined, SaveOutlined, Star, StarBorder } from "@mui/icons-material";
 
 import type { BacklinkSummary, FileHistoryEntry, ManagedFileContent } from "../api/tauriCommands";
 
@@ -34,6 +35,7 @@ export function FileSurface({
   onOpenLocation,
   onSaveNote,
   onSelectHistoryEntry,
+  onToggleFavorite,
   onUpload,
   selectedHistoryRevisionId,
 }: {
@@ -51,6 +53,7 @@ export function FileSurface({
   onOpenLocation: (location: string) => void;
   onSaveNote: () => void;
   onSelectHistoryEntry: (entry: FileHistoryEntry) => void;
+  onToggleFavorite: () => void;
   onUpload: () => void;
   selectedHistoryRevisionId: string | null;
 }) {
@@ -86,6 +89,21 @@ export function FileSurface({
             />
           </Tabs>
         </Box>
+        {!readOnly && (
+          <IconButton
+            aria-label={file.is_favorite ? "お気に入り解除" : "お気に入り"}
+            disabled={isVirtual || isUploading}
+            size="small"
+            onClick={onToggleFavorite}
+            sx={{ ml: 0.5 }}
+          >
+            {file.is_favorite ? (
+              <Star sx={{ color: "#bf8700" }} fontSize="small" />
+            ) : (
+              <StarBorder fontSize="small" />
+            )}
+          </IconButton>
+        )}
       </Box>
 
       <Box sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}>

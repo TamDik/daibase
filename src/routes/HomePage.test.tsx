@@ -32,6 +32,7 @@ vi.mock("../api/tauriCommands", () => ({
   deleteFolder: vi.fn(),
   deletePage: vi.fn(),
   listDeletedContent: vi.fn(),
+  listFavoriteContent: vi.fn(),
   listFileHistory: vi.fn(),
   listPageHistory: vi.fn(),
   listNamespaces: vi.fn(),
@@ -45,6 +46,7 @@ vi.mock("../api/tauriCommands", () => ({
   resolveMarkdownLinkStatus: vi.fn(),
   restoreDeletedContent: vi.fn(),
   savePage: vi.fn(),
+  setFavoriteContent: vi.fn(),
   uploadFile: vi.fn(),
   writeFileNote: vi.fn(),
 }));
@@ -61,6 +63,7 @@ const contentTree: ContentTree = {
       title: "Main",
       location: "Work:Main.md",
       display_path: ["Main"],
+      is_favorite: false,
     },
     {
       file_id: "file-guide",
@@ -68,6 +71,7 @@ const contentTree: ContentTree = {
       title: "Intro",
       location: "Work:Guide/Intro.md",
       display_path: ["Guide", "Intro"],
+      is_favorite: true,
     },
     {
       file_id: "file-aaa",
@@ -75,6 +79,7 @@ const contentTree: ContentTree = {
       title: "aaa",
       location: "Work:aaa.md",
       display_path: ["aaa"],
+      is_favorite: false,
     },
     {
       file_id: "file-aaa-bbb",
@@ -82,6 +87,7 @@ const contentTree: ContentTree = {
       title: "bbb",
       location: "Work:aaa/bbb.md",
       display_path: ["aaa", "bbb"],
+      is_favorite: false,
     },
   ],
   files: [
@@ -91,6 +97,7 @@ const contentTree: ContentTree = {
       title: "logo.png",
       location: "Work:images/logo.png",
       display_path: ["images", "logo.png"],
+      is_favorite: false,
     },
   ],
 };
@@ -108,6 +115,7 @@ describe("HomePage", () => {
     vi.mocked(api.deleteFolder).mockReset();
     vi.mocked(api.deletePage).mockReset();
     vi.mocked(api.listDeletedContent).mockReset();
+    vi.mocked(api.listFavoriteContent).mockReset();
     vi.mocked(api.listNamespaces).mockReset();
     vi.mocked(api.listFileHistory).mockReset();
     vi.mocked(api.listPageHistory).mockReset();
@@ -121,11 +129,13 @@ describe("HomePage", () => {
     vi.mocked(api.resolveMarkdownLinkStatus).mockReset();
     vi.mocked(api.restoreDeletedContent).mockReset();
     vi.mocked(api.savePage).mockReset();
+    vi.mocked(api.setFavoriteContent).mockReset();
     vi.mocked(api.uploadFile).mockReset();
     vi.mocked(api.writeFileNote).mockReset();
 
     vi.mocked(api.listNamespaces).mockResolvedValue([workNamespace]);
     vi.mocked(api.listDeletedContent).mockResolvedValue(deletedContentItems());
+    vi.mocked(api.listFavoriteContent).mockResolvedValue(favoriteContentItems());
     vi.mocked(api.listFileHistory).mockResolvedValue(fileHistoryEntries());
     vi.mocked(api.listPageHistory).mockResolvedValue(historyEntries());
     vi.mocked(api.readPageHistorySnapshot).mockResolvedValue({
@@ -159,6 +169,10 @@ describe("HomePage", () => {
         object_id: "sha256:saved",
         saved_at: "2026-01-01T00:00:00Z",
       },
+    }));
+    vi.mocked(api.setFavoriteContent).mockImplementation(async (_namespaceId, path, isFavorite) => ({
+      namespace: workNamespace,
+      content: favoriteContentTree(path, isFavorite),
     }));
     vi.mocked(api.uploadFile).mockImplementation(async (namespaceId, path) => ({
       namespace: workNamespace,
@@ -222,6 +236,7 @@ describe("HomePage", () => {
             title: "Old",
             location: "Work:Old.md",
             display_path: ["Old"],
+            is_favorite: false,
           },
         ],
       },
@@ -272,6 +287,11 @@ describe("HomePage", () => {
               description: "削除済みのページとファイルを表示します。",
               location: "Work:Special:DeletedPages",
             },
+            {
+              title: "Favorites",
+              description: "お気に入りのページとファイルを表示します。",
+              location: "Work:Special:Favorites",
+            },
           ],
         };
       }
@@ -290,6 +310,15 @@ describe("HomePage", () => {
           location: "Work:Special:DeletedPages",
           content: contentTree,
           items: deletedContentItems(),
+        };
+      }
+      if (location === "Special:Favorites" || location === "Work:Special:Favorites") {
+        return {
+          kind: "specialFavorites",
+          namespace,
+          location: "Work:Special:Favorites",
+          content: contentTree,
+          items: favoriteContentItems(),
         };
       }
       const contentPath = location.replace(/^Work:/, "");
@@ -684,6 +713,28 @@ describe("HomePage", () => {
     expect(pageList).toHaveTextContent("Intro");
   });
 
+  it("お気に入りがあるとサイドバーにお気に入りセクションを表示する", async () => {
+    renderHomePage();
+
+    await screen.findByRole("tree", { name: "ページ一覧" });
+
+    expect(screen.getByText("お気に入り")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Intro" })).toBeInTheDocument();
+  });
+
+  it("サイドバーの星ボタンでページをお気に入りに追加する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const mainItem = await screen.findByRole("treeitem", { name: /Main/ });
+    await user.click(within(mainItem).getByRole("button", { name: "お気に入り" }));
+
+    await waitFor(() =>
+      expect(api.setFavoriteContent).toHaveBeenCalledWith(workNamespace.id, "Main.md", true),
+    );
+    expect(screen.getByText("お気に入りに追加しました")).toBeInTheDocument();
+  });
+
   it("サイドバーの幅をドラッグで変更できる", async () => {
     renderHomePage();
 
@@ -729,7 +780,29 @@ describe("HomePage", () => {
     expect(screen.getAllByText("Pages").length).toBeGreaterThan(0);
     expect(screen.getByText("namespace 内の全ページを表示します。")).toBeInTheDocument();
     expect(screen.getByText("Deleted Pages")).toBeInTheDocument();
+    expect(screen.getByText("Favorites")).toBeInTheDocument();
+    expect(screen.getByText("お気に入りのページとファイルを表示します。")).toBeInTheDocument();
     expect(screen.queryByText(/Work namespace/)).not.toBeInTheDocument();
+  });
+
+  it("Special:Favorites でお気に入りページとファイルを表示して開ける", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:Favorites");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    expect(await screen.findByDisplayValue("Work:Special:Favorites")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Favorites" })).toBeInTheDocument();
+    expect(screen.getAllByText("Intro").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Page \/ Guide\/Intro.md/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Intro.*Page/ }));
+
+    expect(await screen.findByDisplayValue("Work:Guide/Intro.md")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue("# Intro");
   });
 
   it("Special:DeletedPages で削除済みページとファイルを表示する", async () => {
@@ -928,6 +1001,7 @@ function page(
     backlinks,
     latest_revision_id: "rev_01",
     is_virtual: false,
+    is_favorite: path === "Guide/Intro.md",
   };
 }
 
@@ -1010,6 +1084,31 @@ function managedFile(
     size: 1234,
     latest_revision_id: "rev_file_01",
     is_virtual: false,
+    is_favorite: false,
+  };
+}
+
+function favoriteContentItems() {
+  return [
+    {
+      file_id: "file-guide",
+      path: "Guide/Intro.md",
+      title: "Intro",
+      location: "Work:Guide/Intro.md",
+      content_kind: "page",
+    },
+  ];
+}
+
+function favoriteContentTree(path: string, isFavorite: boolean): ContentTree {
+  return {
+    ...contentTree,
+    pages: contentTree.pages.map((page) =>
+      page.path === path ? { ...page, is_favorite: isFavorite } : page,
+    ),
+    files: contentTree.files.map((file) =>
+      file.path === path ? { ...file, is_favorite: isFavorite } : file,
+    ),
   };
 }
 

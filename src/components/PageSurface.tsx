@@ -3,6 +3,7 @@ import {
   Box,
   Chip,
   CircularProgress,
+  IconButton,
   Link,
   List,
   ListItemButton,
@@ -16,7 +17,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { Article, Code } from "@mui/icons-material";
+import { Article, Code, Star, StarBorder } from "@mui/icons-material";
 import { useState } from "react";
 
 import type { BacklinkSummary, FileHistoryEntry } from "../api/tauriCommands";
@@ -34,10 +35,12 @@ export function PageSurface({
   isDirty,
   isSaving,
   isVirtual,
+  isFavorite,
   mode,
   readOnly = false,
   onDraftChange,
   onModeChange,
+  onToggleFavorite,
   onOpenLocation,
   onOpenMarkdownLink,
   onResolveMarkdownImage,
@@ -54,10 +57,12 @@ export function PageSurface({
   isDirty: boolean;
   isSaving: boolean;
   isVirtual: boolean;
+  isFavorite: boolean;
   mode: PageMode;
   readOnly?: boolean;
   onDraftChange: (value: string) => void;
   onModeChange: (mode: PageMode) => void;
+  onToggleFavorite: () => void;
   onOpenLocation: (location: string) => void;
   onOpenMarkdownLink: (target: string) => void;
   onResolveMarkdownImage: (target: string) => Promise<{
@@ -176,6 +181,25 @@ export function PageSurface({
             />
           </Tabs>
         </Box>
+        {!readOnly && (
+          <Tooltip title={isFavorite ? "お気に入り解除" : "お気に入り"}>
+            <span>
+              <IconButton
+                aria-label={isFavorite ? "お気に入り解除" : "お気に入り"}
+                disabled={isVirtual || isSaving}
+                size="small"
+                onClick={onToggleFavorite}
+                sx={{ ml: 0.5 }}
+              >
+                {isFavorite ? (
+                  <Star sx={{ color: "#bf8700" }} fontSize="small" />
+                ) : (
+                  <StarBorder fontSize="small" />
+                )}
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
       </Box>
       {viewToolbar}
 

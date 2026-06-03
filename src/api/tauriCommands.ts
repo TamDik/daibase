@@ -17,6 +17,7 @@ export type FileSummary = {
   title: string;
   location: string;
   display_path: string[];
+  is_favorite: boolean;
 };
 
 export type FolderSummary = {
@@ -46,6 +47,7 @@ export type PageContent = {
   backlinks: BacklinkSummary[];
   latest_revision_id: string | null;
   is_virtual?: boolean;
+  is_favorite?: boolean;
 };
 
 export type BacklinkSummary = {
@@ -85,6 +87,7 @@ export type ManagedFileContent = {
   size: number;
   latest_revision_id: string | null;
   is_virtual?: boolean;
+  is_favorite?: boolean;
 };
 
 export type SaveFileResult = {
@@ -140,6 +143,14 @@ export type DeletedContentSummary = {
   latest_revision_id: string;
 };
 
+export type FavoriteContentSummary = {
+  file_id: string;
+  path: string;
+  title: string;
+  location: string;
+  content_kind: "page" | "file" | string;
+};
+
 export type MarkdownLinkStatus = {
   location: string;
   exists: boolean;
@@ -186,6 +197,11 @@ export type ResolvedLocation =
       kind: "specialDeletedPages";
       namespace: NamespaceSummary;
       location: string;
+    }
+  | {
+      kind: "specialFavorites";
+      namespace: NamespaceSummary;
+      location: string;
     };
 
 export type OpenLocationResult =
@@ -227,6 +243,13 @@ export type OpenLocationResult =
       namespace: NamespaceSummary;
       content: ContentTree;
       items: DeletedContentSummary[];
+    }
+  | {
+      kind: "specialFavorites";
+      location: string;
+      namespace: NamespaceSummary;
+      content: ContentTree;
+      items: FavoriteContentSummary[];
     };
 
 export function listNamespaces() {
@@ -349,6 +372,20 @@ export function listFileHistory(namespaceId: string, path: string) {
 
 export function listDeletedContent(namespaceId: string) {
   return invoke<DeletedContentSummary[]>("list_deleted_content", {
+    namespaceId,
+  });
+}
+
+export function setFavoriteContent(namespaceId: string, path: string, isFavorite: boolean) {
+  return invoke<NamespaceDetail>("set_favorite_content", {
+    namespaceId,
+    path,
+    isFavorite,
+  });
+}
+
+export function listFavoriteContent(namespaceId: string) {
+  return invoke<FavoriteContentSummary[]>("list_favorite_content", {
     namespaceId,
   });
 }

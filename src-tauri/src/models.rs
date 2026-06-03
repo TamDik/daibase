@@ -63,6 +63,8 @@ pub struct PageContent {
     pub backlinks: Vec<BacklinkSummary>,
     pub latest_revision_id: Option<String>,
     pub is_virtual: bool,
+    #[serde(default)]
+    pub is_favorite: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -88,6 +90,8 @@ pub struct ManagedFileContent {
     pub size: u64,
     pub latest_revision_id: Option<String>,
     pub is_virtual: bool,
+    #[serde(default)]
+    pub is_favorite: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -141,6 +145,8 @@ pub struct FileSummary {
     pub title: String,
     pub location: String,
     pub display_path: Vec<String>,
+    #[serde(default)]
+    pub is_favorite: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -159,6 +165,15 @@ pub struct DeletedContentSummary {
     pub content_kind: String,
     pub deleted_at: String,
     pub latest_revision_id: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct FavoriteContentSummary {
+    pub file_id: String,
+    pub path: String,
+    pub title: String,
+    pub location: String,
+    pub content_kind: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -214,12 +229,34 @@ pub enum OpenLocationResult {
         content: ContentTree,
         items: Vec<DeletedContentSummary>,
     },
+    SpecialFavorites {
+        location: String,
+        namespace: NamespaceSummary,
+        content: ContentTree,
+        items: Vec<FavoriteContentSummary>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PathIndex {
     pub schema_version: u32,
     pub entries: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FavoriteIndex {
+    pub schema_version: u32,
+    #[serde(default)]
+    pub paths: Vec<String>,
+}
+
+impl Default for FavoriteIndex {
+    fn default() -> Self {
+        Self {
+            schema_version: 1,
+            paths: Vec::new(),
+        }
+    }
 }
 
 impl Default for PathIndex {
