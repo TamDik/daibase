@@ -1,9 +1,9 @@
 use crate::location::ResolvedLocation;
 use crate::models::{
     ContentTree, DeletedContentSummary, FavoriteContentSummary, FileHistoryEntry,
-    MarkdownImageResolution, MarkdownLinkStatus, McpServerStatus, NamespaceDetail,
-    NamespaceSummary, OpenLocationResult, PageContent, PageHistorySnapshot, SaveFileResult,
-    SavePageResult, SaveResult, SpecialPageSummary,
+    InstalledPluginSummary, MarkdownImageResolution, MarkdownLinkStatus, McpServerStatus,
+    NamespaceDetail, NamespaceSummary, OpenLocationResult, PageContent, PageHistorySnapshot,
+    SaveFileResult, SavePageResult, SaveResult, SpecialPageSummary,
 };
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
@@ -16,6 +16,28 @@ pub fn list_namespaces(app: AppHandle) -> Result<Vec<NamespaceSummary>, String> 
 #[tauri::command]
 pub fn get_mcp_server_status() -> McpServerStatus {
     crate::mcp::server_status()
+}
+
+#[tauri::command]
+pub fn list_plugins(app: AppHandle) -> Result<Vec<InstalledPluginSummary>, String> {
+    crate::plugins::list_plugins(&app)
+}
+
+#[tauri::command]
+pub fn install_plugin_from_folder(
+    app: AppHandle,
+    source_path: PathBuf,
+) -> Result<InstalledPluginSummary, String> {
+    crate::plugins::install_plugin_from_folder(&app, source_path)
+}
+
+#[tauri::command]
+pub fn set_plugin_enabled(
+    app: AppHandle,
+    plugin_id: String,
+    enabled: bool,
+) -> Result<InstalledPluginSummary, String> {
+    crate::plugins::set_plugin_enabled(&app, plugin_id, enabled)
 }
 
 #[tauri::command]

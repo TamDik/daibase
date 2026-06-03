@@ -3,6 +3,7 @@ mod location;
 mod mcp;
 mod models;
 mod namespace;
+mod plugins;
 mod paths;
 mod terminal;
 mod versioning;
@@ -18,6 +19,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_mcp_server_status,
+            commands::list_plugins,
+            commands::install_plugin_from_folder,
+            commands::set_plugin_enabled,
             commands::list_namespaces,
             commands::create_namespace,
             commands::open_namespace,

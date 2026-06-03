@@ -1,0 +1,294 @@
+use crate::models::{
+    InstalledPluginSummary, PluginContribution, PluginInstallSource, PluginManifest,
+    PluginPermission, PluginRegistry,
+};
+use serde::Serialize;
+use std::fs;
+use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Manager};
+
+const PLUGINS_DIR_NAME: &str = "plugins";
+const INSTALLED_DIR_NAME: &str = "installed";
+const REGISTRY_FILE_NAME: &str = "registry.json";
+const MANIFEST_FILE_NAME: &str = "manifest.json";
+
+pub fn list_plugins(app: &AppHandle) -> Result<Vec<InstalledPluginSummary>, String> {
+    Ok(read_registry(app)?.plugins)
+}
+
+pub fn install_plugin_from_folder(
+    app: &AppHandle,
+    source_path: PathBuf,
+) -> Result<InstalledPluginSummary, String> {
+    let manifest = read_manifest_from_folder(&source_path)?;
+    validate_manifest(&manifest)?;
+
+    let plugin_dir = installed_plugin_dir(app, &manifest.id)?;
+    if plugin_dir.exists() {
+        return Err(format!(
+            "プラグインは既にインストールされています: {}",
+            manifest.id
+        ));
+    }
+
+    copy_plugin_folder(&source_path, &plugin_dir)?;
+
+    let mut registry = read_registry(app)?;
+    let plugin = InstalledPluginSummary {
+        id: manifest.id.clone(),
+        name: manifest.name.clone(),
+        version: manifest.version.clone(),
+        description: manifest.description.clone(),
+        enabled: false,
+        source: PluginInstallSource::LocalFolder {
+            path: source_path.to_string_lossy().to_string(),
+        },
+        manifest,
+    };
+    registry.plugins.push(plugin.clone());
+    registry.plugins.sort_by(|left, right| left.name.cmp(&right.name));
+    write_registry(app, &registry)?;
+
+    Ok(plugin)
+}
+
+pub fn set_plugin_enabled(
+    app: &AppHandle,
+    plugin_id: String,
+    enabled: bool,
+) -> Result<InstalledPluginSummary, String> {
+    let mut registry = read_registry(app)?;
+    let Some(plugin) = registry
+        .plugins
+        .iter_mut()
+        .find(|plugin| plugin.id == plugin_id)
+    else {
+        return Err("プラグインが見つかりません。".to_string());
+    };
+
+    plugin.enabled = enabled;
+    let updated = plugin.clone();
+    write_registry(app, &registry)?;
+    Ok(updated)
+}
+
+fn read_manifest_from_folder(source_path: &Path) -> Result<PluginManifest, String> {
+    if !source_path.is_dir() {
+        return Err("プラグインフォルダを選択してください。".to_string());
+    }
+
+    let manifest_path = source_path.join(MANIFEST_FILE_NAME);
+    let manifest_content = fs::read_to_string(&manifest_path)
+        .map_err(|_| "manifest.json が見つからないか読み込めません。".to_string())?;
+    serde_json::from_str(&manifest_content)
+        .map_err(|error| format!("manifest.json の形式が正しくありません: {error}"))
+}
+
+fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
+    validate_plugin_id(&manifest.id)?;
+    require_non_empty("name", &manifest.name)?;
+    require_non_empty("version", &manifest.version)?;
+
+    if manifest.schema_version != 1 {
+        return Err("未対応の plugin manifest schema version です。".to_string());
+    }
+
+    if manifest.entry.trim().is_empty() {
+        return Err("manifest.json の entry を指定してください。".to_string());
+    }
+
+    validate_relative_entry_path(&manifest.entry)?;
+
+    if manifest.contributions.is_empty() {
+        return Err("manifest.json の contributions を 1 つ以上指定してください。".to_string());
+    }
+
+    for contribution in &manifest.contributions {
+        match contribution {
+            PluginContribution::MarkdownRenderer { id, name, .. } => {
+                validate_plugin_id(id)?;
+                require_non_empty("contribution name", name)?;
+            }
+        }
+    }
+
+    for permission in &manifest.permissions {
+        validate_permission(permission)?;
+    }
+
+    Ok(())
+}
+
+fn validate_plugin_id(id: &str) -> Result<(), String> {
+    if id.is_empty() {
+        return Err("plugin id を指定してください。".to_string());
+    }
+
+    if id.len() > 128
+        || !id
+            .chars()
+            .all(|char| char.is_ascii_alphanumeric() || matches!(char, '.' | '-' | '_'))
+    {
+        return Err("plugin id には英数字、ドット、ハイフン、アンダースコアだけ使えます。".to_string());
+    }
+
+    Ok(())
+}
+
+fn require_non_empty(name: &str, value: &str) -> Result<(), String> {
+    if value.trim().is_empty() {
+        return Err(format!("manifest.json の {name} を指定してください。"));
+    }
+    Ok(())
+}
+
+fn validate_relative_entry_path(entry: &str) -> Result<(), String> {
+    let path = Path::new(entry);
+    if path.is_absolute() || entry.contains('\\') {
+        return Err("manifest.json の entry は相対パスで指定してください。".to_string());
+    }
+
+    if path
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err("manifest.json の entry に .. は使えません。".to_string());
+    }
+
+    Ok(())
+}
+
+fn validate_permission(permission: &PluginPermission) -> Result<(), String> {
+    match permission {
+        PluginPermission::PageRead
+        | PluginPermission::PageWrite
+        | PluginPermission::FileRead
+        | PluginPermission::FileWrite
+        | PluginPermission::NamespaceRead
+        | PluginPermission::HistoryRead
+        | PluginPermission::LocationOpen
+        | PluginPermission::UiNotify => Ok(()),
+    }
+}
+
+fn copy_plugin_folder(source_path: &Path, target_path: &Path) -> Result<(), String> {
+    fs::create_dir_all(target_path).map_err(to_error)?;
+    copy_dir_entries(source_path, target_path)
+}
+
+fn copy_dir_entries(source_path: &Path, target_path: &Path) -> Result<(), String> {
+    for entry in fs::read_dir(source_path).map_err(to_error)? {
+        let entry = entry.map_err(to_error)?;
+        let source_entry_path = entry.path();
+        let target_entry_path = target_path.join(entry.file_name());
+        let file_type = entry.file_type().map_err(to_error)?;
+
+        if file_type.is_dir() {
+            fs::create_dir_all(&target_entry_path).map_err(to_error)?;
+            copy_dir_entries(&source_entry_path, &target_entry_path)?;
+        } else if file_type.is_file() {
+            fs::copy(&source_entry_path, &target_entry_path).map_err(to_error)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn read_registry(app: &AppHandle) -> Result<PluginRegistry, String> {
+    let path = registry_path(app)?;
+    if !path.exists() {
+        return Ok(PluginRegistry::default());
+    }
+
+    let content = fs::read_to_string(path).map_err(to_error)?;
+    serde_json::from_str(&content).map_err(to_error)
+}
+
+fn write_registry(app: &AppHandle, registry: &PluginRegistry) -> Result<(), String> {
+    let path = registry_path(app)?;
+    write_json_atomic(&path, registry)
+}
+
+fn registry_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let plugin_dir = plugins_dir(app)?;
+    fs::create_dir_all(&plugin_dir).map_err(to_error)?;
+    Ok(plugin_dir.join(REGISTRY_FILE_NAME))
+}
+
+fn installed_plugin_dir(app: &AppHandle, plugin_id: &str) -> Result<PathBuf, String> {
+    let dir = plugins_dir(app)?.join(INSTALLED_DIR_NAME);
+    fs::create_dir_all(&dir).map_err(to_error)?;
+    Ok(dir.join(plugin_id))
+}
+
+fn plugins_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(to_error)?
+        .join(PLUGINS_DIR_NAME))
+}
+
+fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    let content = serde_json::to_string_pretty(value).map_err(to_error)?;
+    let temporary_path = path.with_extension("json.tmp");
+    fs::write(&temporary_path, content).map_err(to_error)?;
+    fs::rename(&temporary_path, path).map_err(to_error)
+}
+
+fn to_error(error: impl std::fmt::Display) -> String {
+    error.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_markdown_renderer_manifest() {
+        let manifest = valid_manifest();
+
+        assert!(validate_manifest(&manifest).is_ok());
+    }
+
+    #[test]
+    fn rejects_entry_parent_path() {
+        let mut manifest = valid_manifest();
+        manifest.entry = "../dist/index.html".to_string();
+
+        assert_eq!(
+            validate_manifest(&manifest).unwrap_err(),
+            "manifest.json の entry に .. は使えません。"
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_plugin_id() {
+        let mut manifest = valid_manifest();
+        manifest.id = "calendar plugin".to_string();
+
+        assert_eq!(
+            validate_manifest(&manifest).unwrap_err(),
+            "plugin id には英数字、ドット、ハイフン、アンダースコアだけ使えます。"
+        );
+    }
+
+    fn valid_manifest() -> PluginManifest {
+        PluginManifest {
+            schema_version: 1,
+            id: "com.example.calendar".to_string(),
+            name: "Calendar".to_string(),
+            version: "0.1.0".to_string(),
+            description: "Calendar view".to_string(),
+            entry: "dist/index.html".to_string(),
+            contributions: vec![PluginContribution::MarkdownRenderer {
+                id: "calendar".to_string(),
+                name: "Calendar".to_string(),
+                frontmatter: serde_json::json!({
+                    "daibase.renderer": "calendar"
+                }),
+            }],
+            permissions: vec![PluginPermission::PageRead, PluginPermission::LocationOpen],
+        }
+    }
+}

@@ -199,6 +199,79 @@ pub struct CategoryGroupSummary {
     pub pages: Vec<CategoryPageSummary>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PluginRegistry {
+    pub schema_version: u32,
+    #[serde(default)]
+    pub plugins: Vec<InstalledPluginSummary>,
+}
+
+impl Default for PluginRegistry {
+    fn default() -> Self {
+        Self {
+            schema_version: 1,
+            plugins: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct InstalledPluginSummary {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub enabled: bool,
+    pub source: PluginInstallSource,
+    pub manifest: PluginManifest,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum PluginInstallSource {
+    LocalFolder { path: String },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PluginManifest {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: u32,
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    #[serde(default)]
+    pub description: String,
+    pub entry: String,
+    #[serde(default)]
+    pub contributions: Vec<PluginContribution>,
+    #[serde(default)]
+    pub permissions: Vec<PluginPermission>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum PluginContribution {
+    MarkdownRenderer {
+        id: String,
+        name: String,
+        #[serde(default)]
+        frontmatter: serde_json::Value,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub enum PluginPermission {
+    PageRead,
+    PageWrite,
+    FileRead,
+    FileWrite,
+    NamespaceRead,
+    HistoryRead,
+    LocationOpen,
+    UiNotify,
+}
+
 #[derive(Debug, Serialize)]
 pub struct MarkdownLinkStatus {
     pub location: String,
