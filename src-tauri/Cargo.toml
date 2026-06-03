@@ -1,0 +1,32 @@
+[package]
+name = "daibase"
+version = "0.1.0"
+description = "A minimal Tauri v2 desktop app."
+authors = ["TamDik"]
+edition = "2021"
+license = "MIT"
+repository = ""
+default-run = "daibase"
+build = "build.rs"
+
+[lib]
+name = "daibase_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "daibase"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.6.2", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.2", features = [] }
+tauri-plugin-dialog = "2.7.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+ulid = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+portable-pty = "0.9"
