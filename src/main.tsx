@@ -4,6 +4,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { RouterProvider, createBrowserRouter } from "react-router";
 
+import { McpServerBanner } from "./components/McpServerBanner";
 import { HistoryPage } from "./routes/HistoryPage";
 import { HomePage } from "./routes/HomePage";
 
@@ -32,6 +33,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <RouterProvider router={router} />
+      <McpServerBanner />
     </ThemeProvider>
   </React.StrictMode>,
 );

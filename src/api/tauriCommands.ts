@@ -37,6 +37,12 @@ export type NamespaceDetail = {
   content: ContentTree;
 };
 
+export type McpServerStatus = {
+  enabled: boolean;
+  transport: string;
+  url: string;
+};
+
 export type PageContent = {
   namespace_id: string;
   file_id: string;
@@ -280,6 +286,10 @@ export type OpenLocationResult =
 
 export function listNamespaces() {
   return invoke<NamespaceSummary[]>("list_namespaces");
+}
+
+export function getMcpServerStatus() {
+  return invoke<McpServerStatus>("get_mcp_server_status");
 }
 
 export function createNamespace(name: string, rootPath: string) {

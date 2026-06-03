@@ -124,6 +124,13 @@ pub struct SaveFileResult {
     pub save: SaveResult,
 }
 
+#[derive(Debug, Serialize)]
+pub struct McpServerStatus {
+    pub enabled: bool,
+    pub transport: String,
+    pub url: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ContentTree {
     #[serde(default)]

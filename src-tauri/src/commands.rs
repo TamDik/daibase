@@ -1,9 +1,9 @@
 use crate::location::ResolvedLocation;
 use crate::models::{
     ContentTree, DeletedContentSummary, FavoriteContentSummary, FileHistoryEntry,
-    MarkdownImageResolution, MarkdownLinkStatus, NamespaceDetail, NamespaceSummary,
-    OpenLocationResult, PageContent, PageHistorySnapshot, SaveFileResult, SavePageResult,
-    SaveResult, SpecialPageSummary,
+    MarkdownImageResolution, MarkdownLinkStatus, McpServerStatus, NamespaceDetail,
+    NamespaceSummary, OpenLocationResult, PageContent, PageHistorySnapshot, SaveFileResult,
+    SavePageResult, SaveResult, SpecialPageSummary,
 };
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -11,6 +11,11 @@ use tauri::AppHandle;
 #[tauri::command]
 pub fn list_namespaces(app: AppHandle) -> Result<Vec<NamespaceSummary>, String> {
     crate::namespace::list_namespaces(&app)
+}
+
+#[tauri::command]
+pub fn get_mcp_server_status() -> McpServerStatus {
+    crate::mcp::server_status()
 }
 
 #[tauri::command]

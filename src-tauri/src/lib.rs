@@ -1,5 +1,6 @@
 mod commands;
 mod location;
+mod mcp;
 mod models;
 mod namespace;
 mod paths;
@@ -9,7 +10,12 @@ mod versioning;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            mcp::start_server(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
+            commands::get_mcp_server_status,
             commands::list_namespaces,
             commands::create_namespace,
             commands::open_namespace,
