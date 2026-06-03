@@ -43,6 +43,17 @@ export type McpServerStatus = {
   url: string;
 };
 
+export type TerminalSessionSummary = {
+  id: string;
+  shell: string;
+};
+
+export type TerminalOutputEvent = {
+  session_id: string;
+  stream: "stdout" | "stderr" | "system" | string;
+  text: string;
+};
+
 export type PageContent = {
   namespace_id: string;
   file_id: string;
@@ -290,6 +301,34 @@ export function listNamespaces() {
 
 export function getMcpServerStatus() {
   return invoke<McpServerStatus>("get_mcp_server_status");
+}
+
+export function startTerminal(columns?: number, rows?: number) {
+  return invoke<TerminalSessionSummary>("start_terminal", {
+    columns,
+    rows,
+  });
+}
+
+export function writeTerminal(sessionId: string, input: string) {
+  return invoke<void>("write_terminal", {
+    sessionId,
+    input,
+  });
+}
+
+export function resizeTerminal(sessionId: string, columns: number, rows: number) {
+  return invoke<void>("resize_terminal", {
+    sessionId,
+    columns,
+    rows,
+  });
+}
+
+export function stopTerminal(sessionId: string) {
+  return invoke<void>("stop_terminal", {
+    sessionId,
+  });
 }
 
 export function createNamespace(name: string, rootPath: string) {

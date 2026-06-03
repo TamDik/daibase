@@ -61,6 +61,7 @@ import {
   NamespacesSpecialPage,
   SpecialPagesIndex,
 } from "../components/SpecialPages";
+import { TerminalPanel } from "../components/TerminalPanel";
 import { defaultPageLocation, namespacesLocation } from "../lib/location";
 import { updateMarkdownCategories } from "../lib/pageCategories";
 
@@ -159,6 +160,7 @@ export function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [createDialog, setCreateDialog] = useState<CreateDialogState | null>(null);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const pageViewRef = useRef<PageView | null>(null);
   const draftRef = useRef("");
   const isSavingRef = useRef(false);
@@ -1027,31 +1029,41 @@ export function HomePage() {
         onGoForward={() => void handleGoForward()}
         onLocationChange={setLocationInput}
         onLocationSubmit={() => void handleLocationSubmit()}
+        onToggleTerminal={() => setIsTerminalOpen((current) => !current)}
       />
 
       <Box
-        component="main"
         sx={{
-          alignItems: "stretch",
           display: "flex",
-          flexGrow: 1,
+          flex: 1,
+          flexDirection: "column",
           minHeight: 0,
           overflow: "hidden",
-          p: 0,
         }}
       >
-        <PageSidebar
-          content={sidebarContent}
-          currentLocation={locationInput}
-          namespace={activeNamespace}
-          onCreateFolder={(parentDirectory) => handleOpenCreateDialog("folder", parentDirectory)}
-          onCreatePage={(parentDirectory) => handleOpenCreateDialog("page", parentDirectory)}
-          onDeleteContent={(path, kind) => void handleDeleteContent(path, kind)}
-          onOpenLocation={(location) => void navigate(location)}
-          onToggleFavorite={(path, isFavorite) =>
-            void handleToggleFavoriteContent(path, isFavorite)
-          }
-        />
+        <Box
+          component="main"
+          sx={{
+            alignItems: "stretch",
+            display: "flex",
+            flexGrow: 1,
+            minHeight: 0,
+            overflow: "hidden",
+            p: 0,
+          }}
+        >
+          <PageSidebar
+            content={sidebarContent}
+            currentLocation={locationInput}
+            namespace={activeNamespace}
+            onCreateFolder={(parentDirectory) => handleOpenCreateDialog("folder", parentDirectory)}
+            onCreatePage={(parentDirectory) => handleOpenCreateDialog("page", parentDirectory)}
+            onDeleteContent={(path, kind) => void handleDeleteContent(path, kind)}
+            onOpenLocation={(location) => void navigate(location)}
+            onToggleFavorite={(path, isFavorite) =>
+              void handleToggleFavoriteContent(path, isFavorite)
+            }
+          />
 
         <Box
           sx={{
@@ -1187,6 +1199,8 @@ export function HomePage() {
             )}
           </Stack>
         </Box>
+        </Box>
+        {isTerminalOpen && <TerminalPanel onClose={() => setIsTerminalOpen(false)} />}
       </Box>
       <Snackbar
         open={savedMessage !== null}

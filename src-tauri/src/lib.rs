@@ -4,11 +4,13 @@ mod mcp;
 mod models;
 mod namespace;
 mod paths;
+mod terminal;
 mod versioning;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(terminal::TerminalSessions::default())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             mcp::start_server(app.handle().clone());
@@ -45,6 +47,10 @@ pub fn run() {
             commands::resolve_markdown_link,
             commands::resolve_markdown_image,
             commands::resolve_markdown_link_status,
+            commands::start_terminal,
+            commands::write_terminal,
+            commands::resize_terminal,
+            commands::stop_terminal,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

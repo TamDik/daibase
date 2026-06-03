@@ -6,7 +6,7 @@ use crate::models::{
     SavePageResult, SaveResult, SpecialPageSummary,
 };
 use std::path::PathBuf;
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub fn list_namespaces(app: AppHandle) -> Result<Vec<NamespaceSummary>, String> {
@@ -16,6 +16,43 @@ pub fn list_namespaces(app: AppHandle) -> Result<Vec<NamespaceSummary>, String> 
 #[tauri::command]
 pub fn get_mcp_server_status() -> McpServerStatus {
     crate::mcp::server_status()
+}
+
+#[tauri::command]
+pub fn start_terminal(
+    app: AppHandle,
+    sessions: State<crate::terminal::TerminalSessions>,
+    columns: Option<u16>,
+    rows: Option<u16>,
+) -> Result<crate::terminal::TerminalSessionSummary, String> {
+    crate::terminal::start_terminal(app, &sessions, columns, rows)
+}
+
+#[tauri::command]
+pub fn write_terminal(
+    sessions: State<crate::terminal::TerminalSessions>,
+    session_id: String,
+    input: String,
+) -> Result<(), String> {
+    crate::terminal::write_terminal(&sessions, session_id, input)
+}
+
+#[tauri::command]
+pub fn resize_terminal(
+    sessions: State<crate::terminal::TerminalSessions>,
+    session_id: String,
+    columns: u16,
+    rows: u16,
+) -> Result<(), String> {
+    crate::terminal::resize_terminal(&sessions, session_id, columns, rows)
+}
+
+#[tauri::command]
+pub fn stop_terminal(
+    sessions: State<crate::terminal::TerminalSessions>,
+    session_id: String,
+) -> Result<(), String> {
+    crate::terminal::stop_terminal(&sessions, session_id)
 }
 
 #[tauri::command]

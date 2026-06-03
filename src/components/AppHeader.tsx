@@ -3,6 +3,7 @@ import {
   ArrowBackRounded,
   ArrowForwardRounded,
   SubdirectoryArrowLeftRounded,
+  TerminalRounded,
 } from "@mui/icons-material";
 
 export function AppHeader({
@@ -13,6 +14,7 @@ export function AppHeader({
   onGoForward,
   onLocationChange,
   onLocationSubmit,
+  onToggleTerminal,
 }: {
   canGoBack: boolean;
   canGoForward: boolean;
@@ -21,6 +23,7 @@ export function AppHeader({
   onGoForward: () => void;
   onLocationChange: (value: string) => void;
   onLocationSubmit: () => void;
+  onToggleTerminal: () => void;
 }) {
   return (
     <Box
@@ -115,6 +118,11 @@ export function AppHeader({
             </IconButton>
           </Tooltip>
         </Box>
+        <Tooltip title="ターミナル">
+          <IconButton aria-label="ターミナル" size="small" onClick={onToggleTerminal}>
+            <TerminalRounded fontSize="small" />
+          </IconButton>
+        </Tooltip>
       </Stack>
     </Box>
   );
