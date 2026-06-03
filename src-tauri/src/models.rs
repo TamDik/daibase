@@ -60,6 +60,8 @@ pub struct PageContent {
     pub location: String,
     pub content: String,
     #[serde(default)]
+    pub categories: Vec<String>,
+    #[serde(default)]
     pub backlinks: Vec<BacklinkSummary>,
     pub latest_revision_id: Option<String>,
     pub is_virtual: bool,
@@ -176,6 +178,20 @@ pub struct FavoriteContentSummary {
     pub content_kind: String,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct CategoryPageSummary {
+    pub file_id: String,
+    pub path: String,
+    pub title: String,
+    pub location: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct CategoryGroupSummary {
+    pub name: String,
+    pub pages: Vec<CategoryPageSummary>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct MarkdownLinkStatus {
     pub location: String,
@@ -234,6 +250,13 @@ pub enum OpenLocationResult {
         namespace: NamespaceSummary,
         content: ContentTree,
         items: Vec<FavoriteContentSummary>,
+    },
+    SpecialCategories {
+        location: String,
+        namespace: NamespaceSummary,
+        content: ContentTree,
+        categories: Vec<CategoryGroupSummary>,
+        uncategorized_pages: Vec<CategoryPageSummary>,
     },
 }
 

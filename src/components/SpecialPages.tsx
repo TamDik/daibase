@@ -15,6 +15,8 @@ import {
 import { RestoreOutlined } from "@mui/icons-material";
 
 import type {
+  CategoryGroupSummary,
+  CategoryPageSummary,
   ContentTree,
   DeletedContentSummary,
   FavoriteContentSummary,
@@ -301,6 +303,81 @@ export function FavoritesSpecialPage({
         )}
       </Box>
     </Paper>
+  );
+}
+
+export function CategoriesSpecialPage({
+  categories,
+  namespace,
+  uncategorizedPages,
+  onOpenLocation,
+}: {
+  categories: CategoryGroupSummary[];
+  namespace: NamespaceSummary;
+  uncategorizedPages: CategoryPageSummary[];
+  onOpenLocation: (location: string) => void;
+}) {
+  const hasPages = categories.length > 0 || uncategorizedPages.length > 0;
+
+  return (
+    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
+      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+        <Typography variant="h5" component="h2">
+          Categories
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {namespace.name}:Special:Categories
+        </Typography>
+      </Box>
+      <Stack spacing={3} sx={{ p: 3 }}>
+        {!hasPages ? (
+          <Typography variant="body2" color="text.secondary">
+            カテゴリ付きのページはまだありません。
+          </Typography>
+        ) : (
+          <>
+            {categories.map((category) => (
+              <Box key={category.name}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                  {category.name}
+                </Typography>
+                <CategoryPageList pages={category.pages} onOpenLocation={onOpenLocation} />
+              </Box>
+            ))}
+            {uncategorizedPages.length > 0 && (
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                  未分類
+                </Typography>
+                <CategoryPageList pages={uncategorizedPages} onOpenLocation={onOpenLocation} />
+              </Box>
+            )}
+          </>
+        )}
+      </Stack>
+    </Paper>
+  );
+}
+
+function CategoryPageList({
+  pages,
+  onOpenLocation,
+}: {
+  pages: CategoryPageSummary[];
+  onOpenLocation: (location: string) => void;
+}) {
+  return (
+    <List dense disablePadding>
+      {pages.map((page) => (
+        <ListItemButton
+          key={page.path}
+          onClick={() => onOpenLocation(page.location)}
+          sx={{ borderRadius: 1 }}
+        >
+          <ListItemText primary={page.title} secondary={page.location} />
+        </ListItemButton>
+      ))}
+    </List>
   );
 }
 

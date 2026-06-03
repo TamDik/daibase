@@ -1,5 +1,6 @@
 import {
   Alert,
+  Autocomplete,
   Box,
   Chip,
   CircularProgress,
@@ -18,9 +19,14 @@ import {
   Typography,
 } from "@mui/material";
 import { Article, Code, Star, StarBorder } from "@mui/icons-material";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { BacklinkSummary, FileHistoryEntry } from "../api/tauriCommands";
+import {
+  categoriesFromMarkdown,
+  markdownBodyFromMarkdown,
+  updateMarkdownBodyPreservingFrontmatter,
+} from "../lib/pageCategories";
 import { MarkdownWysiwygEditor } from "./MarkdownWysiwygEditor";
 
 export type PageMode = "view" | "history";
@@ -39,6 +45,7 @@ export function PageSurface({
   mode,
   readOnly = false,
   onDraftChange,
+  onCategoriesChange,
   onModeChange,
   onToggleFavorite,
   onOpenLocation,
@@ -61,6 +68,7 @@ export function PageSurface({
   mode: PageMode;
   readOnly?: boolean;
   onDraftChange: (value: string) => void;
+  onCategoriesChange: (categories: string[]) => void;
   onModeChange: (mode: PageMode) => void;
   onToggleFavorite: () => void;
   onOpenLocation: (location: string) => void;
@@ -82,6 +90,36 @@ export function PageSurface({
   selectedHistoryRevisionId: string | null;
 }) {
   const [editorView, setEditorView] = useState<"wysiwyg" | "source">("wysiwyg");
+  const [categoryInput, setCategoryInput] = useState("");
+  const [categoryValues, setCategoryValues] = useState<string[]>([]);
+
+  useEffect(() => {
+    setCategoryInput("");
+    setCategoryValues(categoriesFromMarkdown(draft));
+  }, [editorKey]);
+
+  useEffect(() => {
+    const draftCategories = categoriesFromMarkdown(draft);
+    if (!sameCategories(categoryValues, draftCategories)) {
+      setCategoryValues(draftCategories);
+    }
+  }, [categoryValues, draft]);
+
+  const updateCategories = (categories: string[]) => {
+    const nextCategories = uniqueCategories(categories);
+    setCategoryValues(nextCategories);
+    onCategoriesChange(nextCategories);
+  };
+
+  const commitCategoryInput = () => {
+    const inputCategories = splitCategoryInput(categoryInput);
+    if (inputCategories.length === 0) {
+      setCategoryInput("");
+      return;
+    }
+    setCategoryInput("");
+    updateCategories([...categoryValues, ...inputCategories]);
+  };
 
   const viewToolbar = mode === "view" && (
     <Stack
@@ -216,7 +254,9 @@ export function PageSurface({
           <Box sx={{ position: "relative" }}>
             {isVirtual && (
               <Alert severity="info" sx={{ m: 2 }}>
-                {readOnly ? "削除済みページの内容を表示しています。" : "このページはまだ作成されていません。"}
+                {readOnly
+                  ? "削除済みページの内容を表示しています。"
+                  : "このページはまだ作成されていません。"}
               </Alert>
             )}
             <>
@@ -242,20 +282,76 @@ export function PageSurface({
                   key={editorKey}
                   ariaLabel="Markdown"
                   disabled={isSaving || readOnly}
-                  value={draft}
-                  onChange={onDraftChange}
+                  value={markdownBodyFromMarkdown(draft)}
+                  onChange={(value) =>
+                    onDraftChange(updateMarkdownBodyPreservingFrontmatter(draft, value))
+                  }
                   onOpenMarkdownLink={onOpenMarkdownLink}
                   onResolveMarkdownImage={onResolveMarkdownImage}
                   onResolveMarkdownLinkStatus={onResolveMarkdownLinkStatus}
                 />
               )}
               <BacklinksPanel backlinks={backlinks} onOpenLocation={onOpenLocation} />
+              <Box sx={{ px: 2, pb: 2, pt: 1 }}>
+                <Autocomplete
+                  disabled={isSaving || readOnly}
+                  freeSolo
+                  fullWidth
+                  multiple
+                  options={[]}
+                  size="small"
+                  value={categoryValues}
+                  inputValue={categoryInput}
+                  onBlur={commitCategoryInput}
+                  onChange={(_, value) => updateCategories(value)}
+                  onInputChange={(_, value, reason) => {
+                    if (reason !== "input") {
+                      setCategoryInput(value);
+                      return;
+                    }
+                    if (value.includes(",")) {
+                      const inputCategories = splitCategoryInput(value);
+                      setCategoryInput("");
+                      updateCategories([...categoryValues, ...inputCategories]);
+                      return;
+                    }
+                    setCategoryInput(value);
+                  }}
+                  renderInput={(params) => (
+                    <TextField {...params} label="カテゴリ" placeholder="カテゴリを追加" />
+                  )}
+                />
+              </Box>
             </>
           </Box>
         )}
       </Box>
     </Box>
   );
+}
+
+function splitCategoryInput(value: string) {
+  return value
+    .split(",")
+    .map((category) => category.trim())
+    .filter((category) => category.length > 0);
+}
+
+function uniqueCategories(categories: string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const category of categories.map((value) => value.trim())) {
+    if (!category || seen.has(category)) {
+      continue;
+    }
+    seen.add(category);
+    result.push(category);
+  }
+  return result;
+}
+
+function sameCategories(left: string[], right: string[]) {
+  return left.length === right.length && left.every((category, index) => category === right[index]);
 }
 
 function BacklinksPanel({

@@ -1,8 +1,8 @@
 use crate::models::{
-    BacklinkSummary, ContentTree, DeletedContentSummary, FavoriteContentSummary, FileHistoryEntry,
-    FileSummary, FolderSummary, NamespaceDetail, NamespaceMetadata, NamespaceRegistry,
-    NamespaceSummary, PageHistorySnapshot, SaveFileResult, SideBySideDiffRow,
-    SideBySideDiffSection, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
+    BacklinkSummary, CategoryGroupSummary, CategoryPageSummary, ContentTree, DeletedContentSummary,
+    FavoriteContentSummary, FileHistoryEntry, FileSummary, FolderSummary, NamespaceDetail,
+    NamespaceMetadata, NamespaceRegistry, NamespaceSummary, PageHistorySnapshot, SaveFileResult,
+    SideBySideDiffRow, SideBySideDiffSection, DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
 };
 use crate::paths::{
     resolve_namespace_file_path, resolve_namespace_folder_path, resolve_namespace_path,
@@ -149,6 +149,7 @@ pub fn read_page(
         path: normalized_path.clone(),
         title,
         location,
+        categories: markdown_categories(&content),
         content,
         backlinks,
         latest_revision_id,
@@ -637,6 +638,47 @@ pub fn list_favorite_content(
     Ok(items)
 }
 
+pub fn list_category_groups(
+    namespace: &NamespaceSummary,
+) -> Result<(Vec<CategoryGroupSummary>, Vec<CategoryPageSummary>), String> {
+    let content = list_content_for_namespace(namespace)?;
+    let mut groups = std::collections::BTreeMap::<String, Vec<CategoryPageSummary>>::new();
+    let mut uncategorized_pages = Vec::new();
+
+    for page in content.pages {
+        let page_path = resolve_namespace_path(&namespace.root_path, &page.path)?;
+        let page_content = fs::read_to_string(page_path).map_err(to_error)?;
+        let categories = markdown_categories(&page_content);
+        let summary = CategoryPageSummary {
+            file_id: page.file_id,
+            path: page.path,
+            title: page.title,
+            location: page.location,
+        };
+
+        if categories.is_empty() {
+            uncategorized_pages.push(summary);
+            continue;
+        }
+
+        for category in categories {
+            groups.entry(category).or_default().push(summary.clone());
+        }
+    }
+
+    let mut categories = groups
+        .into_iter()
+        .map(|(name, mut pages)| {
+            pages.sort_by(|left, right| left.path.cmp(&right.path));
+            CategoryGroupSummary { name, pages }
+        })
+        .collect::<Vec<_>>();
+    categories.sort_by(|left, right| left.name.cmp(&right.name));
+    uncategorized_pages.sort_by(|left, right| left.path.cmp(&right.path));
+
+    Ok((categories, uncategorized_pages))
+}
+
 pub fn read_deleted_page(
     app: &AppHandle,
     namespace_id: String,
@@ -655,6 +697,7 @@ pub fn read_deleted_page(
         title,
         location,
         content: String::from_utf8(content).map_err(to_error)?,
+        categories: Vec::new(),
         backlinks: Vec::new(),
         latest_revision_id: Some(entry.revision_id),
         is_virtual: true,
@@ -1252,6 +1295,87 @@ fn page_title(path: &str) -> String {
         .to_string()
 }
 
+fn markdown_categories(content: &str) -> Vec<String> {
+    let Some(frontmatter) = markdown_frontmatter(content) else {
+        return Vec::new();
+    };
+
+    let lines = frontmatter.lines().collect::<Vec<_>>();
+    let mut categories = Vec::new();
+    for (index, line) in lines.iter().enumerate() {
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        if !key.trim().eq_ignore_ascii_case("categories")
+            && !key.trim().eq_ignore_ascii_case("category")
+        {
+            continue;
+        }
+
+        let value = value.trim();
+        if !value.is_empty() {
+            categories.extend(parse_category_value(value));
+            continue;
+        }
+
+        for nested_line in lines.iter().skip(index + 1) {
+            let trimmed = nested_line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Some(item) = trimmed.strip_prefix("- ") {
+                categories.push(clean_category_name(item));
+                continue;
+            }
+            break;
+        }
+    }
+
+    unique_categories(categories)
+}
+
+fn markdown_frontmatter(content: &str) -> Option<&str> {
+    let rest = content
+        .strip_prefix("---\n")
+        .or_else(|| content.strip_prefix("---\r\n"))?;
+    let mut offset = content.len() - rest.len();
+    for line in rest.split_inclusive('\n') {
+        let line_without_break = line.trim_end_matches('\n').trim_end_matches('\r');
+        if line_without_break == "---" {
+            return Some(&content[content.len() - rest.len()..offset]);
+        }
+        offset += line.len();
+    }
+    None
+}
+
+fn parse_category_value(value: &str) -> Vec<String> {
+    let trimmed = value.trim();
+    let list_value = trimmed
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(trimmed);
+    list_value.split(',').map(clean_category_name).collect()
+}
+
+fn clean_category_name(value: &str) -> String {
+    value
+        .trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .trim()
+        .to_string()
+}
+
+fn unique_categories(categories: Vec<String>) -> Vec<String> {
+    let mut seen = std::collections::BTreeSet::new();
+    categories
+        .into_iter()
+        .filter(|category| !category.is_empty())
+        .filter(|category| seen.insert(category.clone()))
+        .collect()
+}
+
 fn read_managed_file_for_namespace(
     namespace: &NamespaceSummary,
     path: &str,
@@ -1619,6 +1743,64 @@ mod tests {
 
         assert!(content.pages[0].is_favorite);
         assert!(content.files[0].is_favorite);
+
+        fs::remove_dir_all(root_path).unwrap();
+    }
+
+    #[test]
+    fn markdown_categories_reads_frontmatter_categories() {
+        assert_eq!(
+            markdown_categories("---\ncategories:\n  - Work\n  - Research\n---\n# Main\n"),
+            vec!["Work", "Research"]
+        );
+        assert_eq!(
+            markdown_categories("---\ncategories: [Work, Research]\n---\n# Main\n"),
+            vec!["Work", "Research"]
+        );
+    }
+
+    #[test]
+    fn list_category_groups_groups_pages_and_uncategorized_pages() {
+        let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
+        fs::create_dir_all(&root_path).unwrap();
+        fs::write(
+            root_path.join("Main.md"),
+            "---\ncategories:\n  - Work\n  - Research\n---\n# Main\n",
+        )
+        .unwrap();
+        fs::write(
+            root_path.join("Draft.md"),
+            "---\ncategories: Work\n---\n# Draft\n",
+        )
+        .unwrap();
+        fs::write(root_path.join("Free.md"), "# Free\n").unwrap();
+
+        let namespace = NamespaceSummary {
+            id: "ns-work".to_string(),
+            name: "Work".to_string(),
+            root_path: root_path.clone(),
+            default_page: DEFAULT_PAGE_PATH.to_string(),
+            default_location: "Work:Main.md".to_string(),
+            pages_location: "Work:Special:Pages".to_string(),
+            created_at: "2026-06-01T00:00:00Z".to_string(),
+            updated_at: "2026-06-01T00:00:00Z".to_string(),
+        };
+
+        let (categories, uncategorized_pages) = list_category_groups(&namespace).unwrap();
+
+        assert_eq!(categories.len(), 2);
+        assert_eq!(categories[0].name, "Research");
+        assert_eq!(categories[0].pages[0].path, "Main.md");
+        assert_eq!(categories[1].name, "Work");
+        assert_eq!(
+            categories[1]
+                .pages
+                .iter()
+                .map(|page| page.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Draft.md", "Main.md"]
+        );
+        assert_eq!(uncategorized_pages[0].path, "Free.md");
 
         fs::remove_dir_all(root_path).unwrap();
     }

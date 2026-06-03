@@ -170,10 +170,12 @@ describe("HomePage", () => {
         saved_at: "2026-01-01T00:00:00Z",
       },
     }));
-    vi.mocked(api.setFavoriteContent).mockImplementation(async (_namespaceId, path, isFavorite) => ({
-      namespace: workNamespace,
-      content: favoriteContentTree(path, isFavorite),
-    }));
+    vi.mocked(api.setFavoriteContent).mockImplementation(
+      async (_namespaceId, path, isFavorite) => ({
+        namespace: workNamespace,
+        content: favoriteContentTree(path, isFavorite),
+      }),
+    );
     vi.mocked(api.uploadFile).mockImplementation(async (namespaceId, path) => ({
       namespace: workNamespace,
       location: managedFile(path, "説明").location,
@@ -292,6 +294,11 @@ describe("HomePage", () => {
               description: "お気に入りのページとファイルを表示します。",
               location: "Work:Special:Favorites",
             },
+            {
+              title: "Categories",
+              description: "カテゴリ別にページを表示します。",
+              location: "Work:Special:Categories",
+            },
           ],
         };
       }
@@ -319,6 +326,35 @@ describe("HomePage", () => {
           location: "Work:Special:Favorites",
           content: contentTree,
           items: favoriteContentItems(),
+        };
+      }
+      if (location === "Special:Categories" || location === "Work:Special:Categories") {
+        return {
+          kind: "specialCategories",
+          namespace,
+          location: "Work:Special:Categories",
+          content: contentTree,
+          categories: [
+            {
+              name: "Work",
+              pages: [
+                {
+                  file_id: "file-main",
+                  path: "Main.md",
+                  title: "Main",
+                  location: "Work:Main.md",
+                },
+              ],
+            },
+          ],
+          uncategorized_pages: [
+            {
+              file_id: "file-guide",
+              path: "Guide/Intro.md",
+              title: "Intro",
+              location: "Work:Guide/Intro.md",
+            },
+          ],
         };
       }
       const contentPath = location.replace(/^Work:/, "");
@@ -363,6 +399,7 @@ describe("HomePage", () => {
                 title: lastPathPart(pageName),
                 location: `Work:${path}`,
                 content: "",
+                categories: [],
                 backlinks: [],
                 latest_revision_id: null,
                 is_virtual: true,
@@ -782,7 +819,25 @@ describe("HomePage", () => {
     expect(screen.getByText("Deleted Pages")).toBeInTheDocument();
     expect(screen.getByText("Favorites")).toBeInTheDocument();
     expect(screen.getByText("お気に入りのページとファイルを表示します。")).toBeInTheDocument();
+    expect(screen.getByText("Categories")).toBeInTheDocument();
+    expect(screen.getByText("カテゴリ別にページを表示します。")).toBeInTheDocument();
     expect(screen.queryByText(/Work namespace/)).not.toBeInTheDocument();
+  });
+
+  it("Special:Categories でカテゴリ別にページを表示する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:Categories");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    expect(await screen.findByDisplayValue("Work:Special:Categories")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Categories" })).toBeInTheDocument();
+    expect(screen.getByText("Work")).toBeInTheDocument();
+    expect(screen.getByText("未分類")).toBeInTheDocument();
+    expect(screen.getByText("Work:Guide/Intro.md")).toBeInTheDocument();
   });
 
   it("Special:Favorites でお気に入りページとファイルを表示して開ける", async () => {
@@ -908,6 +963,44 @@ describe("HomePage", () => {
     expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Main.md", "# Raw Updated");
   });
 
+  it("カテゴリ入力を Markdown frontmatter として保存する", async () => {
+    renderHomePage();
+
+    const categoryInput = await screen.findByRole("combobox", { name: "カテゴリ" });
+    vi.useFakeTimers();
+    fireEvent.change(categoryInput, { target: { value: "Work, Research" } });
+    fireEvent.blur(categoryInput);
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+      await Promise.resolve();
+    });
+
+    expect(api.savePage).toHaveBeenCalledWith(
+      workNamespace.id,
+      "Main.md",
+      "---\ncategories:\n  - Work\n  - Research\n---\n# Main\n\n[Draft](Draft.md)\n\n[Intro](Guide/Intro.md)",
+    );
+  });
+
+  it("Markdown ソースで frontmatter を直接編集するとカテゴリ UI に反映する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await screen.findByDisplayValue("Work:Main.md");
+    await user.click(screen.getByRole("button", { name: "Markdownソース" }));
+    const editor = screen.getByRole("textbox", { name: "Markdownソース" });
+
+    fireEvent.change(editor, {
+      target: {
+        value: "---\ncategories:\n  - Research\n  - Memo\n---\n# Main\n",
+      },
+    });
+
+    expect(await screen.findByText("Research")).toBeInTheDocument();
+    expect(screen.getByText("Memo")).toBeInTheDocument();
+  });
+
   it("画面遷移前に未保存の編集を保存する", async () => {
     const user = userEvent.setup();
     renderHomePage();
@@ -998,6 +1091,7 @@ function page(
     title: lastPathPart(path.replace(/\.md$/, "")),
     location: `Work:${path}`,
     content,
+    categories: [],
     backlinks,
     latest_revision_id: "rev_01",
     is_virtual: false,

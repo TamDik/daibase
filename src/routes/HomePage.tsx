@@ -15,6 +15,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import {
+  type CategoryGroupSummary,
+  type CategoryPageSummary,
   type ContentTree,
   type FavoriteContentSummary,
   type FileHistoryEntry,
@@ -51,6 +53,7 @@ import { FileSurface, type FileMode } from "../components/FileSurface";
 import { PageSidebar } from "../components/PageSidebar";
 import { PageSurface, type PageMode } from "../components/PageSurface";
 import {
+  CategoriesSpecialPage,
   DeletedPagesSpecialPage,
   FavoritesSpecialPage,
   PagesSpecialPage,
@@ -58,6 +61,7 @@ import {
   SpecialPagesIndex,
 } from "../components/SpecialPages";
 import { defaultPageLocation, namespacesLocation } from "../lib/location";
+import { updateMarkdownCategories } from "../lib/pageCategories";
 
 type PageView = {
   kind: "page";
@@ -103,6 +107,14 @@ type SpecialView =
       namespace: NamespaceSummary;
       content: ContentTree;
       items: FavoriteContentSummary[];
+    }
+  | {
+      kind: "categories";
+      location: string;
+      namespace: NamespaceSummary;
+      content: ContentTree;
+      categories: CategoryGroupSummary[];
+      uncategorizedPages: CategoryPageSummary[];
     };
 
 type CreateDialogState = {
@@ -242,6 +254,25 @@ export function HomePage() {
         namespace: opened.namespace,
         content: opened.content,
         items: opened.items,
+      });
+      setDraft("");
+      setLocationInput(opened.location);
+      setPageMode("view");
+      return nextLocation;
+    }
+
+    if (opened.kind === "specialCategories") {
+      setActiveNamespace(opened.namespace);
+      setSidebarContent(opened.content);
+      setPageView(null);
+      setFileView(null);
+      setSpecialView({
+        kind: "categories",
+        location: opened.location,
+        namespace: opened.namespace,
+        content: opened.content,
+        categories: opened.categories,
+        uncategorizedPages: opened.uncategorized_pages,
       });
       setDraft("");
       setLocationInput(opened.location);
@@ -455,7 +486,12 @@ export function HomePage() {
         if (item.content_kind === "page") {
           const page = await readDeletedPage(activeNamespace.id, item.file_id);
           setPageView({ kind: "page", namespace: activeNamespace, page, isReadOnly: true });
-          pageViewRef.current = { kind: "page", namespace: activeNamespace, page, isReadOnly: true };
+          pageViewRef.current = {
+            kind: "page",
+            namespace: activeNamespace,
+            page,
+            isReadOnly: true,
+          };
           setFileView(null);
           setSpecialView(null);
           setDraft(page.content);
@@ -1042,6 +1078,15 @@ export function HomePage() {
               />
             )}
 
+            {specialView?.kind === "categories" && (
+              <CategoriesSpecialPage
+                categories={specialView.categories}
+                namespace={specialView.namespace}
+                uncategorizedPages={specialView.uncategorizedPages}
+                onOpenLocation={(location) => void navigate(location)}
+              />
+            )}
+
             {pageView && (
               <PageSurface
                 backlinks={pageView.page.backlinks}
@@ -1057,6 +1102,9 @@ export function HomePage() {
                 mode={pageMode}
                 readOnly={pageView.isReadOnly ?? false}
                 onDraftChange={setDraft}
+                onCategoriesChange={(categories) =>
+                  setDraft(updateMarkdownCategories(draftRef.current, categories))
+                }
                 onModeChange={(mode) => void handleModeChange(mode)}
                 onToggleFavorite={() =>
                   void handleToggleFavoriteContent(

@@ -44,6 +44,7 @@ export type PageContent = {
   title: string;
   location: string;
   content: string;
+  categories: string[];
   backlinks: BacklinkSummary[];
   latest_revision_id: string | null;
   is_virtual?: boolean;
@@ -151,6 +152,18 @@ export type FavoriteContentSummary = {
   content_kind: "page" | "file" | string;
 };
 
+export type CategoryPageSummary = {
+  file_id: string;
+  path: string;
+  title: string;
+  location: string;
+};
+
+export type CategoryGroupSummary = {
+  name: string;
+  pages: CategoryPageSummary[];
+};
+
 export type MarkdownLinkStatus = {
   location: string;
   exists: boolean;
@@ -202,6 +215,11 @@ export type ResolvedLocation =
       kind: "specialFavorites";
       namespace: NamespaceSummary;
       location: string;
+    }
+  | {
+      kind: "specialCategories";
+      namespace: NamespaceSummary;
+      location: string;
     };
 
 export type OpenLocationResult =
@@ -250,6 +268,14 @@ export type OpenLocationResult =
       namespace: NamespaceSummary;
       content: ContentTree;
       items: FavoriteContentSummary[];
+    }
+  | {
+      kind: "specialCategories";
+      location: string;
+      namespace: NamespaceSummary;
+      content: ContentTree;
+      categories: CategoryGroupSummary[];
+      uncategorized_pages: CategoryPageSummary[];
     };
 
 export function listNamespaces() {

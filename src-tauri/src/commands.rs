@@ -297,7 +297,8 @@ pub fn resolve_markdown_link_status(
         | ResolvedLocation::SpecialPages { .. }
         | ResolvedLocation::SpecialPagesList { .. }
         | ResolvedLocation::SpecialDeletedPages { .. }
-        | ResolvedLocation::SpecialFavorites { .. } => true,
+        | ResolvedLocation::SpecialFavorites { .. }
+        | ResolvedLocation::SpecialCategories { .. } => true,
     };
 
     Ok(MarkdownLinkStatus {
@@ -478,6 +479,21 @@ pub fn open_location(
                 items,
             })
         }
+        ResolvedLocation::SpecialCategories {
+            namespace,
+            location,
+        } => {
+            let detail = crate::namespace::open_namespace(&app, namespace.id.clone())?;
+            let (categories, uncategorized_pages) =
+                crate::namespace::list_category_groups(&detail.namespace)?;
+            Ok(OpenLocationResult::SpecialCategories {
+                location,
+                namespace: detail.namespace,
+                content: detail.content,
+                categories,
+                uncategorized_pages,
+            })
+        }
     }
 }
 
@@ -501,6 +517,7 @@ fn read_page_or_virtual(
                 .to_string(),
             location: crate::namespace::page_location(path, namespace),
             content: String::new(),
+            categories: Vec::new(),
             backlinks: crate::namespace::page_backlinks_for_namespace(namespace, path)?,
             latest_revision_id: None,
             is_virtual: true,
@@ -536,6 +553,11 @@ fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialPageS
             title: "Favorites".to_string(),
             description: "お気に入りのページとファイルを表示します。".to_string(),
             location: format!("{}:Special:Favorites", namespace.name),
+        },
+        SpecialPageSummary {
+            title: "Categories".to_string(),
+            description: "カテゴリ別にページを表示します。".to_string(),
+            location: format!("{}:Special:Categories", namespace.name),
         },
     ]
 }
