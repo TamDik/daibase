@@ -656,7 +656,7 @@ fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialPageS
         },
         SpecialPageSummary {
             title: "Plugins".to_string(),
-            description: "インストール済みプラグインの確認と有効化を行います。".to_string(),
+            description: "登録済みプラグインの確認と有効化を行います。".to_string(),
             location: format!("{}:Special:Plugins", namespace.name),
         },
     ]

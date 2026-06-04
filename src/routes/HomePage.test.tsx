@@ -322,7 +322,7 @@ describe("HomePage", () => {
             },
             {
               title: "Plugins",
-              description: "インストール済みプラグインの確認と有効化を行います。",
+              description: "登録済みプラグインの確認と有効化を行います。",
               location: "Work:Special:Plugins",
             },
           ],
@@ -514,6 +514,7 @@ describe("HomePage", () => {
 
     const frame = await screen.findByTitle("Calendar");
     expect(frame).toHaveAttribute("srcdoc", "<!doctype html><html><body>Calendar</body></html>");
+    expect(frame).toHaveAttribute("scrolling", "no");
     expect(api.resolvePluginMain).toHaveBeenCalledWith("com.example.calendar");
     expect(screen.queryByRole("textbox", { name: "Markdown" })).not.toBeInTheDocument();
   });
@@ -879,12 +880,12 @@ describe("HomePage", () => {
     expect(screen.getByText("カテゴリ別にページを表示します。")).toBeInTheDocument();
     expect(screen.getByText("Plugins")).toBeInTheDocument();
     expect(
-      screen.getByText("インストール済みプラグインの確認と有効化を行います。"),
+      screen.getByText("登録済みプラグインの確認と有効化を行います。"),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Work namespace/)).not.toBeInTheDocument();
   });
 
-  it("Special:Plugins でインストール済みプラグインを表示する", async () => {
+  it("Special:Plugins で登録済みプラグインを表示する", async () => {
     const user = userEvent.setup();
     renderHomePage();
 

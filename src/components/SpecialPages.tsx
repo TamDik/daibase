@@ -429,7 +429,7 @@ export function PluginsSpecialPage({
             startIcon={<FolderOpenOutlined fontSize="small" />}
             onClick={onInstallFromFolder}
           >
-            フォルダからインストール
+            フォルダを登録
           </Button>
         </Box>
 
@@ -437,7 +437,7 @@ export function PluginsSpecialPage({
 
         {plugins.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            インストール済みプラグインはありません。
+            登録済みプラグインはありません。
           </Typography>
         ) : (
           <List dense disablePadding>

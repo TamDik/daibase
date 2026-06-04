@@ -9,13 +9,17 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 const PLUGINS_DIR_NAME: &str = "plugins";
-const INSTALLED_DIR_NAME: &str = "installed";
 const REGISTRY_FILE_NAME: &str = "registry.json";
 const MANIFEST_FILE_NAME: &str = "manifest.json";
 const DOCUMENTATION_ENTRY_PATH: &str = "README.md";
 
 pub fn list_plugins(app: &AppHandle) -> Result<Vec<InstalledPluginSummary>, String> {
-    Ok(read_registry(app)?.plugins)
+    let mut plugins = read_registry(app)?.plugins;
+    for plugin in &mut plugins {
+        refresh_local_folder_plugin(plugin)?;
+    }
+    plugins.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(plugins)
 }
 
 pub fn install_plugin_from_folder(
@@ -24,29 +28,27 @@ pub fn install_plugin_from_folder(
 ) -> Result<InstalledPluginSummary, String> {
     let manifest = read_manifest_from_folder(&source_path)?;
     validate_manifest(&manifest)?;
-
-    let plugin_dir = installed_plugin_dir(app, &manifest.id)?;
-    if plugin_dir.exists() {
-        return Err(format!(
-            "プラグインは既にインストールされています: {}",
-            manifest.id
-        ));
-    }
-
-    copy_plugin_folder(&source_path, &plugin_dir)?;
+    let source_path = fs::canonicalize(source_path).map_err(to_error)?;
 
     let mut registry = read_registry(app)?;
+    let enabled = registry
+        .plugins
+        .iter()
+        .find(|plugin| plugin.id == manifest.id)
+        .map(|plugin| plugin.enabled)
+        .unwrap_or(false);
     let plugin = InstalledPluginSummary {
         id: manifest.id.clone(),
         name: manifest.name.clone(),
         version: manifest.version.clone(),
         description: manifest.description.clone(),
-        enabled: false,
+        enabled,
         source: PluginInstallSource::LocalFolder {
             path: source_path.to_string_lossy().to_string(),
         },
         manifest,
     };
+    registry.plugins.retain(|current| current.id != plugin.id);
     registry.plugins.push(plugin.clone());
     registry
         .plugins
@@ -93,8 +95,9 @@ pub fn resolve_plugin_main(
         return Err("プラグインが無効です。".to_string());
     }
 
-    validate_relative_main_path(&plugin.manifest.main)?;
-    let main_path = installed_plugin_dir(app, &plugin.id)?.join(&plugin.manifest.main);
+    let manifest = current_plugin_manifest(plugin)?;
+    validate_relative_main_path(&manifest.main)?;
+    let main_path = plugin_source_dir(plugin)?.join(&manifest.main);
     if !main_path.is_file() {
         return Err("プラグインの main ファイルが見つかりません。".to_string());
     }
@@ -113,11 +116,15 @@ pub fn read_plugin_documentation(
     plugin_id: String,
 ) -> Result<PluginDocumentation, String> {
     let registry = read_registry(app)?;
-    if !registry.plugins.iter().any(|plugin| plugin.id == plugin_id) {
+    let Some(plugin) = registry
+        .plugins
+        .iter()
+        .find(|plugin| plugin.id == plugin_id)
+    else {
         return Err("プラグインが見つかりません。".to_string());
-    }
+    };
 
-    read_plugin_documentation_from_dir(&plugin_id, &installed_plugin_dir(app, &plugin_id)?)
+    read_plugin_documentation_from_dir(&plugin_id, &plugin_source_dir(plugin)?)
 }
 
 fn read_plugin_documentation_from_dir(
@@ -149,6 +156,31 @@ fn read_manifest_from_folder(source_path: &Path) -> Result<PluginManifest, Strin
         .map_err(|_| "manifest.json が見つからないか読み込めません。".to_string())?;
     serde_json::from_str(&manifest_content)
         .map_err(|error| format!("manifest.json の形式が正しくありません: {error}"))
+}
+
+fn refresh_local_folder_plugin(plugin: &mut InstalledPluginSummary) -> Result<(), String> {
+    let manifest = current_plugin_manifest(plugin)?;
+    plugin.id = manifest.id.clone();
+    plugin.name = manifest.name.clone();
+    plugin.version = manifest.version.clone();
+    plugin.description = manifest.description.clone();
+    plugin.manifest = manifest;
+    Ok(())
+}
+
+fn current_plugin_manifest(plugin: &InstalledPluginSummary) -> Result<PluginManifest, String> {
+    let manifest = read_manifest_from_folder(&plugin_source_dir(plugin)?)?;
+    validate_manifest(&manifest)?;
+    if manifest.id != plugin.id {
+        return Err(format!("プラグイン ID が変更されています: {}", plugin.id));
+    }
+    Ok(manifest)
+}
+
+fn plugin_source_dir(plugin: &InstalledPluginSummary) -> Result<PathBuf, String> {
+    match &plugin.source {
+        PluginInstallSource::LocalFolder { path } => Ok(PathBuf::from(path)),
+    }
 }
 
 fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
@@ -265,29 +297,6 @@ fn validate_permission(permission: &PluginPermission) -> Result<(), String> {
     }
 }
 
-fn copy_plugin_folder(source_path: &Path, target_path: &Path) -> Result<(), String> {
-    fs::create_dir_all(target_path).map_err(to_error)?;
-    copy_dir_entries(source_path, target_path)
-}
-
-fn copy_dir_entries(source_path: &Path, target_path: &Path) -> Result<(), String> {
-    for entry in fs::read_dir(source_path).map_err(to_error)? {
-        let entry = entry.map_err(to_error)?;
-        let source_entry_path = entry.path();
-        let target_entry_path = target_path.join(entry.file_name());
-        let file_type = entry.file_type().map_err(to_error)?;
-
-        if file_type.is_dir() {
-            fs::create_dir_all(&target_entry_path).map_err(to_error)?;
-            copy_dir_entries(&source_entry_path, &target_entry_path)?;
-        } else if file_type.is_file() {
-            fs::copy(&source_entry_path, &target_entry_path).map_err(to_error)?;
-        }
-    }
-
-    Ok(())
-}
-
 fn read_registry(app: &AppHandle) -> Result<PluginRegistry, String> {
     let path = registry_path(app)?;
     if !path.exists() {
@@ -307,12 +316,6 @@ fn registry_path(app: &AppHandle) -> Result<PathBuf, String> {
     let plugin_dir = plugins_dir(app)?;
     fs::create_dir_all(&plugin_dir).map_err(to_error)?;
     Ok(plugin_dir.join(REGISTRY_FILE_NAME))
-}
-
-fn installed_plugin_dir(app: &AppHandle, plugin_id: &str) -> Result<PathBuf, String> {
-    let dir = plugins_dir(app)?.join(INSTALLED_DIR_NAME);
-    fs::create_dir_all(&dir).map_err(to_error)?;
-    Ok(dir.join(plugin_id))
 }
 
 fn plugins_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -394,6 +397,45 @@ mod tests {
         );
 
         fs::remove_dir_all(plugin_dir).unwrap();
+    }
+
+    #[test]
+    fn refreshes_local_folder_manifest_from_source() {
+        let plugin_dir = test_plugin_dir("refreshes_local_folder_manifest_from_source");
+        fs::create_dir_all(&plugin_dir).unwrap();
+        let mut manifest = valid_manifest();
+        manifest.version = "0.2.0".to_string();
+        manifest.description = "Updated calendar view".to_string();
+        write_manifest(&plugin_dir, &manifest);
+
+        let mut plugin = InstalledPluginSummary {
+            id: "com.example.calendar".to_string(),
+            name: "Calendar".to_string(),
+            version: "0.1.0".to_string(),
+            description: "Calendar view".to_string(),
+            enabled: true,
+            source: PluginInstallSource::LocalFolder {
+                path: plugin_dir.to_string_lossy().to_string(),
+            },
+            manifest: valid_manifest(),
+        };
+
+        refresh_local_folder_plugin(&mut plugin).unwrap();
+
+        assert!(plugin.enabled);
+        assert_eq!(plugin.version, "0.2.0");
+        assert_eq!(plugin.description, "Updated calendar view");
+        assert_eq!(plugin.manifest.version, "0.2.0");
+
+        fs::remove_dir_all(plugin_dir).unwrap();
+    }
+
+    fn write_manifest(plugin_dir: &Path, manifest: &PluginManifest) {
+        fs::write(
+            plugin_dir.join("manifest.json"),
+            serde_json::to_string_pretty(manifest).unwrap(),
+        )
+        .unwrap();
     }
 
     fn test_plugin_dir(name: &str) -> PathBuf {

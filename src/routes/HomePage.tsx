@@ -762,7 +762,7 @@ export function HomePage() {
             }
           : current,
       );
-      setSavedMessage("プラグインをインストールしました");
+      setSavedMessage("プラグインフォルダを登録しました");
     } catch (caught) {
       setError(errorMessage(caught));
     }

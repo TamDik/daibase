@@ -281,16 +281,18 @@ fs.writeFileSync(htmlPath, html);
 fs.rmSync(path.join(distDir, "assets"), { force: true, recursive: true });
 ```
 
-## インストールと更新
+## 登録と更新
 
 1. `pnpm build` などで `dist/index.html` を作成します。
 2. Daibase の `Special:Plugins` を開きます。
-3. ローカルフォルダからプラグインフォルダを選択してインストールします。
-4. インストール後、プラグインを有効化します。
+3. ローカルフォルダからプラグインフォルダを選択して登録します。
+4. 登録後、プラグインを有効化します。
 
-Daibase はインストール時にプラグインフォルダを app data directory へコピーします。元フォルダを編集しても、インストール済みプラグインは自動更新されません。
+Daibase は登録したローカルフォルダを直接参照します。app data directory にはプラグイン ID、有効状態、登録元パスなどの registry だけを保存し、プラグイン本体はコピーしません。
 
-同じ `id` のプラグインを再インストールすることは現在できません。開発中に差し替える場合は、バージョン違いでも `id` を変えるか、アプリ側のデータを手動で整理してください。
+`manifest.json`, `README.md`, `dist/index.html` は表示や実行のたびに登録元フォルダから読みます。React / TypeScript で開発している場合、ソース変更後に `pnpm build` を実行すれば、同じ登録のまま変更が反映されます。
+
+同じ `id` のプラグインフォルダを再登録した場合は、登録元パスと manifest 情報を更新し、有効状態は維持します。
 
 ## セキュリティと制限
 

@@ -390,7 +390,9 @@ function PluginHostView({
   readOnly: boolean;
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const iframeResizeCleanupRef = useRef<(() => void) | null>(null);
   const [pluginHtml, setPluginHtml] = useState<string | null>(null);
+  const [iframeHeight, setIframeHeight] = useState(420);
   const [error, setError] = useState<string | null>(null);
   const parsedMarkdown = useMemo(() => markdownContext(content), [content]);
 
@@ -415,6 +417,8 @@ function PluginHostView({
 
     return () => {
       isMounted = false;
+      iframeResizeCleanupRef.current?.();
+      iframeResizeCleanupRef.current = null;
     };
   }, [plugin.id]);
 
@@ -430,6 +434,8 @@ function PluginHostView({
       parsedMarkdown,
       pluginId: plugin.id,
     });
+    window.setTimeout(() => updateIframeHeight(iframeRef.current, setIframeHeight), 0);
+    window.setTimeout(() => updateIframeHeight(iframeRef.current, setIframeHeight), 50);
   }, [content, contribution.id, pageContext, parsedMarkdown, plugin.id, pluginHtml, readOnly]);
 
   if (error) {
@@ -457,7 +463,10 @@ function PluginHostView({
       ref={iframeRef}
       title={contribution.name}
       srcDoc={pluginHtml}
-      onLoad={() =>
+      scrolling="no"
+      onLoad={() => {
+        iframeResizeCleanupRef.current?.();
+        iframeResizeCleanupRef.current = observeIframeHeight(iframeRef.current, setIframeHeight);
         postRenderMessage(iframeRef.current, {
           contributionId: contribution.id,
           content,
@@ -465,17 +474,60 @@ function PluginHostView({
           pageContext,
           parsedMarkdown,
           pluginId: plugin.id,
-        })
-      }
+        });
+      }}
       sx={{
         border: 0,
         display: "block",
-        height: "calc(100vh - 160px)",
+        height: iframeHeight,
         minHeight: 420,
+        overflow: "hidden",
         width: "100%",
       }}
     />
   );
+}
+
+function observeIframeHeight(
+  iframe: HTMLIFrameElement | null,
+  setIframeHeight: (height: number) => void,
+) {
+  updateIframeHeight(iframe, setIframeHeight);
+
+  const document = iframe?.contentDocument;
+  if (!document || typeof ResizeObserver === "undefined") {
+    return null;
+  }
+
+  const observer = new ResizeObserver(() => updateIframeHeight(iframe, setIframeHeight));
+  if (document.documentElement) {
+    observer.observe(document.documentElement);
+  }
+  if (document.body) {
+    observer.observe(document.body);
+  }
+
+  return () => observer.disconnect();
+}
+
+function updateIframeHeight(
+  iframe: HTMLIFrameElement | null,
+  setIframeHeight: (height: number) => void,
+) {
+  const document = iframe?.contentDocument;
+  if (!document) {
+    return;
+  }
+
+  const body = document.body;
+  const documentElement = document.documentElement;
+  const contentHeight = Math.max(
+    body?.scrollHeight ?? 0,
+    body?.offsetHeight ?? 0,
+    documentElement?.scrollHeight ?? 0,
+    documentElement?.offsetHeight ?? 0,
+  );
+  setIframeHeight(Math.max(420, Math.ceil(contentHeight)));
 }
 
 function postRenderMessage(
