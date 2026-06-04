@@ -232,6 +232,13 @@ pub struct PluginMainResolution {
     pub html: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct PluginDocumentation {
+    pub plugin_id: String,
+    pub path: PathBuf,
+    pub markdown: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum PluginInstallSource {

@@ -41,6 +41,7 @@ vi.mock("../api/tauriCommands", () => ({
   listNamespaces: vi.fn(),
   openInitialLocation: vi.fn(),
   openLocation: vi.fn(),
+  readPluginDocumentation: vi.fn(),
   readDeletedFile: vi.fn(),
   readDeletedPage: vi.fn(),
   readPageHistorySnapshot: vi.fn(),
@@ -128,6 +129,7 @@ describe("HomePage", () => {
     vi.mocked(api.listPageHistory).mockReset();
     vi.mocked(api.openInitialLocation).mockReset();
     vi.mocked(api.openLocation).mockReset();
+    vi.mocked(api.readPluginDocumentation).mockReset();
     vi.mocked(api.readDeletedFile).mockReset();
     vi.mocked(api.readDeletedPage).mockReset();
     vi.mocked(api.readPageHistorySnapshot).mockReset();
@@ -151,6 +153,11 @@ describe("HomePage", () => {
     vi.mocked(api.resolvePluginMain).mockResolvedValue({
       path: "/tmp/calendar-plugin/dist/index.html",
       html: "<!doctype html><html><body>Calendar</body></html>",
+    });
+    vi.mocked(api.readPluginDocumentation).mockResolvedValue({
+      plugin_id: "com.example.calendar",
+      path: "/tmp/calendar-plugin/README.md",
+      markdown: "# Calendar Plugin\n\nUse `daibase.view: calendar`.",
     });
     vi.mocked(api.readPageHistorySnapshot).mockResolvedValue({
       entry: historyEntries()[0],
@@ -891,6 +898,23 @@ describe("HomePage", () => {
     expect(screen.getByText("Calendar")).toBeInTheDocument();
     expect(screen.getByText("page-read")).toBeInTheDocument();
     expect(screen.getByText("location-open")).toBeInTheDocument();
+  });
+
+  it("Special:Plugins でプラグインの README を表示する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:Plugins");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    await user.click(await screen.findByRole("button", { name: "Calendar のドキュメントを表示" }));
+
+    expect(api.readPluginDocumentation).toHaveBeenCalledWith("com.example.calendar");
+    expect(await screen.findByRole("dialog", { name: "Calendar" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Calendar Plugin" })).toBeInTheDocument();
+    expect(screen.getByText(/daibase\.view: calendar/)).toBeInTheDocument();
   });
 
   it("Special:Categories でカテゴリ別にページを表示する", async () => {

@@ -1,6 +1,7 @@
 use crate::models::{
-    InstalledPluginSummary, PluginContribution, PluginInstallSource, PluginMainResolution,
-    PluginManifest, PluginPermission, PluginRegistry, PluginViewKind, PluginViewSlot,
+    InstalledPluginSummary, PluginContribution, PluginDocumentation, PluginInstallSource,
+    PluginMainResolution, PluginManifest, PluginPermission, PluginRegistry, PluginViewKind,
+    PluginViewSlot,
 };
 use serde::Serialize;
 use std::fs;
@@ -11,6 +12,7 @@ const PLUGINS_DIR_NAME: &str = "plugins";
 const INSTALLED_DIR_NAME: &str = "installed";
 const REGISTRY_FILE_NAME: &str = "registry.json";
 const MANIFEST_FILE_NAME: &str = "manifest.json";
+const DOCUMENTATION_ENTRY_PATH: &str = "README.md";
 
 pub fn list_plugins(app: &AppHandle) -> Result<Vec<InstalledPluginSummary>, String> {
     Ok(read_registry(app)?.plugins)
@@ -103,6 +105,37 @@ pub fn resolve_plugin_main(
     Ok(PluginMainResolution {
         path: main_path,
         html,
+    })
+}
+
+pub fn read_plugin_documentation(
+    app: &AppHandle,
+    plugin_id: String,
+) -> Result<PluginDocumentation, String> {
+    let registry = read_registry(app)?;
+    if !registry.plugins.iter().any(|plugin| plugin.id == plugin_id) {
+        return Err("プラグインが見つかりません。".to_string());
+    }
+
+    read_plugin_documentation_from_dir(&plugin_id, &installed_plugin_dir(app, &plugin_id)?)
+}
+
+fn read_plugin_documentation_from_dir(
+    plugin_id: &str,
+    plugin_dir: &Path,
+) -> Result<PluginDocumentation, String> {
+    let docs_path = plugin_dir.join(DOCUMENTATION_ENTRY_PATH);
+    if !docs_path.is_file() {
+        return Err("プラグインの README.md が見つかりません。".to_string());
+    }
+
+    let markdown = fs::read_to_string(&docs_path)
+        .map_err(|_| "プラグインの README.md を読み込めません。".to_string())?;
+
+    Ok(PluginDocumentation {
+        plugin_id: plugin_id.to_string(),
+        path: docs_path,
+        markdown,
     })
 }
 
@@ -332,6 +365,39 @@ mod tests {
             validate_manifest(&manifest).unwrap_err(),
             "plugin id には英数字、ドット、ハイフン、アンダースコアだけ使えます。"
         );
+    }
+
+    #[test]
+    fn reads_plugin_documentation_from_readme() {
+        let plugin_dir = test_plugin_dir("reads_plugin_documentation_from_readme");
+        fs::create_dir_all(&plugin_dir).unwrap();
+        fs::write(plugin_dir.join("README.md"), "# Calendar\n\nPlugin docs").unwrap();
+
+        let documentation =
+            read_plugin_documentation_from_dir("com.example.calendar", &plugin_dir).unwrap();
+
+        assert_eq!(documentation.plugin_id, "com.example.calendar");
+        assert_eq!(documentation.markdown, "# Calendar\n\nPlugin docs");
+        assert_eq!(documentation.path, plugin_dir.join("README.md"));
+
+        fs::remove_dir_all(plugin_dir).unwrap();
+    }
+
+    #[test]
+    fn rejects_missing_plugin_documentation() {
+        let plugin_dir = test_plugin_dir("rejects_missing_plugin_documentation");
+        fs::create_dir_all(&plugin_dir).unwrap();
+
+        assert_eq!(
+            read_plugin_documentation_from_dir("com.example.calendar", &plugin_dir).unwrap_err(),
+            "プラグインの README.md が見つかりません。"
+        );
+
+        fs::remove_dir_all(plugin_dir).unwrap();
+    }
+
+    fn test_plugin_dir(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("daibase-plugin-test-{name}-{}", std::process::id()))
     }
 
     fn valid_manifest() -> PluginManifest {

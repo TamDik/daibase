@@ -3,7 +3,8 @@ use crate::models::{
     ContentTree, DeletedContentSummary, FavoriteContentSummary, FileHistoryEntry,
     InstalledPluginSummary, MarkdownImageResolution, MarkdownLinkStatus, McpServerStatus,
     NamespaceDetail, NamespaceSummary, OpenLocationResult, PageContent, PageHistorySnapshot,
-    PluginMainResolution, SaveFileResult, SavePageResult, SaveResult, SpecialPageSummary,
+    PluginDocumentation, PluginMainResolution, SaveFileResult, SavePageResult, SaveResult,
+    SpecialPageSummary,
 };
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
@@ -46,6 +47,14 @@ pub fn resolve_plugin_main(
     plugin_id: String,
 ) -> Result<PluginMainResolution, String> {
     crate::plugins::resolve_plugin_main(&app, plugin_id)
+}
+
+#[tauri::command]
+pub fn read_plugin_documentation(
+    app: AppHandle,
+    plugin_id: String,
+) -> Result<PluginDocumentation, String> {
+    crate::plugins::read_plugin_documentation(&app, plugin_id)
 }
 
 #[tauri::command]

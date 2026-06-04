@@ -252,6 +252,12 @@ export type PluginMainResolution = {
   html: string;
 };
 
+export type PluginDocumentation = {
+  plugin_id: string;
+  path: string;
+  markdown: string;
+};
+
 export type MarkdownLinkStatus = {
   location: string;
   exists: boolean;
@@ -405,6 +411,12 @@ export function setPluginEnabled(pluginId: string, enabled: boolean) {
 
 export function resolvePluginMain(pluginId: string) {
   return invoke<PluginMainResolution>("resolve_plugin_main", {
+    pluginId,
+  });
+}
+
+export function readPluginDocumentation(pluginId: string) {
+  return invoke<PluginDocumentation>("read_plugin_documentation", {
     pluginId,
   });
 }

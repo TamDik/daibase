@@ -41,6 +41,7 @@ import {
   listNamespaces,
   openInitialLocation,
   openLocation,
+  readPluginDocumentation,
   readDeletedFile,
   readDeletedPage,
   readPageHistorySnapshot,
@@ -1228,6 +1229,7 @@ export function HomePage() {
                   namespace={specialView.namespace}
                   plugins={specialView.plugins}
                   onInstallFromFolder={() => void handleInstallPluginFromFolder()}
+                  onReadPluginDocumentation={(plugin) => readPluginDocumentation(plugin.id)}
                   onTogglePlugin={(plugin, enabled) => void handleTogglePlugin(plugin, enabled)}
                 />
               )}

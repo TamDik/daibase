@@ -23,6 +23,7 @@ pub fn run() {
             commands::install_plugin_from_folder,
             commands::set_plugin_enabled,
             commands::resolve_plugin_main,
+            commands::read_plugin_documentation,
             commands::list_namespaces,
             commands::create_namespace,
             commands::open_namespace,

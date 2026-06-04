@@ -456,12 +456,13 @@ verify_history(namespace_id: String) -> HistoryCheckResult
     installed/
       com.example.calendar/
         manifest.json
+        README.md
         dist/
 ```
 
 `registry.json` には、インストール済みプラグインの ID、名前、バージョン、有効状態、インストール元、manifest の内容を保存します。インストール直後は無効にし、ユーザーが `Special:Plugins` で有効化します。
 
-各プラグインはルートに `manifest.json` を持ちます。初期 schema は `schemaVersion: 1` とし、プラグイン ID、表示名、バージョン、main、contributions、permissions を含めます。
+各プラグインはルートに `manifest.json` を持ちます。初期 schema は `schemaVersion: 1` とし、プラグイン ID、表示名、バージョン、main、contributions、permissions を含めます。ルートの `README.md` はアプリ内ドキュメントとして扱い、`Special:Plugins` から確認できるようにします。
 
 ```json
 {
