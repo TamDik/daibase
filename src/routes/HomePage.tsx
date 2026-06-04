@@ -156,6 +156,7 @@ export function HomePage() {
   const [pageMode, setPageMode] = useState<PageMode>("view");
   const [fileMode, setFileMode] = useState<FileMode>("detail");
   const [fileNoteDraft, setFileNoteDraft] = useState("");
+  const [plugins, setPlugins] = useState<InstalledPluginSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -164,9 +165,8 @@ export function HomePage() {
   const [historyEntries, setHistoryEntries] = useState<FileHistoryEntry[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [selectedHistoryRevisionId, setSelectedHistoryRevisionId] = useState<string | null>(null);
-  const [selectedHistorySnapshot, setSelectedHistorySnapshot] = useState<PageHistorySnapshot | null>(
-    null,
-  );
+  const [selectedHistorySnapshot, setSelectedHistorySnapshot] =
+    useState<PageHistorySnapshot | null>(null);
   const [selectedHistoryError, setSelectedHistoryError] = useState<string | null>(null);
   const [isSelectedHistoryLoading, setIsSelectedHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -300,6 +300,7 @@ export function HomePage() {
     }
 
     if (opened.kind === "specialPlugins") {
+      setPlugins(opened.plugins);
       setActiveNamespace(opened.namespace);
       setSidebarContent(opened.content);
       setPageView(null);
@@ -685,7 +686,11 @@ export function HomePage() {
       setIsLoading(true);
       setError(null);
       try {
-        const opened = await openInitialLocation();
+        const [opened, installedPlugins] = await Promise.all([
+          openInitialLocation(),
+          listPlugins(),
+        ]);
+        setPlugins(installedPlugins);
         const location = applyOpenedLocation(opened);
         setHistory([location]);
         setHistoryIndex(0);
@@ -747,6 +752,7 @@ export function HomePage() {
 
       await installPluginFromFolder(selected);
       const plugins = await listPlugins();
+      setPlugins(plugins);
       setSpecialView((current) =>
         current?.kind === "plugins"
           ? {
@@ -768,6 +774,7 @@ export function HomePage() {
       try {
         await setPluginEnabled(plugin.id, enabled);
         const plugins = await listPlugins();
+        setPlugins(plugins);
         setSpecialView((current) =>
           current?.kind === "plugins"
             ? {
@@ -1148,149 +1155,150 @@ export function HomePage() {
             }
           />
 
-        <Box
-          sx={{
-            display: "flex",
-            flex: 1,
-            flexDirection: "column",
-            minHeight: 0,
-            minWidth: 0,
-            overflow: "hidden",
-          }}
-        >
-          <Stack spacing={2} sx={{ flexGrow: 1, minHeight: 0 }}>
-            {isLoading && <Alert severity="info">読み込み中</Alert>}
-            {error && <Alert severity="error">{error}</Alert>}
+          <Box
+            sx={{
+              display: "flex",
+              flex: 1,
+              flexDirection: "column",
+              minHeight: 0,
+              minWidth: 0,
+              overflow: "hidden",
+            }}
+          >
+            <Stack spacing={2} sx={{ flexGrow: 1, minHeight: 0 }}>
+              {isLoading && <Alert severity="info">読み込み中</Alert>}
+              {error && <Alert severity="error">{error}</Alert>}
 
-            {specialView?.kind === "namespaces" && (
-              <NamespacesSpecialPage
-                namespaceName={namespaceName}
-                namespaces={namespaces}
-                rootPath={rootPath}
-                onCreateNamespace={handleCreateNamespace}
-                onNamespaceNameChange={setNamespaceName}
-                onOpenLocation={(location) => void navigate(location)}
-                onRootPathSelect={() => void handleSelectRootPath()}
-              />
-            )}
+              {specialView?.kind === "namespaces" && (
+                <NamespacesSpecialPage
+                  namespaceName={namespaceName}
+                  namespaces={namespaces}
+                  rootPath={rootPath}
+                  onCreateNamespace={handleCreateNamespace}
+                  onNamespaceNameChange={setNamespaceName}
+                  onOpenLocation={(location) => void navigate(location)}
+                  onRootPathSelect={() => void handleSelectRootPath()}
+                />
+              )}
 
-            {specialView?.kind === "specialPages" && (
-              <SpecialPagesIndex
-                location={specialView.location}
-                pages={specialView.pages}
-                onOpenLocation={(location) => void navigate(location)}
-              />
-            )}
+              {specialView?.kind === "specialPages" && (
+                <SpecialPagesIndex
+                  location={specialView.location}
+                  pages={specialView.pages}
+                  onOpenLocation={(location) => void navigate(location)}
+                />
+              )}
 
-            {specialView?.kind === "pages" && (
-              <PagesSpecialPage
-                content={specialView.content}
-                namespace={specialView.namespace}
-                onOpenLocation={(location) => void navigate(location)}
-              />
-            )}
+              {specialView?.kind === "pages" && (
+                <PagesSpecialPage
+                  content={specialView.content}
+                  namespace={specialView.namespace}
+                  onOpenLocation={(location) => void navigate(location)}
+                />
+              )}
 
-            {specialView?.kind === "deletedPages" && (
-              <DeletedPagesSpecialPage
-                items={specialView.items}
-                namespace={specialView.namespace}
-                onOpenDeletedContent={(item) => void handleOpenDeletedContent(item)}
-                onRestoreDeletedContent={(item) => void handleRestoreDeletedContent(item)}
-              />
-            )}
+              {specialView?.kind === "deletedPages" && (
+                <DeletedPagesSpecialPage
+                  items={specialView.items}
+                  namespace={specialView.namespace}
+                  onOpenDeletedContent={(item) => void handleOpenDeletedContent(item)}
+                  onRestoreDeletedContent={(item) => void handleRestoreDeletedContent(item)}
+                />
+              )}
 
-            {specialView?.kind === "favorites" && (
-              <FavoritesSpecialPage
-                items={specialView.items}
-                namespace={specialView.namespace}
-                onOpenLocation={(location) => void navigate(location)}
-              />
-            )}
+              {specialView?.kind === "favorites" && (
+                <FavoritesSpecialPage
+                  items={specialView.items}
+                  namespace={specialView.namespace}
+                  onOpenLocation={(location) => void navigate(location)}
+                />
+              )}
 
-            {specialView?.kind === "categories" && (
-              <CategoriesSpecialPage
-                categories={specialView.categories}
-                namespace={specialView.namespace}
-                uncategorizedPages={specialView.uncategorizedPages}
-                onOpenLocation={(location) => void navigate(location)}
-              />
-            )}
+              {specialView?.kind === "categories" && (
+                <CategoriesSpecialPage
+                  categories={specialView.categories}
+                  namespace={specialView.namespace}
+                  uncategorizedPages={specialView.uncategorizedPages}
+                  onOpenLocation={(location) => void navigate(location)}
+                />
+              )}
 
-            {specialView?.kind === "plugins" && (
-              <PluginsSpecialPage
-                namespace={specialView.namespace}
-                plugins={specialView.plugins}
-                onInstallFromFolder={() => void handleInstallPluginFromFolder()}
-                onTogglePlugin={(plugin, enabled) => void handleTogglePlugin(plugin, enabled)}
-              />
-            )}
+              {specialView?.kind === "plugins" && (
+                <PluginsSpecialPage
+                  namespace={specialView.namespace}
+                  plugins={specialView.plugins}
+                  onInstallFromFolder={() => void handleInstallPluginFromFolder()}
+                  onTogglePlugin={(plugin, enabled) => void handleTogglePlugin(plugin, enabled)}
+                />
+              )}
 
-            {pageView && (
-              <PageSurface
-                backlinks={pageView.page.backlinks}
-                draft={draft}
-                editorKey={`${pageView.namespace.id}:${pageView.page.path}`}
-                historyEntries={historyEntries}
-                historyError={historyError}
-                isHistoryLoading={isHistoryLoading}
-                isDirty={isDirty}
-                isSaving={isSaving}
-                isVirtual={pageView.page.is_virtual ?? false}
-                isFavorite={pageView.page.is_favorite ?? false}
-                mode={pageMode}
-                readOnly={pageView.isReadOnly ?? false}
-                onDraftChange={setDraft}
-                onCategoriesChange={(categories) =>
-                  setDraft(updateMarkdownCategories(draftRef.current, categories))
-                }
-                onModeChange={(mode) => void handleModeChange(mode)}
-                onToggleFavorite={() =>
-                  void handleToggleFavoriteContent(
-                    pageView.page.path,
-                    !(pageView.page.is_favorite ?? false),
-                  )
-                }
-                onOpenLocation={(location) => void navigate(location)}
-                onOpenMarkdownLink={(target) => void handleOpenPageMarkdownLink(target)}
-                onResolveMarkdownImage={handleResolvePageMarkdownImage}
-                onResolveMarkdownLinkStatus={handleResolvePageMarkdownLinkStatus}
-                onSelectHistoryEntry={handleSelectHistoryEntry}
-                onCloseHistorySnapshot={handleCloseHistorySnapshot}
-                selectedHistoryRevisionId={selectedHistoryRevisionId}
-                selectedHistorySnapshot={selectedHistorySnapshot}
-                selectedHistoryError={selectedHistoryError}
-                isSelectedHistoryLoading={isSelectedHistoryLoading}
-              />
-            )}
+              {pageView && (
+                <PageSurface
+                  backlinks={pageView.page.backlinks}
+                  draft={draft}
+                  editorKey={`${pageView.namespace.id}:${pageView.page.path}`}
+                  historyEntries={historyEntries}
+                  historyError={historyError}
+                  isHistoryLoading={isHistoryLoading}
+                  isDirty={isDirty}
+                  isSaving={isSaving}
+                  isVirtual={pageView.page.is_virtual ?? false}
+                  isFavorite={pageView.page.is_favorite ?? false}
+                  mode={pageMode}
+                  plugins={plugins}
+                  readOnly={pageView.isReadOnly ?? false}
+                  onDraftChange={setDraft}
+                  onCategoriesChange={(categories) =>
+                    setDraft(updateMarkdownCategories(draftRef.current, categories))
+                  }
+                  onModeChange={(mode) => void handleModeChange(mode)}
+                  onToggleFavorite={() =>
+                    void handleToggleFavoriteContent(
+                      pageView.page.path,
+                      !(pageView.page.is_favorite ?? false),
+                    )
+                  }
+                  onOpenLocation={(location) => void navigate(location)}
+                  onOpenMarkdownLink={(target) => void handleOpenPageMarkdownLink(target)}
+                  onResolveMarkdownImage={handleResolvePageMarkdownImage}
+                  onResolveMarkdownLinkStatus={handleResolvePageMarkdownLinkStatus}
+                  onSelectHistoryEntry={handleSelectHistoryEntry}
+                  onCloseHistorySnapshot={handleCloseHistorySnapshot}
+                  selectedHistoryRevisionId={selectedHistoryRevisionId}
+                  selectedHistorySnapshot={selectedHistorySnapshot}
+                  selectedHistoryError={selectedHistoryError}
+                  isSelectedHistoryLoading={isSelectedHistoryLoading}
+                />
+              )}
 
-            {fileView && (
-              <FileSurface
-                file={fileView.file}
-                historyEntries={historyEntries}
-                historyError={historyError}
-                isHistoryLoading={isHistoryLoading}
-                isNoteSaving={isFileNoteSaving}
-                isUploading={isFileUploading}
-                mode={fileMode}
-                noteDraft={fileNoteDraft}
-                readOnly={fileView.isReadOnly ?? false}
-                onModeChange={(mode) => void handleFileModeChange(mode)}
-                onNoteChange={setFileNoteDraft}
-                onOpenLocation={(location) => void navigate(location)}
-                onSaveNote={() => void handleSaveFileNote()}
-                onSelectHistoryEntry={handleSelectHistoryEntry}
-                onToggleFavorite={() =>
-                  void handleToggleFavoriteContent(
-                    fileView.file.path,
-                    !(fileView.file.is_favorite ?? false),
-                  )
-                }
-                onUpload={() => void handleUploadFile()}
-                selectedHistoryRevisionId={selectedHistoryRevisionId}
-              />
-            )}
-          </Stack>
-        </Box>
+              {fileView && (
+                <FileSurface
+                  file={fileView.file}
+                  historyEntries={historyEntries}
+                  historyError={historyError}
+                  isHistoryLoading={isHistoryLoading}
+                  isNoteSaving={isFileNoteSaving}
+                  isUploading={isFileUploading}
+                  mode={fileMode}
+                  noteDraft={fileNoteDraft}
+                  readOnly={fileView.isReadOnly ?? false}
+                  onModeChange={(mode) => void handleFileModeChange(mode)}
+                  onNoteChange={setFileNoteDraft}
+                  onOpenLocation={(location) => void navigate(location)}
+                  onSaveNote={() => void handleSaveFileNote()}
+                  onSelectHistoryEntry={handleSelectHistoryEntry}
+                  onToggleFavorite={() =>
+                    void handleToggleFavoriteContent(
+                      fileView.file.path,
+                      !(fileView.file.is_favorite ?? false),
+                    )
+                  }
+                  onUpload={() => void handleUploadFile()}
+                  selectedHistoryRevisionId={selectedHistoryRevisionId}
+                />
+              )}
+            </Stack>
+          </Box>
         </Box>
         {isTerminalOpen && <TerminalPanel onClose={() => setIsTerminalOpen(false)} />}
       </Box>

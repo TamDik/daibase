@@ -226,6 +226,12 @@ pub struct InstalledPluginSummary {
     pub manifest: PluginManifest,
 }
 
+#[derive(Debug, Serialize)]
+pub struct PluginEntryResolution {
+    pub path: PathBuf,
+    pub html: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum PluginInstallSource {

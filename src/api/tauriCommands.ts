@@ -224,6 +224,11 @@ export type InstalledPluginSummary = {
   manifest: PluginManifest;
 };
 
+export type PluginEntryResolution = {
+  path: string;
+  html: string;
+};
+
 export type MarkdownLinkStatus = {
   location: string;
   exists: boolean;
@@ -372,6 +377,12 @@ export function setPluginEnabled(pluginId: string, enabled: boolean) {
   return invoke<InstalledPluginSummary>("set_plugin_enabled", {
     pluginId,
     enabled,
+  });
+}
+
+export function resolvePluginEntry(pluginId: string) {
+  return invoke<PluginEntryResolution>("resolve_plugin_entry", {
+    pluginId,
   });
 }
 

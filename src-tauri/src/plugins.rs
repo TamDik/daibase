@@ -1,6 +1,6 @@
 use crate::models::{
-    InstalledPluginSummary, PluginContribution, PluginInstallSource, PluginManifest,
-    PluginPermission, PluginRegistry,
+    InstalledPluginSummary, PluginContribution, PluginEntryResolution, PluginInstallSource,
+    PluginManifest, PluginPermission, PluginRegistry,
 };
 use serde::Serialize;
 use std::fs;
@@ -72,6 +72,38 @@ pub fn set_plugin_enabled(
     let updated = plugin.clone();
     write_registry(app, &registry)?;
     Ok(updated)
+}
+
+pub fn resolve_plugin_entry(
+    app: &AppHandle,
+    plugin_id: String,
+) -> Result<PluginEntryResolution, String> {
+    let registry = read_registry(app)?;
+    let Some(plugin) = registry
+        .plugins
+        .iter()
+        .find(|plugin| plugin.id == plugin_id)
+    else {
+        return Err("プラグインが見つかりません。".to_string());
+    };
+
+    if !plugin.enabled {
+        return Err("プラグインが無効です。".to_string());
+    }
+
+    validate_relative_entry_path(&plugin.manifest.entry)?;
+    let entry_path = installed_plugin_dir(app, &plugin.id)?.join(&plugin.manifest.entry);
+    if !entry_path.is_file() {
+        return Err("プラグインの entry ファイルが見つかりません。".to_string());
+    }
+
+    let html = fs::read_to_string(&entry_path)
+        .map_err(|_| "プラグインの entry ファイルを読み込めません。".to_string())?;
+
+    Ok(PluginEntryResolution {
+        path: entry_path,
+        html,
+    })
 }
 
 fn read_manifest_from_folder(source_path: &Path) -> Result<PluginManifest, String> {
