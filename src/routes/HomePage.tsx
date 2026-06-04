@@ -1298,7 +1298,7 @@ export function HomePage() {
         open={savedMessage !== null}
         autoHideDuration={4000}
         onClose={() => setSavedMessage(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
       >
         <Alert severity="success" variant="filled" onClose={() => setSavedMessage(null)}>
           {savedMessage}

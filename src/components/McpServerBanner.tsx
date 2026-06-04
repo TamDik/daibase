@@ -42,7 +42,7 @@ export function McpServerBanner() {
       open={open}
       autoHideDuration={MCP_BANNER_DURATION_MS}
       onClose={() => setOpen(false)}
-      anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
     >
       <Box
         role="status"
