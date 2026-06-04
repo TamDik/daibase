@@ -192,16 +192,39 @@ export type PluginManifest = {
   name: string;
   version: string;
   description: string;
-  entry: string;
+  main: string;
   contributions: PluginContribution[];
   permissions: PluginPermission[];
 };
 
 export type PluginContribution = {
-  kind: "markdownRenderer";
+  kind: "pageView";
   id: string;
   name: string;
+  slot?: PluginViewSlot;
+  match?: PluginContributionMatch;
+  view: PluginViewContribution;
+  activation?: PluginActivation;
+};
+
+export type PluginViewSlot =
+  | "main"
+  | "sidebarSection"
+  | "rightPanel"
+  | "bottomPanel"
+  | "toolbar"
+  | "statusBar";
+
+export type PluginContributionMatch = {
   frontmatter?: unknown;
+};
+
+export type PluginViewContribution = {
+  kind: "custom";
+};
+
+export type PluginActivation = {
+  autoOpen?: boolean;
 };
 
 export type PluginPermission =
@@ -224,7 +247,7 @@ export type InstalledPluginSummary = {
   manifest: PluginManifest;
 };
 
-export type PluginEntryResolution = {
+export type PluginMainResolution = {
   path: string;
   html: string;
 };
@@ -380,8 +403,8 @@ export function setPluginEnabled(pluginId: string, enabled: boolean) {
   });
 }
 
-export function resolvePluginEntry(pluginId: string) {
-  return invoke<PluginEntryResolution>("resolve_plugin_entry", {
+export function resolvePluginMain(pluginId: string) {
+  return invoke<PluginMainResolution>("resolve_plugin_main", {
     pluginId,
   });
 }

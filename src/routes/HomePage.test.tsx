@@ -44,7 +44,7 @@ vi.mock("../api/tauriCommands", () => ({
   readDeletedFile: vi.fn(),
   readDeletedPage: vi.fn(),
   readPageHistorySnapshot: vi.fn(),
-  resolvePluginEntry: vi.fn(),
+  resolvePluginMain: vi.fn(),
   resolveMarkdownLink: vi.fn(),
   resolveMarkdownImage: vi.fn(),
   resolveMarkdownLinkStatus: vi.fn(),
@@ -131,7 +131,7 @@ describe("HomePage", () => {
     vi.mocked(api.readDeletedFile).mockReset();
     vi.mocked(api.readDeletedPage).mockReset();
     vi.mocked(api.readPageHistorySnapshot).mockReset();
-    vi.mocked(api.resolvePluginEntry).mockReset();
+    vi.mocked(api.resolvePluginMain).mockReset();
     vi.mocked(api.resolveMarkdownLink).mockReset();
     vi.mocked(api.resolveMarkdownImage).mockReset();
     vi.mocked(api.resolveMarkdownLinkStatus).mockReset();
@@ -148,7 +148,7 @@ describe("HomePage", () => {
     vi.mocked(api.listPlugins).mockResolvedValue(pluginItems());
     vi.mocked(api.listFileHistory).mockResolvedValue(fileHistoryEntries());
     vi.mocked(api.listPageHistory).mockResolvedValue(historyEntries());
-    vi.mocked(api.resolvePluginEntry).mockResolvedValue({
+    vi.mocked(api.resolvePluginMain).mockResolvedValue({
       path: "/tmp/calendar-plugin/dist/index.html",
       html: "<!doctype html><html><body>Calendar</body></html>",
     });
@@ -490,7 +490,7 @@ describe("HomePage", () => {
     expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue("# Raw");
   });
 
-  it("有効な markdown renderer plugin が frontmatter に一致すると plugin entry を表示する", async () => {
+  it("有効な page view plugin が frontmatter に一致すると Plugin Host view を表示する", async () => {
     vi.mocked(api.listPlugins).mockResolvedValue([pluginItems({ enabled: true })[0]]);
     vi.mocked(api.openInitialLocation).mockResolvedValue({
       kind: "page",
@@ -499,7 +499,7 @@ describe("HomePage", () => {
       content: contentTree,
       page: page(
         "Calendar.md",
-        "---\ndaibase.renderer: calendar\n---\n# Calendar\n\n- 2026-06-04 Review",
+        "---\ndaibase.view: calendar\n---\n# Calendar\n\n- 2026-06-04 Review",
       ),
     });
 
@@ -507,7 +507,7 @@ describe("HomePage", () => {
 
     const frame = await screen.findByTitle("Calendar");
     expect(frame).toHaveAttribute("srcdoc", "<!doctype html><html><body>Calendar</body></html>");
-    expect(api.resolvePluginEntry).toHaveBeenCalledWith("com.example.calendar");
+    expect(api.resolvePluginMain).toHaveBeenCalledWith("com.example.calendar");
     expect(screen.queryByRole("textbox", { name: "Markdown" })).not.toBeInTheDocument();
   });
 
@@ -1284,14 +1284,23 @@ function pluginItems({ enabled = false }: { enabled?: boolean } = {}): Installed
         name: "Calendar",
         version: "0.1.0",
         description: "Calendar view",
-        entry: "dist/index.html",
+        main: "dist/index.html",
         contributions: [
           {
-            kind: "markdownRenderer",
+            kind: "pageView",
             id: "calendar",
             name: "Calendar",
-            frontmatter: {
-              "daibase.renderer": "calendar",
+            slot: "main",
+            match: {
+              frontmatter: {
+                "daibase.view": "calendar",
+              },
+            },
+            view: {
+              kind: "custom",
+            },
+            activation: {
+              autoOpen: true,
             },
           },
         ],

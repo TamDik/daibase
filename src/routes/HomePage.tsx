@@ -1245,6 +1245,13 @@ export function HomePage() {
                   isVirtual={pageView.page.is_virtual ?? false}
                   isFavorite={pageView.page.is_favorite ?? false}
                   mode={pageMode}
+                  pageContext={{
+                    namespaceId: pageView.namespace.id,
+                    namespaceName: pageView.namespace.name,
+                    path: pageView.page.path,
+                    location: pageView.page.location,
+                    title: pageView.page.title,
+                  }}
                   plugins={plugins}
                   readOnly={pageView.isReadOnly ?? false}
                   onDraftChange={setDraft}

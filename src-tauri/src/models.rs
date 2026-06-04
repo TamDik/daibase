@@ -227,7 +227,7 @@ pub struct InstalledPluginSummary {
 }
 
 #[derive(Debug, Serialize)]
-pub struct PluginEntryResolution {
+pub struct PluginMainResolution {
     pub path: PathBuf,
     pub html: String,
 }
@@ -247,7 +247,7 @@ pub struct PluginManifest {
     pub version: String,
     #[serde(default)]
     pub description: String,
-    pub entry: String,
+    pub main: String,
     #[serde(default)]
     pub contributions: Vec<PluginContribution>,
     #[serde(default)]
@@ -257,12 +257,52 @@ pub struct PluginManifest {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum PluginContribution {
-    MarkdownRenderer {
+    PageView {
         id: String,
         name: String,
         #[serde(default)]
-        frontmatter: serde_json::Value,
+        slot: PluginViewSlot,
+        #[serde(default)]
+        r#match: PluginContributionMatch,
+        view: PluginViewContribution,
+        #[serde(default)]
+        activation: PluginActivation,
     },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum PluginViewSlot {
+    #[default]
+    Main,
+    SidebarSection,
+    RightPanel,
+    BottomPanel,
+    Toolbar,
+    StatusBar,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct PluginContributionMatch {
+    #[serde(default)]
+    pub frontmatter: serde_json::Value,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PluginViewContribution {
+    pub kind: PluginViewKind,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum PluginViewKind {
+    Custom,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct PluginActivation {
+    #[serde(default, rename = "autoOpen")]
+    pub auto_open: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

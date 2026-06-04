@@ -1,20 +1,18 @@
 # Plugin Development
 
-このドキュメントは、Daibase に導入できるローカルプラグインの実装仕様です。
+このドキュメントは、Daibase に導入できるローカルプラグインの実装仕様です。設計背景は `docs/plugin-host-design.md` にまとめています。
 
-Plugin Host 方式へ切り替える設計方針は `docs/plugin-host-design.md` にまとめています。互換性を気にしない次期仕様では、プラグインに Daibase DOM を直接触らせず、Host が view model を受け取って描画する方式へ寄せます。
-
-現時点のプラグインは、ローカルの unpacked plugin folder を `Special:Plugins` からインストールする方式です。Daibase はプラグインフォルダを app data directory にコピーし、インストール直後は無効状態にします。ユーザーが `Special:Plugins` で有効化すると、対応する Markdown renderer が使われます。
+Daibase は Plugin Host 方式を採用します。プラグインは Daibase 本体の DOM、React component、Tauri command を直接触りません。ユーザーが登録、有効化、無効化、削除できる未知の拡張として扱い、Daibase は manifest と Plugin Host protocol だけを知ります。
 
 ## 対応している機能
 
-現在対応している contribution は `markdownRenderer` です。
+現在対応している contribution は `pageView` です。
 
-Markdown ページの frontmatter がプラグイン manifest の `frontmatter` 条件に一致すると、通常の Markdown 表示の代わりにプラグインの `entry` HTML が iframe で表示されます。
+Markdown ページの frontmatter が `pageView.match.frontmatter` に一致すると、通常の editor view の代わりに plugin view を MainView に表示できます。
 
 ```yaml
 ---
-daibase.renderer: calendar
+daibase.view: calendar
 ---
 ```
 
@@ -31,7 +29,7 @@ my-plugin/
     index.html
 ```
 
-React / TypeScript などで実装する場合も、Daibase が読み込むのは `manifest.json` の `entry` で指定された静的 HTML です。
+React / TypeScript などで実装する場合も、Daibase が読み込むのは `manifest.json` の `main` で指定された静的 HTML です。
 
 推奨する開発用構成は次の通りです。
 
@@ -62,14 +60,23 @@ my-plugin/
   "name": "Calendar",
   "version": "0.1.0",
   "description": "Markdown ページをカレンダーとして表示します。",
-  "entry": "dist/index.html",
+  "main": "dist/index.html",
   "contributions": [
     {
-      "kind": "markdownRenderer",
+      "kind": "pageView",
       "id": "calendar",
       "name": "Calendar",
-      "frontmatter": {
-        "daibase.renderer": "calendar"
+      "slot": "main",
+      "match": {
+        "frontmatter": {
+          "daibase.view": "calendar"
+        }
+      },
+      "view": {
+        "kind": "custom"
+      },
+      "activation": {
+        "autoOpen": true
       }
     }
   ],
@@ -94,26 +101,35 @@ my-plugin/
 `description`
 : 任意。UI に表示する説明です。
 
-`entry`
-: 必須。プラグインフォルダからの相対パスです。絶対パス、バックスラッシュ、`..` は使えません。
+`main`
+: 必須。プラグインフォルダからの相対パスです。絶対パス、バックスラッシュ、`..` は使えません。現在は Plugin Host が iframe `srcDoc` として読み込める単一 HTML を指定します。
 
 `contributions`
-: 必須。1 つ以上の contribution を指定します。現在は `markdownRenderer` のみ対応しています。
+: 必須。1 つ以上の contribution を指定します。現在は `pageView` のみ対応しています。
 
 `permissions`
-: 任意。将来の capability 確認用です。現在指定できる値は `page-read`, `page-write`, `file-read`, `file-write`, `namespace-read`, `history-read`, `location-open`, `ui-notify` です。
+: 任意。Host API の capability 確認用です。現在指定できる値は `page-read`, `page-write`, `file-read`, `file-write`, `namespace-read`, `history-read`, `location-open`, `ui-notify` です。
 
-## markdownRenderer
+## pageView
 
-`markdownRenderer` は、Markdown ページの表示をプラグインで置き換える contribution です。
+`pageView` は、ページの MainView に plugin view を表示する contribution です。
 
 ```json
 {
-  "kind": "markdownRenderer",
+  "kind": "pageView",
   "id": "calendar",
   "name": "Calendar",
-  "frontmatter": {
-    "daibase.renderer": "calendar"
+  "slot": "main",
+  "match": {
+    "frontmatter": {
+      "daibase.view": "calendar"
+    }
+  },
+  "view": {
+    "kind": "custom"
+  },
+  "activation": {
+    "autoOpen": true
   }
 }
 ```
@@ -122,16 +138,27 @@ my-plugin/
 : 必須。contribution の ID です。プラグイン ID と同じ文字種制限です。
 
 `name`
-: 必須。renderer の表示名です。
+: 必須。view の表示名です。
 
-`frontmatter`
-: 必須。Markdown frontmatter と照合する key-value 条件です。現在は flat な key-value のみ対応しています。すべての条件に一致した場合に renderer が使われます。
+`slot`
+: 任意。現在 MainView に表示する `main` をサポートしています。将来は `sidebarSection`, `rightPanel`, `bottomPanel`, `toolbar`, `statusBar` を Host 管理の slot として扱います。
+
+`match.frontmatter`
+: 必須。Markdown frontmatter と照合する key-value 条件です。現在は flat な key-value のみ対応しています。すべての条件に一致した場合に view が候補になります。
+
+`view.kind`
+: 必須。現在は `custom` のみ対応しています。Plugin Host が sandbox iframe として `main` HTML を表示します。
+
+`activation.autoOpen`
+: 任意。`true` の場合、条件に一致したページで plugin view を初期表示します。エディタへ戻る操作は Daibase 側に残します。
 
 対応例:
 
 ```yaml
 ---
-daibase.renderer: calendar
+daibase.view: calendar
+calendar:
+  month: 2026-06
 ---
 ```
 
@@ -140,19 +167,38 @@ daibase.renderer: calendar
 ```yaml
 ---
 daibase:
-  renderer: calendar
+  view: calendar
 ---
 ```
 
 ## Runtime Message
 
-Daibase は renderer iframe の読み込み後、`window.postMessage` で Markdown 本文を渡します。
+Daibase は plugin iframe の読み込み後、`window.postMessage` で page context を渡します。
 
 ```ts
 type DaibaseRenderMessage = {
   type: "daibase:render";
-  payload: {
-    content: string;
+  requestId: string;
+  context: {
+    namespace: {
+      id: string;
+      name: string;
+    };
+    page: {
+      namespaceId: string;
+      path: string;
+      location: string;
+      title: string;
+      content: string;
+      frontmatter: Record<string, unknown>;
+      body: string;
+      isDirty: boolean;
+      isReadOnly: boolean;
+    };
+    view: {
+      pluginId: string;
+      contributionId: string;
+    };
   };
 };
 ```
@@ -165,16 +211,13 @@ window.addEventListener("message", (event: MessageEvent<DaibaseRenderMessage>) =
     return;
   }
 
-  const markdown = event.data.payload.content;
-  render(markdown);
+  render(event.data.context);
 });
 ```
 
-Daibase は現在、`entry` HTML を読み込んで iframe の `srcDoc` に渡します。そのため、`dist/index.html` は単体で実行できる HTML にしてください。
+## main HTML の制約
 
-## entry HTML の制約
-
-`dist/index.html` は次の条件を満たしてください。
+`main` で指定する HTML は次の条件を満たしてください。
 
 - JavaScript と CSS を HTML 内に inline する。
 - CDN や外部ネットワークに依存しない。
@@ -247,11 +290,11 @@ Daibase はインストール時にプラグインフォルダを app data direc
 
 ## セキュリティと制限
 
-- プラグインはローカル HTML として iframe 内で実行されます。
+- プラグインは Plugin Host 管理の sandbox iframe 内で実行されます。
+- Daibase 本体 DOM、React component、Tauri command を直接触らせません。
 - 任意の Daibase 操作 API はまだ公開していません。
-- `permissions` は manifest に保存されますが、現在の renderer 実行では `page-read` などの API proxy は未実装です。
+- `permissions` は manifest に保存されますが、現在の Host API proxy は未実装です。
 - プラグイン管理操作は MCP には公開していません。
-- secret、証明書、生成物以外の不要ファイルをプラグインフォルダへ含めないでください。
 
 ## 最小サンプル
 
@@ -261,17 +304,26 @@ Daibase はインストール時にプラグインフォルダを app data direc
 {
   "schemaVersion": 1,
   "id": "com.example.hello",
-  "name": "Hello Renderer",
+  "name": "Hello View",
   "version": "0.1.0",
-  "description": "Hello renderer sample.",
-  "entry": "dist/index.html",
+  "description": "Hello page view sample.",
+  "main": "dist/index.html",
   "contributions": [
     {
-      "kind": "markdownRenderer",
+      "kind": "pageView",
       "id": "hello",
       "name": "Hello",
-      "frontmatter": {
-        "daibase.renderer": "hello"
+      "slot": "main",
+      "match": {
+        "frontmatter": {
+          "daibase.view": "hello"
+        }
+      },
+      "view": {
+        "kind": "custom"
+      },
+      "activation": {
+        "autoOpen": true
       }
     }
   ],
@@ -287,7 +339,7 @@ Daibase はインストール時にプラグインフォルダを app data direc
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Hello Renderer</title>
+    <title>Hello View</title>
     <style>
       body {
         font-family: system-ui, sans-serif;
@@ -300,7 +352,7 @@ Daibase はインストール時にプラグインフォルダを app data direc
     </style>
   </head>
   <body>
-    <h1>Hello Renderer</h1>
+    <h1>Hello View</h1>
     <pre id="content"></pre>
     <script>
       const content = document.getElementById("content");
@@ -309,7 +361,7 @@ Daibase はインストール時にプラグインフォルダを app data direc
         if (event.data?.type !== "daibase:render") {
           return;
         }
-        content.textContent = event.data.payload.content;
+        content.textContent = event.data.context.page.body;
       });
 
       content.textContent = "Waiting for Daibase content...";

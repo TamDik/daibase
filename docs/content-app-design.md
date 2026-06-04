@@ -461,7 +461,7 @@ verify_history(namespace_id: String) -> HistoryCheckResult
 
 `registry.json` には、インストール済みプラグインの ID、名前、バージョン、有効状態、インストール元、manifest の内容を保存します。インストール直後は無効にし、ユーザーが `Special:Plugins` で有効化します。
 
-各プラグインはルートに `manifest.json` を持ちます。初期 schema は `schemaVersion: 1` とし、プラグイン ID、表示名、バージョン、entry、contributions、permissions を含めます。
+各プラグインはルートに `manifest.json` を持ちます。初期 schema は `schemaVersion: 1` とし、プラグイン ID、表示名、バージョン、main、contributions、permissions を含めます。
 
 ```json
 {
@@ -470,14 +470,23 @@ verify_history(namespace_id: String) -> HistoryCheckResult
   "name": "Calendar",
   "version": "0.1.0",
   "description": "Markdown ページをカレンダーとして表示します。",
-  "entry": "dist/index.html",
+  "main": "dist/index.html",
   "contributions": [
     {
-      "kind": "markdownRenderer",
+      "kind": "pageView",
       "id": "calendar",
       "name": "Calendar",
-      "frontmatter": {
-        "daibase.renderer": "calendar"
+      "slot": "main",
+      "match": {
+        "frontmatter": {
+          "daibase.view": "calendar"
+        }
+      },
+      "view": {
+        "kind": "custom"
+      },
+      "activation": {
+        "autoOpen": true
       }
     }
   ],
@@ -485,7 +494,7 @@ verify_history(namespace_id: String) -> HistoryCheckResult
 }
 ```
 
-最初に対応する contribution は `markdownRenderer` です。Daibase 側で Markdown の frontmatter を読み、`daibase.renderer` などの Daibase 管理 key によって適用する renderer を判断します。namespace 名、`Special:*`、`.md` 判定、ロケーション正規化は Rust 側を正とし、プラグインやフロントエンドが独自に正規ロケーションを組み立てないようにします。
+最初に対応する contribution は `pageView` です。Daibase 側で Markdown の frontmatter を読み、`daibase.view` などの Daibase 管理 key によって適用する view を判断します。Plugin Host は該当プラグインの `main` HTML を sandbox iframe として MainView に表示し、Daibase DOM や Tauri command は直接触らせません。namespace 名、`Special:*`、`.md` 判定、ロケーション正規化は Rust 側を正とし、プラグインやフロントエンドが独自に正規ロケーションを組み立てないようにします。
 
 プラグインに Daibase 操作 API を渡す場合は capability 制にします。初期 permission は `page-read`, `page-write`, `file-read`, `file-write`, `namespace-read`, `history-read`, `location-open`, `ui-notify` を候補にし、実行時には manifest の permission とユーザーの承認状態を確認してから command を proxy します。
 

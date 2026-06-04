@@ -1,6 +1,6 @@
 use crate::models::{
-    InstalledPluginSummary, PluginContribution, PluginEntryResolution, PluginInstallSource,
-    PluginManifest, PluginPermission, PluginRegistry,
+    InstalledPluginSummary, PluginContribution, PluginInstallSource, PluginMainResolution,
+    PluginManifest, PluginPermission, PluginRegistry, PluginViewKind, PluginViewSlot,
 };
 use serde::Serialize;
 use std::fs;
@@ -74,10 +74,10 @@ pub fn set_plugin_enabled(
     Ok(updated)
 }
 
-pub fn resolve_plugin_entry(
+pub fn resolve_plugin_main(
     app: &AppHandle,
     plugin_id: String,
-) -> Result<PluginEntryResolution, String> {
+) -> Result<PluginMainResolution, String> {
     let registry = read_registry(app)?;
     let Some(plugin) = registry
         .plugins
@@ -91,17 +91,17 @@ pub fn resolve_plugin_entry(
         return Err("プラグインが無効です。".to_string());
     }
 
-    validate_relative_entry_path(&plugin.manifest.entry)?;
-    let entry_path = installed_plugin_dir(app, &plugin.id)?.join(&plugin.manifest.entry);
-    if !entry_path.is_file() {
-        return Err("プラグインの entry ファイルが見つかりません。".to_string());
+    validate_relative_main_path(&plugin.manifest.main)?;
+    let main_path = installed_plugin_dir(app, &plugin.id)?.join(&plugin.manifest.main);
+    if !main_path.is_file() {
+        return Err("プラグインの main ファイルが見つかりません。".to_string());
     }
 
-    let html = fs::read_to_string(&entry_path)
-        .map_err(|_| "プラグインの entry ファイルを読み込めません。".to_string())?;
+    let html = fs::read_to_string(&main_path)
+        .map_err(|_| "プラグインの main ファイルを読み込めません。".to_string())?;
 
-    Ok(PluginEntryResolution {
-        path: entry_path,
+    Ok(PluginMainResolution {
+        path: main_path,
         html,
     })
 }
@@ -127,11 +127,11 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         return Err("未対応の plugin manifest schema version です。".to_string());
     }
 
-    if manifest.entry.trim().is_empty() {
-        return Err("manifest.json の entry を指定してください。".to_string());
+    if manifest.main.trim().is_empty() {
+        return Err("manifest.json の main を指定してください。".to_string());
     }
 
-    validate_relative_entry_path(&manifest.entry)?;
+    validate_relative_main_path(&manifest.main)?;
 
     if manifest.contributions.is_empty() {
         return Err("manifest.json の contributions を 1 つ以上指定してください。".to_string());
@@ -139,9 +139,17 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
 
     for contribution in &manifest.contributions {
         match contribution {
-            PluginContribution::MarkdownRenderer { id, name, .. } => {
+            PluginContribution::PageView {
+                id,
+                name,
+                slot,
+                view,
+                ..
+            } => {
                 validate_plugin_id(id)?;
                 require_non_empty("contribution name", name)?;
+                validate_page_view_slot(slot)?;
+                validate_page_view_kind(&view.kind)?;
             }
         }
     }
@@ -178,20 +186,37 @@ fn require_non_empty(name: &str, value: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_relative_entry_path(entry: &str) -> Result<(), String> {
-    let path = Path::new(entry);
-    if path.is_absolute() || entry.contains('\\') {
-        return Err("manifest.json の entry は相対パスで指定してください。".to_string());
+fn validate_relative_main_path(main: &str) -> Result<(), String> {
+    let path = Path::new(main);
+    if path.is_absolute() || main.contains('\\') {
+        return Err("manifest.json の main は相対パスで指定してください。".to_string());
     }
 
     if path
         .components()
         .any(|component| matches!(component, std::path::Component::ParentDir))
     {
-        return Err("manifest.json の entry に .. は使えません。".to_string());
+        return Err("manifest.json の main に .. は使えません。".to_string());
     }
 
     Ok(())
+}
+
+fn validate_page_view_slot(slot: &PluginViewSlot) -> Result<(), String> {
+    match slot {
+        PluginViewSlot::Main
+        | PluginViewSlot::SidebarSection
+        | PluginViewSlot::RightPanel
+        | PluginViewSlot::BottomPanel
+        | PluginViewSlot::Toolbar
+        | PluginViewSlot::StatusBar => Ok(()),
+    }
+}
+
+fn validate_page_view_kind(kind: &PluginViewKind) -> Result<(), String> {
+    match kind {
+        PluginViewKind::Custom => Ok(()),
+    }
 }
 
 fn validate_permission(permission: &PluginPermission) -> Result<(), String> {
@@ -281,20 +306,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn validates_markdown_renderer_manifest() {
+    fn validates_page_view_manifest() {
         let manifest = valid_manifest();
 
         assert!(validate_manifest(&manifest).is_ok());
     }
 
     #[test]
-    fn rejects_entry_parent_path() {
+    fn rejects_main_parent_path() {
         let mut manifest = valid_manifest();
-        manifest.entry = "../dist/index.html".to_string();
+        manifest.main = "../dist/index.html".to_string();
 
         assert_eq!(
             validate_manifest(&manifest).unwrap_err(),
-            "manifest.json の entry に .. は使えません。"
+            "manifest.json の main に .. は使えません。"
         );
     }
 
@@ -316,13 +341,20 @@ mod tests {
             name: "Calendar".to_string(),
             version: "0.1.0".to_string(),
             description: "Calendar view".to_string(),
-            entry: "dist/index.html".to_string(),
-            contributions: vec![PluginContribution::MarkdownRenderer {
+            main: "dist/index.html".to_string(),
+            contributions: vec![PluginContribution::PageView {
                 id: "calendar".to_string(),
                 name: "Calendar".to_string(),
-                frontmatter: serde_json::json!({
-                    "daibase.renderer": "calendar"
-                }),
+                slot: PluginViewSlot::Main,
+                r#match: crate::models::PluginContributionMatch {
+                    frontmatter: serde_json::json!({
+                        "daibase.view": "calendar"
+                    }),
+                },
+                view: crate::models::PluginViewContribution {
+                    kind: PluginViewKind::Custom,
+                },
+                activation: crate::models::PluginActivation { auto_open: true },
             }],
             permissions: vec![PluginPermission::PageRead, PluginPermission::LocationOpen],
         }
