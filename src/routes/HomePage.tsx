@@ -56,6 +56,7 @@ import {
   writeFileNote,
 } from "../api/tauriCommands";
 import { FileSurface, type FileMode } from "../components/FileSurface";
+import { MainContentTop } from "../components/MainContentTop";
 import { PageSidebar } from "../components/PageSidebar";
 import { PageSurface, type PageMode } from "../components/PageSurface";
 import {
@@ -137,6 +138,10 @@ type CreateDialogState = {
   parentDirectory: string;
   name: string;
 };
+
+function specialSearchNamespaceId(view: SpecialView) {
+  return view.kind === "namespaces" ? null : view.namespace.id;
+}
 
 export function HomePage() {
   const [namespaces, setNamespaces] = useState<NamespaceSummary[]>([]);
@@ -1174,73 +1179,95 @@ export function HomePage() {
 
               {specialView && (
                 <Box
-                  data-testid="special-page-scroll"
-                  sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}
+                  sx={{
+                    bgcolor: "#ffffff",
+                    display: "flex",
+                    flex: "1 1 auto",
+                    flexDirection: "column",
+                    minHeight: 0,
+                    overflow: "hidden",
+                  }}
                 >
-                  {specialView.kind === "namespaces" && (
-                    <NamespacesSpecialPage
-                      namespaceName={namespaceName}
-                      namespaces={namespaces}
-                      rootPath={rootPath}
-                      onCreateNamespace={handleCreateNamespace}
-                      onNamespaceNameChange={setNamespaceName}
-                      onOpenLocation={(location) => void navigate(location)}
-                      onRootPathSelect={() => void handleSelectRootPath()}
-                    />
-                  )}
+                  <MainContentTop
+                    canGoBack={canGoBack}
+                    canGoForward={canGoForward}
+                    searchNamespaceId={specialSearchNamespaceId(specialView)}
+                    onGoBack={() => void handleGoBack()}
+                    onGoForward={() => void handleGoForward()}
+                    onOpenLocation={(location) => void navigate(location)}
+                    onToggleTerminal={() => setIsTerminalOpen((current) => !current)}
+                  />
+                  <Box
+                    data-testid="special-page-scroll"
+                    sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}
+                  >
+                    {specialView.kind === "namespaces" && (
+                      <NamespacesSpecialPage
+                        namespaceName={namespaceName}
+                        namespaces={namespaces}
+                        rootPath={rootPath}
+                        onCreateNamespace={handleCreateNamespace}
+                        onNamespaceNameChange={setNamespaceName}
+                        onOpenLocation={(location) => void navigate(location)}
+                        onRootPathSelect={() => void handleSelectRootPath()}
+                      />
+                    )}
 
-                  {specialView.kind === "specialPages" && (
-                    <SpecialPagesIndex
-                      location={specialView.location}
-                      pages={specialView.pages}
-                      onOpenLocation={(location) => void navigate(location)}
-                    />
-                  )}
+                    {specialView.kind === "specialPages" && (
+                      <SpecialPagesIndex
+                        location={specialView.location}
+                        pages={specialView.pages}
+                        onOpenLocation={(location) => void navigate(location)}
+                      />
+                    )}
 
-                  {specialView.kind === "pages" && (
-                    <PagesSpecialPage
-                      content={specialView.content}
-                      namespace={specialView.namespace}
-                      onOpenLocation={(location) => void navigate(location)}
-                    />
-                  )}
+                    {specialView.kind === "pages" && (
+                      <PagesSpecialPage
+                        content={specialView.content}
+                        namespace={specialView.namespace}
+                        onOpenLocation={(location) => void navigate(location)}
+                      />
+                    )}
 
-                  {specialView.kind === "deletedPages" && (
-                    <DeletedPagesSpecialPage
-                      items={specialView.items}
-                      namespace={specialView.namespace}
-                      onOpenDeletedContent={(item) => void handleOpenDeletedContent(item)}
-                      onRestoreDeletedContent={(item) => void handleRestoreDeletedContent(item)}
-                    />
-                  )}
+                    {specialView.kind === "deletedPages" && (
+                      <DeletedPagesSpecialPage
+                        items={specialView.items}
+                        namespace={specialView.namespace}
+                        onOpenDeletedContent={(item) => void handleOpenDeletedContent(item)}
+                        onRestoreDeletedContent={(item) => void handleRestoreDeletedContent(item)}
+                      />
+                    )}
 
-                  {specialView.kind === "favorites" && (
-                    <FavoritesSpecialPage
-                      items={specialView.items}
-                      namespace={specialView.namespace}
-                      onOpenLocation={(location) => void navigate(location)}
-                    />
-                  )}
+                    {specialView.kind === "favorites" && (
+                      <FavoritesSpecialPage
+                        items={specialView.items}
+                        namespace={specialView.namespace}
+                        onOpenLocation={(location) => void navigate(location)}
+                      />
+                    )}
 
-                  {specialView.kind === "categories" && (
-                    <CategoriesSpecialPage
-                      categories={specialView.categories}
-                      namespace={specialView.namespace}
-                      uncategorizedPages={specialView.uncategorizedPages}
-                      onOpenLocation={(location) => void navigate(location)}
-                    />
-                  )}
+                    {specialView.kind === "categories" && (
+                      <CategoriesSpecialPage
+                        categories={specialView.categories}
+                        namespace={specialView.namespace}
+                        uncategorizedPages={specialView.uncategorizedPages}
+                        onOpenLocation={(location) => void navigate(location)}
+                      />
+                    )}
 
-                  {specialView.kind === "plugins" && (
-                    <PluginsSpecialPage
-                      namespace={specialView.namespace}
-                      plugins={specialView.plugins}
-                      onInstallFromFolder={() => void handleInstallPluginFromFolder()}
-                      onReadPluginDocumentation={(plugin) => readPluginDocumentation(plugin.id)}
-                      onRemovePlugin={(plugin) => void handleRemovePlugin(plugin)}
-                      onTogglePlugin={(plugin, enabled) => void handleTogglePlugin(plugin, enabled)}
-                    />
-                  )}
+                    {specialView.kind === "plugins" && (
+                      <PluginsSpecialPage
+                        namespace={specialView.namespace}
+                        plugins={specialView.plugins}
+                        onInstallFromFolder={() => void handleInstallPluginFromFolder()}
+                        onReadPluginDocumentation={(plugin) => readPluginDocumentation(plugin.id)}
+                        onRemovePlugin={(plugin) => void handleRemovePlugin(plugin)}
+                        onTogglePlugin={(plugin, enabled) =>
+                          void handleTogglePlugin(plugin, enabled)
+                        }
+                      />
+                    )}
+                  </Box>
                 </Box>
               )}
 

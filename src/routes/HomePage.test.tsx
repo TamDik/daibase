@@ -514,7 +514,15 @@ describe("HomePage", () => {
     expect(within(results).getByText("Guide/Intro.md")).toBeInTheDocument();
     expect(within(results).getByText(/本文の Intro/)).toBeInTheDocument();
 
-    await user.click(within(results).getByRole("button", { name: /Intro/ }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "検索パネル" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "検索" }));
+    const reopenedInput = screen.getByRole("textbox", { name: "検索またはコマンド" });
+    expect(reopenedInput).toHaveValue("");
+    await user.type(reopenedInput, "intro");
+
+    const reopenedResults = await screen.findByRole("list", { name: "検索結果" });
+    await user.click(within(reopenedResults).getByRole("button", { name: /Intro/ }));
 
     expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue("# Intro");
   });
@@ -876,6 +884,10 @@ describe("HomePage", () => {
     await openSpecialPage(user, "Pages");
 
     expect(await screen.findByRole("heading", { name: "Pages" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "戻る" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "進む" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "ターミナル" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "検索" })).toBeInTheDocument();
     expect(screen.getByText("Work:Guide/Intro.md")).toBeInTheDocument();
   });
 

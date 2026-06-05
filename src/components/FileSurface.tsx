@@ -13,21 +13,12 @@ import {
   Tab,
   Tabs,
   TextField,
-  Tooltip,
   Typography,
 } from "@mui/material";
-import {
-  ArrowBackRounded,
-  ArrowForwardRounded,
-  CloudUploadOutlined,
-  SaveOutlined,
-  Star,
-  StarBorder,
-  TerminalRounded,
-} from "@mui/icons-material";
+import { CloudUploadOutlined, SaveOutlined, Star, StarBorder } from "@mui/icons-material";
 
 import type { BacklinkSummary, FileHistoryEntry, ManagedFileContent } from "../api/tauriCommands";
-import { CommandLauncher } from "./CommandLauncher";
+import { MainContentTop } from "./MainContentTop";
 
 export type FileMode = "detail" | "history";
 
@@ -94,66 +85,50 @@ export function FileSurface({
         overflow: "hidden",
       }}
     >
-      <Box sx={{ alignItems: "center", display: "flex", flex: "0 0 auto", px: 1.5, pt: 0.5 }}>
-        <Stack direction="row" spacing={0.25} sx={{ alignItems: "center", mr: 1 }}>
-          <Tooltip title="戻る">
-            <span>
-              <IconButton aria-label="戻る" disabled={!canGoBack} size="small" onClick={onGoBack}>
-                <ArrowBackRounded fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip title="進む">
-            <span>
-              <IconButton
-                aria-label="進む"
-                disabled={!canGoForward}
-                size="small"
-                onClick={onGoForward}
+      <MainContentTop
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        searchNamespaceId={file.namespace_id}
+        onGoBack={onGoBack}
+        onGoForward={onGoForward}
+        onOpenLocation={onOpenLocation}
+        onToggleTerminal={onToggleTerminal}
+        rightSlot={
+          <>
+            <Divider flexItem orientation="vertical" sx={{ mr: 1 }} />
+            <Box sx={{ borderBottom: 1, borderColor: "divider", flex: 1 }}>
+              <Tabs
+                value={mode}
+                onChange={(_, value: FileMode) => onModeChange(value)}
+                sx={{ minHeight: 36 }}
               >
-                <ArrowForwardRounded fontSize="small" />
+                <Tab label="ファイル" value="detail" sx={{ minHeight: 36, px: 1.5, py: 0 }} />
+                <Tab
+                  label="履歴"
+                  value="history"
+                  disabled={isVirtual}
+                  sx={{ minHeight: 36, px: 1.5, py: 0 }}
+                />
+              </Tabs>
+            </Box>
+            {!readOnly && (
+              <IconButton
+                aria-label={file.is_favorite ? "お気に入り解除" : "お気に入り"}
+                disabled={isVirtual || isUploading}
+                size="small"
+                onClick={onToggleFavorite}
+                sx={{ ml: 0.5 }}
+              >
+                {file.is_favorite ? (
+                  <Star sx={{ color: "#bf8700" }} fontSize="small" />
+                ) : (
+                  <StarBorder fontSize="small" />
+                )}
               </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip title="ターミナル">
-            <IconButton aria-label="ターミナル" size="small" onClick={onToggleTerminal}>
-              <TerminalRounded fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <CommandLauncher namespaceId={file.namespace_id} onOpenLocation={onOpenLocation} />
-        </Stack>
-        <Divider flexItem orientation="vertical" sx={{ mr: 1 }} />
-        <Box sx={{ borderBottom: 1, borderColor: "divider", flex: 1 }}>
-          <Tabs
-            value={mode}
-            onChange={(_, value: FileMode) => onModeChange(value)}
-            sx={{ minHeight: 36 }}
-          >
-            <Tab label="ファイル" value="detail" sx={{ minHeight: 36, px: 1.5, py: 0 }} />
-            <Tab
-              label="履歴"
-              value="history"
-              disabled={isVirtual}
-              sx={{ minHeight: 36, px: 1.5, py: 0 }}
-            />
-          </Tabs>
-        </Box>
-        {!readOnly && (
-          <IconButton
-            aria-label={file.is_favorite ? "お気に入り解除" : "お気に入り"}
-            disabled={isVirtual || isUploading}
-            size="small"
-            onClick={onToggleFavorite}
-            sx={{ ml: 0.5 }}
-          >
-            {file.is_favorite ? (
-              <Star sx={{ color: "#bf8700" }} fontSize="small" />
-            ) : (
-              <StarBorder fontSize="small" />
             )}
-          </IconButton>
-        )}
-      </Box>
+          </>
+        }
+      />
 
       <Box sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}>
         {mode === "history" ? (

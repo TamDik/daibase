@@ -20,7 +20,7 @@ export function CommandLauncher({
   namespaceId,
   onOpenLocation,
 }: {
-  namespaceId: string;
+  namespaceId: string | null;
   onOpenLocation: (location: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -38,7 +38,7 @@ export function CommandLauncher({
 
   useEffect(() => {
     const trimmedQuery = query.trim();
-    if (!isOpen || trimmedQuery.length === 0) {
+    if (!isOpen || !namespaceId || trimmedQuery.length === 0) {
       setResults([]);
       setIsSearching(false);
       setError(null);
@@ -71,26 +71,54 @@ export function CommandLauncher({
     };
   }, [isOpen, namespaceId, query]);
 
-  const openResult = (result: SearchContentResult) => {
-    onOpenLocation(result.location);
-    setIsOpen(false);
+  const resetSearch = () => {
     setQuery("");
     setResults([]);
+    setError(null);
+    setIsSearching(false);
+  };
+
+  const openLauncher = () => {
+    resetSearch();
+    setIsOpen(true);
+  };
+
+  const closeLauncher = () => {
+    resetSearch();
+    setIsOpen(false);
+  };
+
+  const openResult = (result: SearchContentResult) => {
+    onOpenLocation(result.location);
+    closeLauncher();
   };
 
   return (
     <Box sx={{ alignItems: "center", display: "flex" }}>
       <Tooltip title="検索">
-        <IconButton aria-label="検索" size="small" onClick={() => setIsOpen((current) => !current)}>
-          <SearchRounded fontSize="small" />
-        </IconButton>
+        <span>
+          <IconButton
+            aria-label="検索"
+            disabled={!namespaceId}
+            size="small"
+            onClick={() => {
+              if (isOpen) {
+                closeLauncher();
+                return;
+              }
+              openLauncher();
+            }}
+          >
+            <SearchRounded fontSize="small" />
+          </IconButton>
+        </span>
       </Tooltip>
       {isOpen && (
         <Backdrop
           open
           invisible
           sx={{ alignItems: "flex-start", zIndex: (theme) => theme.zIndex.modal }}
-          onClick={() => setIsOpen(false)}
+          onClick={closeLauncher}
         >
           <Paper
             role="dialog"
@@ -116,8 +144,7 @@ export function CommandLauncher({
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
-                    setIsOpen(false);
-                    setQuery("");
+                    closeLauncher();
                   }
                 }}
                 slotProps={{
@@ -126,7 +153,6 @@ export function CommandLauncher({
                   },
                   input: {
                     endAdornment: isSearching ? <CircularProgress size={18} /> : null,
-                    startAdornment: <SearchRounded fontSize="small" sx={{ color: "#57606a" }} />,
                   },
                 }}
                 sx={{
