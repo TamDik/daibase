@@ -503,6 +503,7 @@ describe("HomePage", () => {
 
     await screen.findByRole("treeitem", { name: "Main" });
     await user.click(screen.getByRole("button", { name: "検索" }));
+    expect(screen.getByRole("dialog", { name: "検索パネル" })).toBeInTheDocument();
     const input = screen.getByRole("textbox", { name: "検索またはコマンド" });
     expect(input).toHaveFocus();
 

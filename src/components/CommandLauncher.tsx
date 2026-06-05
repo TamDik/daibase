@@ -1,4 +1,5 @@
 import {
+  Backdrop,
   Box,
   CircularProgress,
   IconButton,
@@ -78,107 +79,126 @@ export function CommandLauncher({
   };
 
   return (
-    <Box sx={{ alignItems: "center", display: "flex", position: "relative" }}>
+    <Box sx={{ alignItems: "center", display: "flex" }}>
       <Tooltip title="検索">
         <IconButton aria-label="検索" size="small" onClick={() => setIsOpen((current) => !current)}>
           <SearchRounded fontSize="small" />
         </IconButton>
       </Tooltip>
       {isOpen && (
-        <Box sx={{ ml: 0.5, position: "relative", width: { xs: 220, sm: 320 } }}>
-          <TextField
-            inputRef={inputRef}
-            autoComplete="off"
-            placeholder="検索"
-            size="small"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                setIsOpen(false);
-                setQuery("");
-              }
-            }}
-            slotProps={{
-              htmlInput: {
-                "aria-label": "検索またはコマンド",
-              },
-              input: {
-                endAdornment: isSearching ? <CircularProgress size={16} /> : null,
-              },
-            }}
+        <Backdrop
+          open
+          invisible
+          sx={{ alignItems: "flex-start", zIndex: (theme) => theme.zIndex.modal }}
+          onClick={() => setIsOpen(false)}
+        >
+          <Paper
+            role="dialog"
+            aria-label="検索パネル"
+            elevation={12}
+            onClick={(event) => event.stopPropagation()}
             sx={{
-              bgcolor: "#ffffff",
-              "& .MuiInputBase-root": {
-                height: 32,
-              },
+              border: "1px solid #d0d7de",
+              borderRadius: 1,
+              mt: { xs: 7, sm: 9 },
+              overflow: "hidden",
+              width: "min(720px, calc(100vw - 32px))",
             }}
-          />
-          {query.trim().length > 0 && (
-            <Paper
-              elevation={6}
-              sx={{
-                border: "1px solid #d0d7de",
-                left: 0,
-                maxHeight: 320,
-                overflow: "auto",
-                position: "absolute",
-                right: 0,
-                top: "calc(100% + 4px)",
-                zIndex: 20,
-              }}
-            >
-              {error ? (
-                <Typography color="error" variant="body2" sx={{ p: 1.25 }}>
-                  {error}
-                </Typography>
-              ) : results.length > 0 ? (
-                <List dense disablePadding aria-label="検索結果">
-                  {results.map((result) => (
-                    <ListItemButton
-                      key={`${result.content_kind}:${result.location}`}
-                      onClick={() => openResult(result)}
-                    >
-                      <ListItemText
-                        primary={result.title}
-                        secondary={
-                          <>
-                            <Typography
-                              component="span"
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ display: "block", overflowWrap: "anywhere" }}
-                            >
-                              {result.path}
-                            </Typography>
-                            {result.snippet && (
+          >
+            <Box sx={{ p: 1 }}>
+              <TextField
+                inputRef={inputRef}
+                autoComplete="off"
+                fullWidth
+                placeholder="検索"
+                size="medium"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setIsOpen(false);
+                    setQuery("");
+                  }
+                }}
+                slotProps={{
+                  htmlInput: {
+                    "aria-label": "検索またはコマンド",
+                  },
+                  input: {
+                    endAdornment: isSearching ? <CircularProgress size={18} /> : null,
+                    startAdornment: <SearchRounded fontSize="small" sx={{ color: "#57606a" }} />,
+                  },
+                }}
+                sx={{
+                  bgcolor: "#ffffff",
+                  "& .MuiInputBase-root": {
+                    fontSize: 18,
+                    gap: 1,
+                    minHeight: 52,
+                  },
+                }}
+              />
+            </Box>
+            {query.trim().length > 0 && (
+              <Box
+                sx={{
+                  borderTop: "1px solid #d0d7de",
+                  maxHeight: "min(480px, calc(100vh - 180px))",
+                  overflow: "auto",
+                }}
+              >
+                {error ? (
+                  <Typography color="error" variant="body2" sx={{ p: 1.25 }}>
+                    {error}
+                  </Typography>
+                ) : results.length > 0 ? (
+                  <List dense disablePadding aria-label="検索結果">
+                    {results.map((result) => (
+                      <ListItemButton
+                        key={`${result.content_kind}:${result.location}`}
+                        onClick={() => openResult(result)}
+                      >
+                        <ListItemText
+                          primary={result.title}
+                          secondary={
+                            <>
                               <Typography
                                 component="span"
                                 variant="caption"
                                 color="text.secondary"
                                 sx={{ display: "block", overflowWrap: "anywhere" }}
                               >
-                                {result.snippet}
+                                {result.path}
                               </Typography>
-                            )}
-                          </>
-                        }
-                      />
-                    </ListItemButton>
-                  ))}
-                </List>
-              ) : isSearching ? (
-                <Typography variant="body2" color="text.secondary" sx={{ p: 1.25 }}>
-                  検索中
-                </Typography>
-              ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ p: 1.25 }}>
-                  見つかりません
-                </Typography>
-              )}
-            </Paper>
-          )}
-        </Box>
+                              {result.snippet && (
+                                <Typography
+                                  component="span"
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ display: "block", overflowWrap: "anywhere" }}
+                                >
+                                  {result.snippet}
+                                </Typography>
+                              )}
+                            </>
+                          }
+                        />
+                      </ListItemButton>
+                    ))}
+                  </List>
+                ) : isSearching ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ p: 1.25 }}>
+                    検索中
+                  </Typography>
+                ) : (
+                  <Typography variant="body2" color="text.secondary" sx={{ p: 1.25 }}>
+                    見つかりません
+                  </Typography>
+                )}
+              </Box>
+            )}
+          </Paper>
+        </Backdrop>
       )}
     </Box>
   );
