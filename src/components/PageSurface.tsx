@@ -183,6 +183,9 @@ export function PageSurface({
         exclusive
         size="small"
         value={editorView}
+        sx={{
+          background: "#FFF",
+        }}
         onChange={(_, value: "wysiwyg" | "source" | null) => {
           if (value) {
             setEditorView(value);
@@ -295,22 +298,24 @@ export function PageSurface({
             )}
             <>
               {editorView === "source" ? (
-                <TextField
-                  label="Markdownソース"
-                  value={draft}
-                  onChange={(event) => onDraftChange(event.target.value)}
-                  disabled={isSaving || readOnly}
-                  multiline
-                  minRows={24}
-                  fullWidth
-                  sx={{
-                    "& textarea": {
-                      fontFamily:
-                        'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-                      lineHeight: 1.6,
-                    },
-                  }}
-                />
+                <Box sx={{ mx: 2, mt: 4 }}>
+                  <TextField
+                    label="Markdownソース"
+                    value={draft}
+                    onChange={(event) => onDraftChange(event.target.value)}
+                    disabled={isSaving || readOnly}
+                    multiline
+                    minRows={24}
+                    fullWidth
+                    sx={{
+                      "& textarea": {
+                        fontFamily:
+                          'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+                        lineHeight: 1.6,
+                      },
+                    }}
+                  />
+                </Box>
               ) : (
                 <>
                   {pluginViewMatch ? (
