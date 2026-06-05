@@ -51,7 +51,7 @@ export function SpecialPagesIndex({
 }) {
   return (
     <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Special Pages
         </Typography>
@@ -95,7 +95,7 @@ export function NamespacesSpecialPage({
 }) {
   return (
     <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Namespaces
         </Typography>
@@ -177,7 +177,7 @@ export function PagesSpecialPage({
 }) {
   return (
     <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Pages
         </Typography>
@@ -221,7 +221,7 @@ export function DeletedPagesSpecialPage({
 }) {
   return (
     <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Deleted Pages
         </Typography>
@@ -288,7 +288,7 @@ export function FavoritesSpecialPage({
 }) {
   return (
     <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Favorites
         </Typography>
@@ -337,7 +337,7 @@ export function CategoriesSpecialPage({
 
   return (
     <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Categories
         </Typography>
@@ -418,7 +418,7 @@ export function PluginsSpecialPage({
 
   return (
     <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Plugins
         </Typography>
