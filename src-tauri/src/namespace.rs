@@ -2,8 +2,8 @@ use crate::models::{
     BacklinkSummary, CategoryGroupSummary, CategoryPageSummary, ContentTree, DeletedContentSummary,
     FavoriteContentSummary, FileHistoryEntry, FileSummary, FolderSummary, NamespaceDetail,
     NamespaceMetadata, NamespaceRegistry, NamespaceSummary, PageHistorySnapshot, SaveFileResult,
-    SearchContentResult, SideBySideDiffRow, SideBySideDiffSection, DEFAULT_MAIN_CONTENT,
-    DEFAULT_PAGE_PATH,
+    SearchContentResult, SideBySideDiffRow, SideBySideDiffSection, SpecialPageSummary,
+    DEFAULT_MAIN_CONTENT, DEFAULT_PAGE_PATH,
 };
 use crate::paths::{
     resolve_namespace_file_path, resolve_namespace_folder_path, resolve_namespace_path,
@@ -1215,11 +1215,22 @@ fn search_content_for_namespace(
     }
 
     let normalized_query = query.to_lowercase();
+    let mut results = special_pages_for_namespace(namespace)
+        .into_iter()
+        .filter(|page| special_page_matches_query(page, &normalized_query))
+        .map(|page| SearchContentResult {
+            content_kind: "special".to_string(),
+            path: page.location.clone(),
+            title: page.title,
+            location: page.location,
+            snippet: Some(page.description),
+        })
+        .collect::<Vec<_>>();
+
     let mut paths = Vec::new();
     collect_visible_file_paths(&namespace.root_path, &namespace.root_path, &mut paths)?;
     paths.sort();
 
-    let mut results = Vec::new();
     for path in paths {
         let resolved_path = namespace.root_path.join(&path);
         let (content_kind, title, location) = if path.ends_with(".md") {
@@ -1260,6 +1271,51 @@ fn search_content_for_namespace(
     }
 
     Ok(results)
+}
+
+pub fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialPageSummary> {
+    vec![
+        SpecialPageSummary {
+            title: "Special Pages".to_string(),
+            description: "全ての Special ページを表示します。".to_string(),
+            location: format!("{}:Special:SpecialPages", namespace.name),
+        },
+        SpecialPageSummary {
+            title: "Namespaces".to_string(),
+            description: "登録済み namespace の確認と新規作成を行います。".to_string(),
+            location: "Special:Namespaces".to_string(),
+        },
+        SpecialPageSummary {
+            title: "Pages".to_string(),
+            description: "namespace 内の全ページを表示します。".to_string(),
+            location: format!("{}:Special:Pages", namespace.name),
+        },
+        SpecialPageSummary {
+            title: "Deleted Pages".to_string(),
+            description: "削除済みのページとファイルを表示します。".to_string(),
+            location: format!("{}:Special:DeletedPages", namespace.name),
+        },
+        SpecialPageSummary {
+            title: "Favorites".to_string(),
+            description: "お気に入りのページとファイルを表示します。".to_string(),
+            location: format!("{}:Special:Favorites", namespace.name),
+        },
+        SpecialPageSummary {
+            title: "Categories".to_string(),
+            description: "カテゴリ別にページを表示します。".to_string(),
+            location: format!("{}:Special:Categories", namespace.name),
+        },
+        SpecialPageSummary {
+            title: "Plugins".to_string(),
+            description: "登録済みプラグインの確認と有効化を行います。".to_string(),
+            location: format!("{}:Special:Plugins", namespace.name),
+        },
+    ]
+}
+
+fn special_page_matches_query(page: &SpecialPageSummary, normalized_query: &str) -> bool {
+    page.title.to_lowercase().contains(normalized_query)
+        || page.location.to_lowercase().contains(normalized_query)
 }
 
 fn search_snippet(content: &str, normalized_query: &str) -> Option<String> {
@@ -1863,6 +1919,12 @@ mod tests {
         let path_results = search_content_for_namespace(&namespace, "intro").unwrap();
         assert_eq!(path_results.len(), 1);
         assert_eq!(path_results[0].path, "Guide/Intro.md");
+
+        let special_results = search_content_for_namespace(&namespace, "favorites").unwrap();
+        assert_eq!(special_results.len(), 1);
+        assert_eq!(special_results[0].content_kind, "special");
+        assert_eq!(special_results[0].title, "Favorites");
+        assert_eq!(special_results[0].location, "Work:Special:Favorites");
 
         fs::remove_dir_all(root_path).unwrap();
     }

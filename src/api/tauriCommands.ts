@@ -21,7 +21,7 @@ export type FileSummary = {
 };
 
 export type SearchContentResult = {
-  content_kind: "page" | "file" | string;
+  content_kind: "page" | "file" | "special" | string;
   path: string;
   title: string;
   location: string;
