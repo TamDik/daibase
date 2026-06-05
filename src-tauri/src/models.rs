@@ -222,6 +222,8 @@ pub struct InstalledPluginSummary {
     pub version: String,
     pub description: String,
     pub enabled: bool,
+    #[serde(default)]
+    pub load_error: Option<String>,
     pub source: PluginInstallSource,
     pub manifest: PluginManifest,
 }

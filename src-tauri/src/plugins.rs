@@ -16,7 +16,10 @@ const DOCUMENTATION_ENTRY_PATH: &str = "README.md";
 pub fn list_plugins(app: &AppHandle) -> Result<Vec<InstalledPluginSummary>, String> {
     let mut plugins = read_registry(app)?.plugins;
     for plugin in &mut plugins {
-        refresh_local_folder_plugin(plugin)?;
+        match refresh_local_folder_plugin(plugin) {
+            Ok(()) => plugin.load_error = None,
+            Err(error) => plugin.load_error = Some(error),
+        }
     }
     plugins.sort_by(|left, right| left.name.cmp(&right.name));
     Ok(plugins)
@@ -43,6 +46,7 @@ pub fn install_plugin_from_folder(
         version: manifest.version.clone(),
         description: manifest.description.clone(),
         enabled,
+        load_error: None,
         source: PluginInstallSource::LocalFolder {
             path: source_path.to_string_lossy().to_string(),
         },
@@ -414,6 +418,7 @@ mod tests {
             version: "0.1.0".to_string(),
             description: "Calendar view".to_string(),
             enabled: true,
+            load_error: None,
             source: PluginInstallSource::LocalFolder {
                 path: plugin_dir.to_string_lossy().to_string(),
             },
@@ -428,6 +433,35 @@ mod tests {
         assert_eq!(plugin.manifest.version, "0.2.0");
 
         fs::remove_dir_all(plugin_dir).unwrap();
+    }
+
+    #[test]
+    fn marks_broken_plugin_without_dropping_summary() {
+        let mut plugin = InstalledPluginSummary {
+            id: "com.example.calendar".to_string(),
+            name: "Calendar".to_string(),
+            version: "0.1.0".to_string(),
+            description: "Calendar view".to_string(),
+            enabled: true,
+            load_error: None,
+            source: PluginInstallSource::LocalFolder {
+                path: test_plugin_dir("missing_plugin")
+                    .to_string_lossy()
+                    .to_string(),
+            },
+            manifest: valid_manifest(),
+        };
+
+        let error = refresh_local_folder_plugin(&mut plugin).unwrap_err();
+        plugin.load_error = Some(error);
+
+        assert!(plugin.enabled);
+        assert_eq!(plugin.name, "Calendar");
+        assert!(plugin
+            .load_error
+            .as_deref()
+            .unwrap()
+            .contains("プラグインフォルダを選択してください。"));
     }
 
     fn write_manifest(plugin_dir: &Path, manifest: &PluginManifest) {

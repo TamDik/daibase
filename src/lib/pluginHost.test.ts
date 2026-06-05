@@ -53,6 +53,7 @@ function plugin({ enabled }: { enabled: boolean }): InstalledPluginSummary {
     version: "0.1.0",
     description: "Calendar view",
     enabled,
+    load_error: null,
     source: {
       kind: "localFolder",
       path: "/tmp/calendar-plugin",

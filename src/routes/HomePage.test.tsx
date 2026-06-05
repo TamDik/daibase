@@ -901,6 +901,47 @@ describe("HomePage", () => {
     expect(screen.getByText("location-open")).toBeInTheDocument();
   });
 
+  it("Special:Plugins で壊れたプラグインをエラー表示する", async () => {
+    vi.mocked(api.listPlugins).mockResolvedValue([
+      pluginItems({
+        loadError: "manifest.json が見つからないか読み込めません。",
+      })[0],
+    ]);
+    vi.mocked(api.openLocation).mockImplementation(async (location) => {
+      if (location === "Special:Plugins" || location === "Work:Special:Plugins") {
+        return {
+          kind: "specialPlugins",
+          namespace: workNamespace,
+          location: "Work:Special:Plugins",
+          title: "Plugins",
+          content: contentTree,
+          plugins: pluginItems({
+            loadError: "manifest.json が見つからないか読み込めません。",
+          }),
+        };
+      }
+      return {
+        kind: "page",
+        namespace: workNamespace,
+        location: `Work:${location}`,
+        content: contentTree,
+        page: page(location, "# Main"),
+      };
+    });
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:Plugins");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    expect(await screen.findByDisplayValue("Work:Special:Plugins")).toBeInTheDocument();
+    expect(screen.getByText("Calendar")).toBeInTheDocument();
+    expect(screen.getByText("読み込みエラー")).toBeInTheDocument();
+    expect(screen.getByText("manifest.json が見つからないか読み込めません。")).toBeInTheDocument();
+  });
+
   it("Special:Plugins でプラグインの README を表示する", async () => {
     const user = userEvent.setup();
     renderHomePage();
@@ -1291,7 +1332,10 @@ function favoriteContentItems() {
   ];
 }
 
-function pluginItems({ enabled = false }: { enabled?: boolean } = {}): InstalledPluginSummary[] {
+function pluginItems({
+  enabled = false,
+  loadError = null,
+}: { enabled?: boolean; loadError?: string | null } = {}): InstalledPluginSummary[] {
   return [
     {
       id: "com.example.calendar",
@@ -1299,6 +1343,7 @@ function pluginItems({ enabled = false }: { enabled?: boolean } = {}): Installed
       version: "0.1.0",
       description: "Calendar view",
       enabled,
+      load_error: loadError,
       source: {
         kind: "localFolder",
         path: "/tmp/calendar-plugin",

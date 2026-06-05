@@ -243,6 +243,7 @@ export type InstalledPluginSummary = {
   version: string;
   description: string;
   enabled: boolean;
+  load_error: string | null;
   source: PluginInstallSource;
   manifest: PluginManifest;
 };

@@ -470,10 +470,18 @@ export function PluginsSpecialPage({
                       size="small"
                       label={plugin.enabled ? "有効" : "無効"}
                     />
+                    {plugin.load_error && (
+                      <Chip color="error" size="small" variant="outlined" label="読み込みエラー" />
+                    )}
                   </Stack>
                   <Typography variant="body2" color="text.secondary" noWrap>
                     {plugin.description || plugin.id}
                   </Typography>
+                  {plugin.load_error && (
+                    <Typography variant="caption" color="error" component="div">
+                      {plugin.load_error}
+                    </Typography>
+                  )}
                   <Typography variant="caption" color="text.secondary" noWrap component="div">
                     {sourceLabel(plugin)}
                   </Typography>
