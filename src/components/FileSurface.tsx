@@ -27,6 +27,7 @@ import {
 } from "@mui/icons-material";
 
 import type { BacklinkSummary, FileHistoryEntry, ManagedFileContent } from "../api/tauriCommands";
+import { CommandLauncher } from "./CommandLauncher";
 
 export type FileMode = "detail" | "history";
 
@@ -119,6 +120,7 @@ export function FileSurface({
               <TerminalRounded fontSize="small" />
             </IconButton>
           </Tooltip>
+          <CommandLauncher namespaceId={file.namespace_id} onOpenLocation={onOpenLocation} />
         </Stack>
         <Divider flexItem orientation="vertical" sx={{ mr: 1 }} />
         <Box sx={{ borderBottom: 1, borderColor: "divider", flex: 1 }}>
@@ -190,9 +192,7 @@ export function FileSurface({
               </Box>
               {!readOnly && (
                 <Button
-                  startIcon={
-                    isUploading ? <CircularProgress size={16} /> : <CloudUploadOutlined />
-                  }
+                  startIcon={isUploading ? <CircularProgress size={16} /> : <CloudUploadOutlined />}
                   variant="contained"
                   disabled={isUploading}
                   onClick={onUpload}

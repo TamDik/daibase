@@ -19,6 +19,7 @@ import type {
   ManagedFileContent,
   NamespaceSummary,
   PageContent,
+  SearchContentResult,
 } from "../api/tauriCommands";
 import { HomePage } from "./HomePage";
 
@@ -52,6 +53,7 @@ vi.mock("../api/tauriCommands", () => ({
   resolveMarkdownLinkStatus: vi.fn(),
   restoreDeletedContent: vi.fn(),
   savePage: vi.fn(),
+  searchContent: vi.fn(),
   setFavoriteContent: vi.fn(),
   setPluginEnabled: vi.fn(),
   uploadFile: vi.fn(),
@@ -149,6 +151,7 @@ describe("HomePage", () => {
     vi.mocked(api.resolveMarkdownLinkStatus).mockReset();
     vi.mocked(api.restoreDeletedContent).mockReset();
     vi.mocked(api.savePage).mockReset();
+    vi.mocked(api.searchContent).mockReset();
     vi.mocked(api.setFavoriteContent).mockReset();
     vi.mocked(api.setPluginEnabled).mockReset();
     vi.mocked(api.uploadFile).mockReset();
@@ -202,6 +205,7 @@ describe("HomePage", () => {
         saved_at: "2026-01-01T00:00:00Z",
       },
     }));
+    vi.mocked(api.searchContent).mockResolvedValue(searchResults());
     vi.mocked(api.setFavoriteContent).mockImplementation(
       async (_namespaceId, path, isFavorite) => ({
         namespace: workNamespace,
@@ -491,6 +495,27 @@ describe("HomePage", () => {
     expect(screen.queryByLabelText("未保存")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Markdown" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "編集" })).not.toBeInTheDocument();
+  });
+
+  it("検索ボタンで入力欄を表示して検索結果からページを開く", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await screen.findByRole("treeitem", { name: "Main" });
+    await user.click(screen.getByRole("button", { name: "検索" }));
+    const input = screen.getByRole("textbox", { name: "検索またはコマンド" });
+    expect(input).toHaveFocus();
+
+    await user.type(input, "intro");
+
+    await waitFor(() => expect(api.searchContent).toHaveBeenCalledWith(workNamespace.id, "intro"));
+    const results = await screen.findByRole("list", { name: "検索結果" });
+    expect(within(results).getByText("Guide/Intro.md")).toBeInTheDocument();
+    expect(within(results).getByText(/本文の Intro/)).toBeInTheDocument();
+
+    await user.click(within(results).getByRole("button", { name: /Intro/ }));
+
+    expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue("# Intro");
   });
 
   it("Markdown ソース表示で本文を編集できる", async () => {
@@ -883,9 +908,7 @@ describe("HomePage", () => {
     expect(screen.getByText("Categories")).toBeInTheDocument();
     expect(screen.getByText("カテゴリ別にページを表示します。")).toBeInTheDocument();
     expect(screen.getByText("Plugins")).toBeInTheDocument();
-    expect(
-      screen.getByText("登録済みプラグインの確認と有効化を行います。"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("登録済みプラグインの確認と有効化を行います。")).toBeInTheDocument();
     expect(screen.queryByText(/Work namespace/)).not.toBeInTheDocument();
   });
 
@@ -1345,6 +1368,18 @@ function favoriteContentItems() {
       title: "Intro",
       location: "Work:Guide/Intro.md",
       content_kind: "page",
+    },
+  ];
+}
+
+function searchResults(): SearchContentResult[] {
+  return [
+    {
+      content_kind: "page",
+      path: "Guide/Intro.md",
+      title: "Intro",
+      location: "Work:Guide/Intro.md",
+      snippet: "本文の Intro に一致しました。",
     },
   ];
 }

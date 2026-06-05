@@ -171,6 +171,16 @@ fn handle_tool_call(id: Value, params: Value, app: &AppHandle) -> Value {
         "list_content" => call_namespace_id(arguments, |namespace_id| {
             crate::namespace::list_content(app, namespace_id)
         }),
+        "search_content" => {
+            let namespace_id = required_string(&arguments, "namespace_id");
+            let query = required_string(&arguments, "query");
+            match (namespace_id, query) {
+                (Ok(namespace_id), Ok(query)) => {
+                    to_value(crate::namespace::search_content(app, namespace_id, query))
+                }
+                (Err(error), _) | (_, Err(error)) => Err(error),
+            }
+        }
         "read_page" => call_namespace_path(arguments, |namespace_id, path| {
             crate::namespace::read_page(app, namespace_id, path)
         }),
@@ -338,6 +348,15 @@ fn tools() -> Vec<Value> {
             "list_content",
             "List Content",
             "namespace 内のページ、ファイル、フォルダーを一覧します。",
+        ),
+        tool(
+            "search_content",
+            "Search Content",
+            "namespace 内のページ名、パス、本文、テキストファイル内容を検索します。",
+            object_schema(vec![
+                string_prop("namespace_id", "namespace ID"),
+                string_prop("query", "検索語"),
+            ]),
         ),
         namespace_path_tool("read_page", "Read Page", "Markdown ページを読み込みます。"),
         tool(
@@ -715,6 +734,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert!(tool_names.contains(&"write_page".to_string()));
+        assert!(tool_names.contains(&"search_content".to_string()));
         assert!(tool_names.contains(&"upload_file".to_string()));
         assert!(tool_names.contains(&"delete_page".to_string()));
         assert!(tool_names.contains(&"restore_deleted_content".to_string()));

@@ -4,7 +4,7 @@ use crate::models::{
     InstalledPluginSummary, MarkdownImageResolution, MarkdownLinkStatus, McpServerStatus,
     NamespaceDetail, NamespaceSummary, OpenLocationResult, PageContent, PageHistorySnapshot,
     PluginDocumentation, PluginMainResolution, SaveFileResult, SavePageResult, SaveResult,
-    SpecialPageSummary,
+    SearchContentResult, SpecialPageSummary,
 };
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
@@ -230,6 +230,15 @@ pub fn write_file_note(
 #[tauri::command]
 pub fn list_content(app: AppHandle, namespace_id: String) -> Result<ContentTree, String> {
     crate::namespace::list_content(&app, namespace_id)
+}
+
+#[tauri::command]
+pub fn search_content(
+    app: AppHandle,
+    namespace_id: String,
+    query: String,
+) -> Result<Vec<SearchContentResult>, String> {
+    crate::namespace::search_content(&app, namespace_id, query)
 }
 
 #[tauri::command]

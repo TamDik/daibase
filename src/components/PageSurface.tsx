@@ -42,6 +42,7 @@ import {
   updateMarkdownBodyPreservingFrontmatter,
 } from "../lib/pageCategories";
 import { findPageViewPlugin, markdownContext } from "../lib/pluginHost";
+import { CommandLauncher } from "./CommandLauncher";
 import { MarkdownWysiwygEditor } from "./MarkdownWysiwygEditor";
 import { SideBySideDiffView } from "./SideBySideDiffView";
 
@@ -215,6 +216,7 @@ export function PageSurface({
               <TerminalRounded fontSize="small" />
             </IconButton>
           </Tooltip>
+          <CommandLauncher namespaceId={pageContext.namespaceId} onOpenLocation={onOpenLocation} />
         </Stack>
         <Box sx={{ flex: 1, minWidth: 0 }} />
         {isDirty && (
