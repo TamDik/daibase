@@ -511,8 +511,10 @@ describe("HomePage", () => {
 
     await waitFor(() => expect(api.searchContent).toHaveBeenCalledWith(workNamespace.id, "intro"));
     const results = await screen.findByRole("list", { name: "検索結果" });
-    expect(within(results).getByText("Guide/Intro.md")).toBeInTheDocument();
-    expect(within(results).getByText(/本文の Intro/)).toBeInTheDocument();
+    const resultButton = within(results).getByRole("button", { name: /Intro/ });
+    expect(resultButton).toHaveTextContent("Guide/Intro.md");
+    expect(resultButton).toHaveTextContent("本文の Intro");
+    expect(within(results).getAllByText("Intro", { selector: "mark" })).toHaveLength(3);
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "検索パネル" })).not.toBeInTheDocument();

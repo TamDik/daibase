@@ -12,7 +12,7 @@ import {
   Typography,
 } from "@mui/material";
 import { SearchRounded } from "@mui/icons-material";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { searchContent, type SearchContentResult } from "../api/tauriCommands";
 
@@ -92,6 +92,7 @@ export function CommandLauncher({
     onOpenLocation(result.location);
     closeLauncher();
   };
+  const highlightQuery = query.trim();
 
   return (
     <Box sx={{ alignItems: "center", display: "flex" }}>
@@ -195,7 +196,9 @@ export function CommandLauncher({
                         onClick={() => openResult(result)}
                       >
                         <ListItemText
-                          primary={result.title}
+                          primary={
+                            <HighlightedText text={result.title} query={highlightQuery} />
+                          }
                           secondary={
                             <>
                               <Typography
@@ -204,7 +207,7 @@ export function CommandLauncher({
                                 color="text.secondary"
                                 sx={{ display: "block", overflowWrap: "anywhere" }}
                               >
-                                {result.path}
+                                <HighlightedText text={result.path} query={highlightQuery} />
                               </Typography>
                               {result.snippet && (
                                 <Typography
@@ -213,7 +216,10 @@ export function CommandLauncher({
                                   color="text.secondary"
                                   sx={{ display: "block", overflowWrap: "anywhere" }}
                                 >
-                                  {result.snippet}
+                                  <HighlightedText
+                                    text={result.snippet}
+                                    query={highlightQuery}
+                                  />
                                 </Typography>
                               )}
                             </>
@@ -238,4 +244,50 @@ export function CommandLauncher({
       )}
     </Box>
   );
+}
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  return <>{highlightText(text, query)}</>;
+}
+
+export function highlightText(text: string, query: string): ReactNode[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery.length === 0) {
+    return [text];
+  }
+
+  const normalizedText = text.toLowerCase();
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  let matchIndex = normalizedText.indexOf(normalizedQuery);
+
+  while (matchIndex >= 0) {
+    if (matchIndex > cursor) {
+      nodes.push(text.slice(cursor, matchIndex));
+    }
+
+    const matchEnd = matchIndex + normalizedQuery.length;
+    nodes.push(
+      <Box
+        key={`${matchIndex}-${matchEnd}`}
+        component="mark"
+        sx={{
+          bgcolor: "#fff0a6",
+          borderRadius: 0.75,
+          color: "inherit",
+          px: 0.25,
+        }}
+      >
+        {text.slice(matchIndex, matchEnd)}
+      </Box>,
+    );
+    cursor = matchEnd;
+    matchIndex = normalizedText.indexOf(normalizedQuery, cursor);
+  }
+
+  if (cursor < text.length) {
+    nodes.push(text.slice(cursor));
+  }
+
+  return nodes.length > 0 ? nodes : [text];
 }
