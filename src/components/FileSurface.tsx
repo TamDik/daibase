@@ -3,7 +3,6 @@ import {
   Box,
   Button,
   CircularProgress,
-  IconButton,
   Link,
   List,
   ListItemButton,
@@ -20,11 +19,10 @@ import {
   HistoryRounded,
   InsertDriveFileOutlined,
   SaveOutlined,
-  Star,
-  StarBorder,
 } from "@mui/icons-material";
 
 import type { BacklinkSummary, FileHistoryEntry, ManagedFileContent } from "../api/tauriCommands";
+import { FavoriteToggleButton } from "./FavoriteToggleButton";
 import { MainContentTop } from "./MainContentTop";
 
 export type FileMode = "detail" | "history";
@@ -135,19 +133,11 @@ export function FileSurface({
               </Tooltip>
             </ToggleButtonGroup>
             {!readOnly && (
-              <IconButton
-                aria-label={file.is_favorite ? "お気に入り解除" : "お気に入り"}
+              <FavoriteToggleButton
                 disabled={isVirtual || isUploading}
-                size="small"
-                onClick={onToggleFavorite}
-                sx={{ ml: 0.5 }}
-              >
-                {file.is_favorite ? (
-                  <Star sx={{ color: "#bf8700" }} fontSize="small" />
-                ) : (
-                  <StarBorder fontSize="small" />
-                )}
-              </IconButton>
+                isFavorite={file.is_favorite ?? false}
+                onToggleFavorite={onToggleFavorite}
+              />
             )}
           </>
         }

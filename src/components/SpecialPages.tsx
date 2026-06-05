@@ -50,7 +50,7 @@ export function SpecialPagesIndex({
   onOpenLocation: (location: string) => void;
 }) {
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
       <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Special Pages
@@ -94,7 +94,7 @@ export function NamespacesSpecialPage({
   onRootPathSelect: () => void;
 }) {
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
       <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Namespaces
@@ -176,7 +176,7 @@ export function PagesSpecialPage({
   onOpenLocation: (location: string) => void;
 }) {
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
       <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Pages
@@ -220,7 +220,7 @@ export function DeletedPagesSpecialPage({
   onRestoreDeletedContent: (item: DeletedContentSummary) => void;
 }) {
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
       <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Deleted Pages
@@ -287,7 +287,7 @@ export function FavoritesSpecialPage({
   onOpenLocation: (location: string) => void;
 }) {
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
       <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Favorites
@@ -336,7 +336,7 @@ export function CategoriesSpecialPage({
   const hasPages = categories.length > 0 || uncategorizedPages.length > 0;
 
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
       <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Categories
@@ -417,7 +417,7 @@ export function PluginsSpecialPage({
   const [pluginToRemove, setPluginToRemove] = useState<InstalledPluginSummary | null>(null);
 
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
       <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Plugins

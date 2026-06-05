@@ -5,7 +5,6 @@ import {
   Button,
   Chip,
   CircularProgress,
-  IconButton,
   Link,
   List,
   ListItemButton,
@@ -17,14 +16,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import {
-  ArrowBackRounded,
-  Article,
-  Code,
-  HistoryRounded,
-  Star,
-  StarBorder,
-} from "@mui/icons-material";
+import { ArrowBackRounded, Article, Code, HistoryRounded } from "@mui/icons-material";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
@@ -40,6 +32,7 @@ import {
   updateMarkdownBodyPreservingFrontmatter,
 } from "../lib/pageCategories";
 import { findPageViewPlugin, markdownContext } from "../lib/pluginHost";
+import { FavoriteToggleButton } from "./FavoriteToggleButton";
 import { MainContentTop } from "./MainContentTop";
 import { MarkdownWysiwygEditor } from "./MarkdownWysiwygEditor";
 import { SideBySideDiffView } from "./SideBySideDiffView";
@@ -256,23 +249,11 @@ export function PageSurface({
               </Tooltip>
             </ToggleButtonGroup>
             {!readOnly && (
-              <Tooltip title={isFavorite ? "お気に入り解除" : "お気に入り"}>
-                <span>
-                  <IconButton
-                    aria-label={isFavorite ? "お気に入り解除" : "お気に入り"}
-                    disabled={isVirtual || isSaving}
-                    size="small"
-                    onClick={onToggleFavorite}
-                    sx={{ ml: 0.5 }}
-                  >
-                    {isFavorite ? (
-                      <Star sx={{ color: "#bf8700" }} fontSize="small" />
-                    ) : (
-                      <StarBorder fontSize="small" />
-                    )}
-                  </IconButton>
-                </span>
-              </Tooltip>
+              <FavoriteToggleButton
+                disabled={isVirtual || isSaving}
+                isFavorite={isFavorite}
+                onToggleFavorite={onToggleFavorite}
+              />
             )}
           </>
         }
