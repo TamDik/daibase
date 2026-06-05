@@ -1188,73 +1188,80 @@ export function HomePage() {
               overflow: "hidden",
             }}
           >
-            <Stack spacing={2} sx={{ flexGrow: 1, minHeight: 0 }}>
+            <Stack spacing={2} sx={{ flex: "1 1 auto", minHeight: 0, overflow: "hidden" }}>
               {isLoading && <Alert severity="info">読み込み中</Alert>}
               {error && <Alert severity="error">{error}</Alert>}
 
-              {specialView?.kind === "namespaces" && (
-                <NamespacesSpecialPage
-                  namespaceName={namespaceName}
-                  namespaces={namespaces}
-                  rootPath={rootPath}
-                  onCreateNamespace={handleCreateNamespace}
-                  onNamespaceNameChange={setNamespaceName}
-                  onOpenLocation={(location) => void navigate(location)}
-                  onRootPathSelect={() => void handleSelectRootPath()}
-                />
-              )}
+              {specialView && (
+                <Box
+                  data-testid="special-page-scroll"
+                  sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}
+                >
+                  {specialView.kind === "namespaces" && (
+                    <NamespacesSpecialPage
+                      namespaceName={namespaceName}
+                      namespaces={namespaces}
+                      rootPath={rootPath}
+                      onCreateNamespace={handleCreateNamespace}
+                      onNamespaceNameChange={setNamespaceName}
+                      onOpenLocation={(location) => void navigate(location)}
+                      onRootPathSelect={() => void handleSelectRootPath()}
+                    />
+                  )}
 
-              {specialView?.kind === "specialPages" && (
-                <SpecialPagesIndex
-                  location={specialView.location}
-                  pages={specialView.pages}
-                  onOpenLocation={(location) => void navigate(location)}
-                />
-              )}
+                  {specialView.kind === "specialPages" && (
+                    <SpecialPagesIndex
+                      location={specialView.location}
+                      pages={specialView.pages}
+                      onOpenLocation={(location) => void navigate(location)}
+                    />
+                  )}
 
-              {specialView?.kind === "pages" && (
-                <PagesSpecialPage
-                  content={specialView.content}
-                  namespace={specialView.namespace}
-                  onOpenLocation={(location) => void navigate(location)}
-                />
-              )}
+                  {specialView.kind === "pages" && (
+                    <PagesSpecialPage
+                      content={specialView.content}
+                      namespace={specialView.namespace}
+                      onOpenLocation={(location) => void navigate(location)}
+                    />
+                  )}
 
-              {specialView?.kind === "deletedPages" && (
-                <DeletedPagesSpecialPage
-                  items={specialView.items}
-                  namespace={specialView.namespace}
-                  onOpenDeletedContent={(item) => void handleOpenDeletedContent(item)}
-                  onRestoreDeletedContent={(item) => void handleRestoreDeletedContent(item)}
-                />
-              )}
+                  {specialView.kind === "deletedPages" && (
+                    <DeletedPagesSpecialPage
+                      items={specialView.items}
+                      namespace={specialView.namespace}
+                      onOpenDeletedContent={(item) => void handleOpenDeletedContent(item)}
+                      onRestoreDeletedContent={(item) => void handleRestoreDeletedContent(item)}
+                    />
+                  )}
 
-              {specialView?.kind === "favorites" && (
-                <FavoritesSpecialPage
-                  items={specialView.items}
-                  namespace={specialView.namespace}
-                  onOpenLocation={(location) => void navigate(location)}
-                />
-              )}
+                  {specialView.kind === "favorites" && (
+                    <FavoritesSpecialPage
+                      items={specialView.items}
+                      namespace={specialView.namespace}
+                      onOpenLocation={(location) => void navigate(location)}
+                    />
+                  )}
 
-              {specialView?.kind === "categories" && (
-                <CategoriesSpecialPage
-                  categories={specialView.categories}
-                  namespace={specialView.namespace}
-                  uncategorizedPages={specialView.uncategorizedPages}
-                  onOpenLocation={(location) => void navigate(location)}
-                />
-              )}
+                  {specialView.kind === "categories" && (
+                    <CategoriesSpecialPage
+                      categories={specialView.categories}
+                      namespace={specialView.namespace}
+                      uncategorizedPages={specialView.uncategorizedPages}
+                      onOpenLocation={(location) => void navigate(location)}
+                    />
+                  )}
 
-              {specialView?.kind === "plugins" && (
-                <PluginsSpecialPage
-                  namespace={specialView.namespace}
-                  plugins={specialView.plugins}
-                  onInstallFromFolder={() => void handleInstallPluginFromFolder()}
-                  onReadPluginDocumentation={(plugin) => readPluginDocumentation(plugin.id)}
-                  onRemovePlugin={(plugin) => void handleRemovePlugin(plugin)}
-                  onTogglePlugin={(plugin, enabled) => void handleTogglePlugin(plugin, enabled)}
-                />
+                  {specialView.kind === "plugins" && (
+                    <PluginsSpecialPage
+                      namespace={specialView.namespace}
+                      plugins={specialView.plugins}
+                      onInstallFromFolder={() => void handleInstallPluginFromFolder()}
+                      onReadPluginDocumentation={(plugin) => readPluginDocumentation(plugin.id)}
+                      onRemovePlugin={(plugin) => void handleRemovePlugin(plugin)}
+                      onTogglePlugin={(plugin, enabled) => void handleTogglePlugin(plugin, enabled)}
+                    />
+                  )}
+                </Box>
               )}
 
               {pageView && (

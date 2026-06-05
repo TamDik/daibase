@@ -861,6 +861,22 @@ describe("HomePage", () => {
     expect(screen.getByText("Work:Guide/Intro.md")).toBeInTheDocument();
   });
 
+  it("Special ページのコンテンツ領域をスクロール可能にする", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:Pages");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    await screen.findByDisplayValue("Work:Special:Pages");
+    expect(screen.getByTestId("special-page-scroll")).toHaveStyle({
+      minHeight: "0px",
+      overflow: "auto",
+    });
+  });
+
   it("Special:SpecialPages で全ての Special ページを表示する", async () => {
     const user = userEvent.setup();
     renderHomePage();
