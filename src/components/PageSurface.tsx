@@ -5,6 +5,7 @@ import {
   Button,
   Chip,
   CircularProgress,
+  IconButton,
   Link,
   List,
   ListItemButton,
@@ -16,7 +17,16 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { ArrowBackRounded, Article, Code, HistoryRounded } from "@mui/icons-material";
+import {
+  Article,
+  ArrowBackRounded,
+  CloseRounded,
+  Code,
+  FindInPageRounded,
+  HistoryRounded,
+  KeyboardArrowDownRounded,
+  KeyboardArrowUpRounded,
+} from "@mui/icons-material";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
@@ -31,6 +41,7 @@ import {
   markdownBodyFromMarkdown,
   updateMarkdownBodyPreservingFrontmatter,
 } from "../lib/pageCategories";
+import { findPageSearchMatches } from "../lib/pageSearch";
 import { findPageViewPlugin, markdownContext } from "../lib/pluginHost";
 import { FavoriteToggleButton } from "./FavoriteToggleButton";
 import { MainContentTop } from "./MainContentTop";
@@ -64,7 +75,6 @@ export function PageSurface({
   readOnly = false,
   canGoBack,
   canGoForward,
-  onToggleTerminal,
   onDraftChange,
   onCategoriesChange,
   onGoBack,
@@ -98,7 +108,6 @@ export function PageSurface({
   readOnly?: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
-  onToggleTerminal: () => void;
   onDraftChange: (value: string) => void;
   onCategoriesChange: (categories: string[]) => void;
   onGoBack: () => void;
@@ -130,12 +139,24 @@ export function PageSurface({
   const [editorView, setEditorView] = useState<"wysiwyg" | "source">("wysiwyg");
   const [categoryInput, setCategoryInput] = useState("");
   const [categoryValues, setCategoryValues] = useState<string[]>([]);
+  const [pageSearchOpen, setPageSearchOpen] = useState(false);
+  const [pageSearchQuery, setPageSearchQuery] = useState("");
+  const [pageSearchIndex, setPageSearchIndex] = useState(0);
+  const sourceTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const pluginViewMatch = editorView === "wysiwyg" ? findPageViewPlugin(draft, plugins) : null;
   const activeTool = mode === "history" ? "history" : editorView;
+  const pageSearchMatches = useMemo(
+    () => findPageSearchMatches(draft, pageSearchQuery),
+    [draft, pageSearchQuery],
+  );
+  const activePageSearchMatch = pageSearchMatches[pageSearchIndex] ?? null;
 
   useEffect(() => {
     setCategoryInput("");
     setCategoryValues(categoriesFromMarkdown(draft));
+    setPageSearchOpen(false);
+    setPageSearchQuery("");
+    setPageSearchIndex(0);
   }, [editorKey]);
 
   useEffect(() => {
@@ -144,6 +165,54 @@ export function PageSurface({
       setCategoryValues(draftCategories);
     }
   }, [categoryValues, draft]);
+
+  useEffect(() => {
+    setPageSearchIndex(0);
+  }, [pageSearchQuery]);
+
+  useEffect(() => {
+    if (pageSearchIndex >= pageSearchMatches.length) {
+      setPageSearchIndex(Math.max(0, pageSearchMatches.length - 1));
+    }
+  }, [pageSearchIndex, pageSearchMatches.length]);
+
+  useEffect(() => {
+    if (!pageSearchOpen || editorView !== "source" || !activePageSearchMatch) {
+      return;
+    }
+
+    const textarea = sourceTextareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    textarea.focus();
+    textarea.setSelectionRange(activePageSearchMatch.start, activePageSearchMatch.end);
+  }, [activePageSearchMatch, editorView, pageSearchOpen]);
+
+  const openPageSearch = () => {
+    setPageSearchOpen(true);
+  };
+
+  const closePageSearch = () => {
+    setPageSearchOpen(false);
+    setPageSearchQuery("");
+    setPageSearchIndex(0);
+  };
+
+  const goToPreviousPageSearchMatch = () => {
+    if (pageSearchMatches.length === 0) {
+      return;
+    }
+    setPageSearchIndex((current) => (current <= 0 ? pageSearchMatches.length - 1 : current - 1));
+  };
+
+  const goToNextPageSearchMatch = () => {
+    if (pageSearchMatches.length === 0) {
+      return;
+    }
+    setPageSearchIndex((current) => (current + 1) % pageSearchMatches.length);
+  };
 
   const updateCategories = (categories: string[]) => {
     const nextCategories = uniqueCategories(categories);
@@ -176,14 +245,21 @@ export function PageSurface({
       <MainContentTop
         canGoBack={canGoBack}
         canGoForward={canGoForward}
-        searchNamespaceId={pageContext.namespaceId}
         onGoBack={onGoBack}
         onGoForward={onGoForward}
-        onOpenLocation={onOpenLocation}
-        onToggleTerminal={onToggleTerminal}
         rightSlot={
           <>
             <Box sx={{ flex: 1, minWidth: 0 }} />
+            <Tooltip title="ページ内検索">
+              <IconButton
+                aria-label="ページ内検索"
+                aria-pressed={pageSearchOpen}
+                size="small"
+                onClick={pageSearchOpen ? closePageSearch : openPageSearch}
+              >
+                <FindInPageRounded fontSize="small" />
+              </IconButton>
+            </Tooltip>
             {isDirty && (
               <Chip
                 aria-label="未保存"
@@ -258,6 +334,17 @@ export function PageSurface({
           </>
         }
       />
+      {pageSearchOpen && (
+        <PageSearchBar
+          currentIndex={pageSearchIndex}
+          matchCount={pageSearchMatches.length}
+          query={pageSearchQuery}
+          onClose={closePageSearch}
+          onNext={goToNextPageSearchMatch}
+          onPrevious={goToPreviousPageSearchMatch}
+          onQueryChange={setPageSearchQuery}
+        />
+      )}
       <Box sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}>
         {mode === "history" ? (
           <HistoryPanel
@@ -284,6 +371,7 @@ export function PageSurface({
               {editorView === "source" ? (
                 <Box sx={{ mx: 2, mt: 4 }}>
                   <TextField
+                    inputRef={sourceTextareaRef}
                     label="Markdownソース"
                     value={draft}
                     onChange={(event) => onDraftChange(event.target.value)}
@@ -361,6 +449,107 @@ export function PageSurface({
           </Box>
         )}
       </Box>
+    </Box>
+  );
+}
+
+function PageSearchBar({
+  currentIndex,
+  matchCount,
+  query,
+  onClose,
+  onNext,
+  onPrevious,
+  onQueryChange,
+}: {
+  currentIndex: number;
+  matchCount: number;
+  query: string;
+  onClose: () => void;
+  onNext: () => void;
+  onPrevious: () => void;
+  onQueryChange: (query: string) => void;
+}) {
+  const hasQuery = query.trim().length > 0;
+  const hasMatches = matchCount > 0;
+  const countLabel = hasQuery && hasMatches ? `${currentIndex + 1}/${matchCount}` : "0/0";
+
+  return (
+    <Box
+      role="search"
+      aria-label="ページ内検索"
+      sx={{
+        alignItems: "center",
+        borderTop: "1px solid",
+        borderBottom: "1px solid",
+        borderColor: "divider",
+        display: "flex",
+        flex: "0 0 auto",
+        gap: 0.75,
+        px: 1.5,
+        py: 0.75,
+      }}
+    >
+      <TextField
+        autoComplete="off"
+        autoFocus
+        size="small"
+        value={query}
+        placeholder="ページ内検索"
+        onChange={(event) => onQueryChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            onClose();
+          }
+          if (event.key === "Enter") {
+            event.preventDefault();
+            if (event.shiftKey) {
+              onPrevious();
+              return;
+            }
+            onNext();
+          }
+        }}
+        slotProps={{
+          htmlInput: {
+            "aria-label": "ページ内検索キーワード",
+          },
+        }}
+        sx={{ maxWidth: 320, minWidth: 160, width: "min(320px, 45vw)" }}
+      />
+      <Typography
+        aria-label="ページ内検索の一致数"
+        variant="body2"
+        color="text.secondary"
+        sx={{ flex: "0 0 auto", minWidth: 44, textAlign: "right" }}
+      >
+        {countLabel}
+      </Typography>
+      <Tooltip title="前へ">
+        <span>
+          <IconButton
+            aria-label="前の一致"
+            disabled={!hasMatches}
+            size="small"
+            onClick={onPrevious}
+          >
+            <KeyboardArrowUpRounded fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Tooltip title="次へ">
+        <span>
+          <IconButton aria-label="次の一致" disabled={!hasMatches} size="small" onClick={onNext}>
+            <KeyboardArrowDownRounded fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Box sx={{ flex: 1, minWidth: 0 }} />
+      <Tooltip title="閉じる">
+        <IconButton aria-label="ページ内検索を閉じる" size="small" onClick={onClose}>
+          <CloseRounded fontSize="small" />
+        </IconButton>
+      </Tooltip>
     </Box>
   );
 }

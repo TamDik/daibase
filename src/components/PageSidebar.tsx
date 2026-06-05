@@ -1,4 +1,4 @@
-import { Box, Button, IconButton, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, IconButton, Stack, Tooltip, Typography } from "@mui/material";
 import {
   ArticleOutlined,
   CreateNewFolderOutlined,
@@ -10,6 +10,7 @@ import {
   SortByAlphaOutlined,
   Star,
   StarBorder,
+  TerminalRounded,
 } from "@mui/icons-material";
 import { RichTreeView } from "@mui/x-tree-view/RichTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
@@ -22,6 +23,7 @@ import type {
   FolderSummary,
   NamespaceSummary,
 } from "../api/tauriCommands";
+import { CommandLauncher } from "./CommandLauncher";
 import { ResizableSidebar } from "./ResizableSidebar";
 
 type PageTreeItem = {
@@ -49,6 +51,7 @@ export function PageSidebar({
   onCreatePage,
   onDeleteContent,
   onOpenLocation,
+  onToggleTerminal,
   onToggleFavorite,
 }: {
   content: ContentTree | null;
@@ -58,6 +61,7 @@ export function PageSidebar({
   onCreatePage: (parentDirectory: string) => void;
   onDeleteContent: (path: string, kind: "page" | "folder" | "file") => void;
   onOpenLocation: (location: string) => void;
+  onToggleTerminal: () => void;
   onToggleFavorite: (path: string, isFavorite: boolean) => void;
 }) {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -67,10 +71,6 @@ export function PageSidebar({
   const treeItems = useMemo(
     () => buildTreeItems(folders, pages, files, sortDirection),
     [files, folders, pages, sortDirection],
-  );
-  const favoriteItems = useMemo(
-    () => collectFavoriteItems(pages, files, sortDirection),
-    [files, pages, sortDirection],
   );
   const expandableItemIds = useMemo(() => collectExpandableItemIds(treeItems), [treeItems]);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
@@ -117,9 +117,12 @@ export function PageSidebar({
     <ResizableSidebar>
       <SidebarToolbar
         canCreate={namespace !== null}
+        searchNamespaceId={namespace?.id ?? null}
         sortDirection={sortDirection}
         onCreateFolder={() => onCreateFolder(createParentDirectory)}
         onCreatePage={() => onCreatePage(createParentDirectory)}
+        onOpenLocation={onOpenLocation}
+        onToggleTerminal={onToggleTerminal}
         onToggleSortDirection={() =>
           setSortDirection((current) => (current === "asc" ? "desc" : "asc"))
         }
@@ -162,68 +165,6 @@ export function PageSidebar({
           />
         )}
       </Box>
-      {namespace !== null && favoriteItems.length > 0 && (
-        <Box
-          sx={{
-            borderTop: "1px solid",
-            borderColor: "divider",
-            px: 1,
-            py: 0.75,
-          }}
-        >
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ display: "block", fontWeight: 700, px: 1, pb: 0.25 }}
-          >
-            お気に入り
-          </Typography>
-          <Stack spacing={0.25}>
-            {favoriteItems.map((item) => (
-              <Button
-                key={`${item.contentKind}:${item.path}`}
-                fullWidth
-                size="small"
-                startIcon={<Star fontSize="small" />}
-                sx={{
-                  justifyContent: "flex-start",
-                  minWidth: 0,
-                  overflow: "hidden",
-                  textTransform: "none",
-                  "& .MuiButton-startIcon": { flex: "0 0 auto" },
-                }}
-                onClick={() => onOpenLocation(item.location)}
-              >
-                <Box
-                  component="span"
-                  sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}
-                >
-                  {item.title}
-                </Box>
-              </Button>
-            ))}
-          </Stack>
-        </Box>
-      )}
-      <Box
-        sx={{
-          borderTop: "1px solid",
-          borderColor: "divider",
-          px: 1,
-          py: 0.75,
-        }}
-      >
-        <Button
-          fullWidth
-          disabled={namespace === null}
-          size="small"
-          startIcon={<PublicOutlined fontSize="small" />}
-          sx={{ justifyContent: "flex-start", textTransform: "none" }}
-          onClick={() => onOpenLocation("Special:SpecialPages")}
-        >
-          Special Pages
-        </Button>
-      </Box>
     </ResizableSidebar>
   );
 }
@@ -232,15 +173,21 @@ type SortDirection = "asc" | "desc";
 
 function SidebarToolbar({
   canCreate,
+  searchNamespaceId,
   sortDirection,
   onCreateFolder,
   onCreatePage,
+  onOpenLocation,
+  onToggleTerminal,
   onToggleSortDirection,
 }: {
   canCreate: boolean;
+  searchNamespaceId: string | null;
   sortDirection: SortDirection;
   onCreateFolder: () => void;
   onCreatePage: () => void;
+  onOpenLocation: (location: string) => void;
+  onToggleTerminal: () => void;
   onToggleSortDirection: () => void;
 }) {
   const sidebarActions = [
@@ -272,7 +219,49 @@ function SidebarToolbar({
       <Typography variant="h6" component="h1" sx={{ fontSize: 16, fontWeight: 700 }}>
         Daibase
       </Typography>
-      <Stack aria-label="サイドバー操作" direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+      <Stack
+        aria-label="サイドバーナビゲーション"
+        direction="row"
+        spacing={0.5}
+        sx={{ alignItems: "center" }}
+      >
+        <CommandLauncher namespaceId={searchNamespaceId} onOpenLocation={onOpenLocation} />
+        <Tooltip title="Favorites">
+          <span>
+            <IconButton
+              aria-label="Favorites"
+              disabled={!canCreate}
+              size="small"
+              onClick={() => onOpenLocation("Special:Favorites")}
+            >
+              <Star fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title="Special Pages">
+          <span>
+            <IconButton
+              aria-label="Special Pages"
+              disabled={!canCreate}
+              size="small"
+              onClick={() => onOpenLocation("Special:SpecialPages")}
+            >
+              <PublicOutlined fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title="ターミナル">
+          <IconButton aria-label="ターミナル" size="small" onClick={onToggleTerminal}>
+            <TerminalRounded fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+      <Stack
+        aria-label="サイドバー操作"
+        direction="row"
+        spacing={0.5}
+        sx={{ alignItems: "center" }}
+      >
         {sidebarActions.map((action) => (
           <Tooltip key={action.label} title={action.tooltip ?? action.label}>
             <span>
@@ -308,8 +297,7 @@ function PageTreeViewItem({
   const canDelete =
     metadata?.path &&
     (metadata.kind === "page" || metadata.kind === "folder" || metadata.kind === "file");
-  const canFavorite =
-    metadata?.path && (metadata.kind === "page" || metadata.kind === "file");
+  const canFavorite = metadata?.path && (metadata.kind === "page" || metadata.kind === "file");
   return (
     <TreeItem
       {...props}
@@ -517,44 +505,6 @@ function insertTreeItem(
     children.push({ ...value });
     current.children = children;
   }
-}
-
-type FavoriteSidebarItem = {
-  contentKind: "page" | "file";
-  location: string;
-  path: string;
-  title: string;
-};
-
-function collectFavoriteItems(
-  pages: FileSummary[],
-  files: FileSummary[],
-  sortDirection: SortDirection,
-): FavoriteSidebarItem[] {
-  const items = [
-    ...pages
-      .filter((page) => page.is_favorite)
-      .map((page) => ({
-        contentKind: "page" as const,
-        location: page.location,
-        path: page.path,
-        title: page.title,
-      })),
-    ...files
-      .filter((file) => file.is_favorite)
-      .map((file) => ({
-        contentKind: "file" as const,
-        location: file.location,
-        path: file.path,
-        title: file.title,
-      })),
-  ];
-
-  items.sort((left, right) => {
-    const comparison = left.path.localeCompare(right.path);
-    return sortDirection === "asc" ? comparison : -comparison;
-  });
-  return items;
 }
 
 function sortTreeItems(items: PageTreeItem[], sortDirection: SortDirection) {

@@ -41,7 +41,6 @@ export function FileSurface({
   canGoForward,
   onGoBack,
   onGoForward,
-  onToggleTerminal,
   onModeChange,
   onNoteChange,
   onOpenLocation,
@@ -64,7 +63,6 @@ export function FileSurface({
   canGoForward: boolean;
   onGoBack: () => void;
   onGoForward: () => void;
-  onToggleTerminal: () => void;
   onModeChange: (mode: FileMode) => void;
   onNoteChange: (value: string) => void;
   onOpenLocation: (location: string) => void;
@@ -93,11 +91,8 @@ export function FileSurface({
       <MainContentTop
         canGoBack={canGoBack}
         canGoForward={canGoForward}
-        searchNamespaceId={file.namespace_id}
         onGoBack={onGoBack}
         onGoForward={onGoForward}
-        onOpenLocation={onOpenLocation}
-        onToggleTerminal={onToggleTerminal}
         rightSlot={
           <>
             <Box sx={{ flex: 1, minWidth: 0 }} />

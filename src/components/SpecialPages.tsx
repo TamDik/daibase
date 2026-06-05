@@ -60,7 +60,7 @@ export function SpecialPagesIndex({
         </Typography>
       </Box>
       <Box sx={{ p: 3 }}>
-        <List dense disablePadding>
+        <List dense disablePadding aria-label="Special ページ一覧">
           {pages.map((page) => (
             <ListItemButton
               key={page.location}

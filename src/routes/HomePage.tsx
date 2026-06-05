@@ -139,10 +139,6 @@ type CreateDialogState = {
   name: string;
 };
 
-function specialSearchNamespaceId(view: SpecialView) {
-  return view.kind === "namespaces" ? null : view.namespace.id;
-}
-
 export function HomePage() {
   const [namespaces, setNamespaces] = useState<NamespaceSummary[]>([]);
   const [activeNamespace, setActiveNamespace] = useState<NamespaceSummary | null>(null);
@@ -1158,6 +1154,7 @@ export function HomePage() {
             onCreatePage={(parentDirectory) => handleOpenCreateDialog("page", parentDirectory)}
             onDeleteContent={(path, kind) => void handleDeleteContent(path, kind)}
             onOpenLocation={(location) => void navigate(location)}
+            onToggleTerminal={() => setIsTerminalOpen((current) => !current)}
             onToggleFavorite={(path, isFavorite) =>
               void handleToggleFavoriteContent(path, isFavorite)
             }
@@ -1191,11 +1188,8 @@ export function HomePage() {
                   <MainContentTop
                     canGoBack={canGoBack}
                     canGoForward={canGoForward}
-                    searchNamespaceId={specialSearchNamespaceId(specialView)}
                     onGoBack={() => void handleGoBack()}
                     onGoForward={() => void handleGoForward()}
-                    onOpenLocation={(location) => void navigate(location)}
-                    onToggleTerminal={() => setIsTerminalOpen((current) => !current)}
                   />
                   <Box
                     data-testid="special-page-scroll"
@@ -1301,7 +1295,6 @@ export function HomePage() {
                   }
                   onGoBack={() => void handleGoBack()}
                   onGoForward={() => void handleGoForward()}
-                  onToggleTerminal={() => setIsTerminalOpen((current) => !current)}
                   onModeChange={(mode) => void handleModeChange(mode)}
                   onToggleFavorite={() =>
                     void handleToggleFavoriteContent(
@@ -1337,7 +1330,6 @@ export function HomePage() {
                   canGoForward={canGoForward}
                   onGoBack={() => void handleGoBack()}
                   onGoForward={() => void handleGoForward()}
-                  onToggleTerminal={() => setIsTerminalOpen((current) => !current)}
                   onModeChange={(mode) => void handleFileModeChange(mode)}
                   onNoteChange={setFileNoteDraft}
                   onOpenLocation={(location) => void navigate(location)}

@@ -497,12 +497,12 @@ describe("HomePage", () => {
     expect(screen.queryByRole("tab", { name: "編集" })).not.toBeInTheDocument();
   });
 
-  it("検索ボタンで入力欄を表示して検索結果からページを開く", async () => {
+  it("全体検索ボタンで入力欄を表示して検索結果からページを開く", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
     await screen.findByRole("treeitem", { name: "Main" });
-    await user.click(screen.getByRole("button", { name: "検索" }));
+    await user.click(screen.getByRole("button", { name: "全体検索" }));
     expect(screen.getByRole("dialog", { name: "検索パネル" })).toBeInTheDocument();
     const input = screen.getByRole("textbox", { name: "検索またはコマンド" });
     expect(input).toHaveFocus();
@@ -518,7 +518,7 @@ describe("HomePage", () => {
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "検索パネル" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "検索" }));
+    await user.click(screen.getByRole("button", { name: "全体検索" }));
     const reopenedInput = screen.getByRole("textbox", { name: "検索またはコマンド" });
     expect(reopenedInput).toHaveValue("");
     await user.type(reopenedInput, "intro");
@@ -527,6 +527,27 @@ describe("HomePage", () => {
     await user.click(within(reopenedResults).getByRole("button", { name: /Intro/ }));
 
     expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue("# Intro");
+  });
+
+  it("ページ内検索バーで現在のページ本文を検索できる", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await screen.findByRole("treeitem", { name: "Main" });
+    await user.click(screen.getByRole("button", { name: "ページ内検索" }));
+
+    const searchRegion = screen.getByRole("search", { name: "ページ内検索" });
+    const input = within(searchRegion).getByRole("textbox", { name: "ページ内検索キーワード" });
+    expect(input).toHaveFocus();
+
+    await user.type(input, "main");
+
+    expect(within(searchRegion).getByLabelText("ページ内検索の一致数")).toHaveTextContent("1/1");
+    expect(within(searchRegion).getByRole("button", { name: "前の一致" })).toBeEnabled();
+    expect(within(searchRegion).getByRole("button", { name: "次の一致" })).toBeEnabled();
+
+    await user.click(within(searchRegion).getByRole("button", { name: "ページ内検索を閉じる" }));
+    expect(screen.queryByRole("search", { name: "ページ内検索" })).not.toBeInTheDocument();
   });
 
   it("Markdown ソース表示で本文を編集できる", async () => {
@@ -851,13 +872,16 @@ describe("HomePage", () => {
     expect(pageList).toHaveTextContent("Intro");
   });
 
-  it("お気に入りがあるとサイドバーにお気に入りセクションを表示する", async () => {
+  it("サイドバーから Special:Favorites を開く", async () => {
+    const user = userEvent.setup();
     renderHomePage();
 
     await screen.findByRole("tree", { name: "ページ一覧" });
+    expect(screen.queryByText("お気に入り")).not.toBeInTheDocument();
 
-    expect(screen.getByText("お気に入り")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Intro" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Favorites" }));
+
+    expect(await screen.findByRole("heading", { name: "Favorites" })).toBeInTheDocument();
   });
 
   it("サイドバーの星ボタンでページをお気に入りに追加する", async () => {
@@ -898,7 +922,7 @@ describe("HomePage", () => {
     expect(screen.getByRole("button", { name: "戻る" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "進む" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "ターミナル" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "検索" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全体検索" })).toBeInTheDocument();
     expect(screen.getByText("Work:Guide/Intro.md")).toBeInTheDocument();
   });
 
@@ -1103,12 +1127,8 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    await screen.findByRole("tree", { name: "ページ一覧" });
     const specialPagesLink = screen.getByRole("button", { name: "Special Pages" });
-
-    expect(
-      pageList.compareDocumentPosition(specialPagesLink) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
 
     await user.click(specialPagesLink);
 
@@ -1247,8 +1267,11 @@ function renderHomePage() {
 async function openSpecialPage(user: ReturnType<typeof userEvent.setup>, title: string) {
   await user.click(await screen.findByRole("button", { name: "Special Pages" }));
   if (title !== "Special Pages") {
+    const specialPagesList = await screen.findByRole("list", { name: "Special ページ一覧" });
     await user.click(
-      await screen.findByRole("button", { name: new RegExp(`^${escapeRegExp(title)}\\b`) }),
+      within(specialPagesList).getByRole("button", {
+        name: new RegExp(`^${escapeRegExp(title)}\\b`),
+      }),
     );
   }
 }

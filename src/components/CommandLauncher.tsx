@@ -96,10 +96,10 @@ export function CommandLauncher({
 
   return (
     <Box sx={{ alignItems: "center", display: "flex" }}>
-      <Tooltip title="検索">
+      <Tooltip title="全体検索">
         <span>
           <IconButton
-            aria-label="検索"
+            aria-label="全体検索"
             disabled={!namespaceId}
             size="small"
             onClick={() => {
@@ -196,9 +196,7 @@ export function CommandLauncher({
                         onClick={() => openResult(result)}
                       >
                         <ListItemText
-                          primary={
-                            <HighlightedText text={result.title} query={highlightQuery} />
-                          }
+                          primary={<HighlightedText text={result.title} query={highlightQuery} />}
                           secondary={
                             <>
                               <Typography
@@ -216,10 +214,7 @@ export function CommandLauncher({
                                   color="text.secondary"
                                   sx={{ display: "block", overflowWrap: "anywhere" }}
                                 >
-                                  <HighlightedText
-                                    text={result.snippet}
-                                    query={highlightQuery}
-                                  />
+                                  <HighlightedText text={result.snippet} query={highlightQuery} />
                                 </Typography>
                               )}
                             </>
