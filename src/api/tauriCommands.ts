@@ -410,6 +410,12 @@ export function setPluginEnabled(pluginId: string, enabled: boolean) {
   });
 }
 
+export function removePlugin(pluginId: string) {
+  return invoke<void>("remove_plugin", {
+    pluginId,
+  });
+}
+
 export function resolvePluginMain(pluginId: string) {
   return invoke<PluginMainResolution>("resolve_plugin_main", {
     pluginId,

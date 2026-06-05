@@ -42,6 +42,11 @@ pub fn set_plugin_enabled(
 }
 
 #[tauri::command]
+pub fn remove_plugin(app: AppHandle, plugin_id: String) -> Result<(), String> {
+    crate::plugins::remove_plugin(&app, plugin_id)
+}
+
+#[tauri::command]
 pub fn resolve_plugin_main(
     app: AppHandle,
     plugin_id: String,

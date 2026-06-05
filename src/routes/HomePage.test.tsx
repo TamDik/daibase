@@ -45,6 +45,7 @@ vi.mock("../api/tauriCommands", () => ({
   readDeletedFile: vi.fn(),
   readDeletedPage: vi.fn(),
   readPageHistorySnapshot: vi.fn(),
+  removePlugin: vi.fn(),
   resolvePluginMain: vi.fn(),
   resolveMarkdownLink: vi.fn(),
   resolveMarkdownImage: vi.fn(),
@@ -133,6 +134,7 @@ describe("HomePage", () => {
     vi.mocked(api.readDeletedFile).mockReset();
     vi.mocked(api.readDeletedPage).mockReset();
     vi.mocked(api.readPageHistorySnapshot).mockReset();
+    vi.mocked(api.removePlugin).mockReset();
     vi.mocked(api.resolvePluginMain).mockReset();
     vi.mocked(api.resolveMarkdownLink).mockReset();
     vi.mocked(api.resolveMarkdownImage).mockReset();
@@ -159,6 +161,7 @@ describe("HomePage", () => {
       path: "/tmp/calendar-plugin/README.md",
       markdown: "# Calendar Plugin\n\nUse `daibase.view: calendar`.",
     });
+    vi.mocked(api.removePlugin).mockResolvedValue(undefined);
     vi.mocked(api.readPageHistorySnapshot).mockResolvedValue({
       entry: historyEntries()[0],
       previous_content: "# Main\n\nBefore\n",
@@ -957,6 +960,28 @@ describe("HomePage", () => {
     expect(await screen.findByRole("dialog", { name: "Calendar" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Calendar Plugin" })).toBeInTheDocument();
     expect(screen.getByText(/daibase\.view: calendar/)).toBeInTheDocument();
+  });
+
+  it("Special:Plugins でプラグイン登録を削除する", async () => {
+    vi.mocked(api.listPlugins)
+      .mockResolvedValueOnce(pluginItems())
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:Plugins");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    await user.click(await screen.findByRole("button", { name: "Calendar を削除" }));
+    expect(await screen.findByRole("dialog", { name: "プラグインを削除" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "削除" }));
+
+    expect(api.removePlugin).toHaveBeenCalledWith("com.example.calendar");
+    expect(await screen.findByText("登録済みプラグインはありません。")).toBeInTheDocument();
+    expect(screen.queryByText("Calendar")).not.toBeInTheDocument();
   });
 
   it("Special:Categories でカテゴリ別にページを表示する", async () => {

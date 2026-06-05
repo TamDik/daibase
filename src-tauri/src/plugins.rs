@@ -82,6 +82,12 @@ pub fn set_plugin_enabled(
     Ok(updated)
 }
 
+pub fn remove_plugin(app: &AppHandle, plugin_id: String) -> Result<(), String> {
+    let mut registry = read_registry(app)?;
+    remove_plugin_from_registry(&mut registry, &plugin_id)?;
+    write_registry(app, &registry)
+}
+
 pub fn resolve_plugin_main(
     app: &AppHandle,
     plugin_id: String,
@@ -185,6 +191,18 @@ fn plugin_source_dir(plugin: &InstalledPluginSummary) -> Result<PathBuf, String>
     match &plugin.source {
         PluginInstallSource::LocalFolder { path } => Ok(PathBuf::from(path)),
     }
+}
+
+fn remove_plugin_from_registry(
+    registry: &mut PluginRegistry,
+    plugin_id: &str,
+) -> Result<(), String> {
+    let original_len = registry.plugins.len();
+    registry.plugins.retain(|plugin| plugin.id != plugin_id);
+    if registry.plugins.len() == original_len {
+        return Err("プラグインが見つかりません。".to_string());
+    }
+    Ok(())
 }
 
 fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
@@ -462,6 +480,43 @@ mod tests {
             .as_deref()
             .unwrap()
             .contains("プラグインフォルダを選択してください。"));
+    }
+
+    #[test]
+    fn removes_plugin_from_registry() {
+        let mut registry = PluginRegistry {
+            schema_version: 1,
+            plugins: vec![installed_plugin()],
+        };
+
+        remove_plugin_from_registry(&mut registry, "com.example.calendar").unwrap();
+
+        assert!(registry.plugins.is_empty());
+    }
+
+    #[test]
+    fn rejects_removing_missing_plugin() {
+        let mut registry = PluginRegistry::default();
+
+        assert_eq!(
+            remove_plugin_from_registry(&mut registry, "com.example.calendar").unwrap_err(),
+            "プラグインが見つかりません。"
+        );
+    }
+
+    fn installed_plugin() -> InstalledPluginSummary {
+        InstalledPluginSummary {
+            id: "com.example.calendar".to_string(),
+            name: "Calendar".to_string(),
+            version: "0.1.0".to_string(),
+            description: "Calendar view".to_string(),
+            enabled: true,
+            load_error: None,
+            source: PluginInstallSource::LocalFolder {
+                path: "/tmp/calendar-plugin".to_string(),
+            },
+            manifest: valid_manifest(),
+        }
     }
 
     fn write_manifest(plugin_dir: &Path, manifest: &PluginManifest) {

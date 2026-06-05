@@ -45,6 +45,7 @@ import {
   readDeletedFile,
   readDeletedPage,
   readPageHistorySnapshot,
+  removePlugin,
   resolveMarkdownImage,
   resolveMarkdownLinkStatus,
   restoreDeletedContent,
@@ -792,6 +793,27 @@ export function HomePage() {
     [],
   );
 
+  const handleRemovePlugin = useCallback(async (plugin: InstalledPluginSummary) => {
+    setError(null);
+    setSavedMessage(null);
+    try {
+      await removePlugin(plugin.id);
+      const plugins = await listPlugins();
+      setPlugins(plugins);
+      setSpecialView((current) =>
+        current?.kind === "plugins"
+          ? {
+              ...current,
+              plugins,
+            }
+          : current,
+      );
+      setSavedMessage("プラグインを削除しました");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }, []);
+
   const handleLocationSubmit = async () => {
     try {
       await navigate(locationInput);
@@ -1230,6 +1252,7 @@ export function HomePage() {
                   plugins={specialView.plugins}
                   onInstallFromFolder={() => void handleInstallPluginFromFolder()}
                   onReadPluginDocumentation={(plugin) => readPluginDocumentation(plugin.id)}
+                  onRemovePlugin={(plugin) => void handleRemovePlugin(plugin)}
                   onTogglePlugin={(plugin, enabled) => void handleTogglePlugin(plugin, enabled)}
                 />
               )}

@@ -22,6 +22,7 @@ pub fn run() {
             commands::list_plugins,
             commands::install_plugin_from_folder,
             commands::set_plugin_enabled,
+            commands::remove_plugin,
             commands::resolve_plugin_main,
             commands::read_plugin_documentation,
             commands::list_namespaces,

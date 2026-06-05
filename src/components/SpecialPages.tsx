@@ -21,6 +21,7 @@ import {
 import {
   ArticleOutlined,
   CloseOutlined,
+  DeleteOutlined,
   ExtensionOutlined,
   FolderOpenOutlined,
   RestoreOutlined,
@@ -379,12 +380,14 @@ export function PluginsSpecialPage({
   namespace,
   onInstallFromFolder,
   onReadPluginDocumentation,
+  onRemovePlugin,
   onTogglePlugin,
 }: {
   plugins: InstalledPluginSummary[];
   namespace: NamespaceSummary;
   onInstallFromFolder: () => void;
   onReadPluginDocumentation: (plugin: InstalledPluginSummary) => Promise<PluginDocumentation>;
+  onRemovePlugin: (plugin: InstalledPluginSummary) => void;
   onTogglePlugin: (plugin: InstalledPluginSummary, enabled: boolean) => void;
 }) {
   const [documentationState, setDocumentationState] = useState<
@@ -411,6 +414,7 @@ export function PluginsSpecialPage({
 
   const documentationPlugin =
     documentationState.kind === "closed" ? null : documentationState.plugin;
+  const [pluginToRemove, setPluginToRemove] = useState<InstalledPluginSummary | null>(null);
 
   return (
     <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
@@ -504,6 +508,17 @@ export function PluginsSpecialPage({
                     </IconButton>
                   </span>
                 </Tooltip>
+                <Tooltip title="削除">
+                  <span>
+                    <IconButton
+                      edge="end"
+                      aria-label={`${plugin.name} を削除`}
+                      onClick={() => setPluginToRemove(plugin)}
+                    >
+                      <DeleteOutlined fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
                 <Switch
                   edge="end"
                   checked={plugin.enabled}
@@ -564,6 +579,37 @@ export function PluginsSpecialPage({
             <PluginMarkdownDocument markdown={documentationState.documentation.markdown} />
           )}
         </DialogContent>
+      </Dialog>
+      <Dialog
+        open={pluginToRemove !== null}
+        onClose={() => setPluginToRemove(null)}
+        slotProps={{
+          paper: {
+            "aria-label": pluginToRemove ? `${pluginToRemove.name} を削除` : "プラグインを削除",
+          },
+        }}
+      >
+        <DialogTitle>プラグインを削除</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            {pluginToRemove?.name} の登録を削除します。ローカルフォルダのファイルは削除されません。
+          </Typography>
+        </DialogContent>
+        <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end", px: 3, pb: 2 }}>
+          <Button onClick={() => setPluginToRemove(null)}>キャンセル</Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => {
+              if (pluginToRemove) {
+                onRemovePlugin(pluginToRemove);
+              }
+              setPluginToRemove(null);
+            }}
+          >
+            削除
+          </Button>
+        </Stack>
       </Dialog>
     </Paper>
   );
