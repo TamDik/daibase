@@ -29,8 +29,8 @@ export function MainContentTop({
         alignItems: "center",
         display: "flex",
         flex: "0 0 auto",
+        minHeight: 36,
         px: 1.5,
-        pt: 0.5,
       }}
     >
       <Stack direction="row" spacing={0.25} sx={{ alignItems: "center", mr: 1 }}>
