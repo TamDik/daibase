@@ -3,19 +3,26 @@ import {
   Box,
   Button,
   CircularProgress,
-  Divider,
   IconButton,
   Link,
   List,
   ListItemButton,
   ListItemText,
   Stack,
-  Tab,
-  Tabs,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from "@mui/material";
-import { CloudUploadOutlined, SaveOutlined, Star, StarBorder } from "@mui/icons-material";
+import {
+  CloudUploadOutlined,
+  HistoryRounded,
+  InsertDriveFileOutlined,
+  SaveOutlined,
+  Star,
+  StarBorder,
+} from "@mui/icons-material";
 
 import type { BacklinkSummary, FileHistoryEntry, ManagedFileContent } from "../api/tauriCommands";
 import { MainContentTop } from "./MainContentTop";
@@ -95,22 +102,38 @@ export function FileSurface({
         onToggleTerminal={onToggleTerminal}
         rightSlot={
           <>
-            <Divider flexItem orientation="vertical" sx={{ mr: 1 }} />
-            <Box sx={{ borderBottom: 1, borderColor: "divider", flex: 1 }}>
-              <Tabs
-                value={mode}
-                onChange={(_, value: FileMode) => onModeChange(value)}
-                sx={{ minHeight: 36 }}
-              >
-                <Tab label="ファイル" value="detail" sx={{ minHeight: 36, px: 1.5, py: 0 }} />
-                <Tab
-                  label="履歴"
+            <Box sx={{ flex: 1, minWidth: 0 }} />
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={mode}
+              sx={{ flex: "0 0 auto" }}
+              onChange={(_, value: FileMode | null) => {
+                if (value) {
+                  onModeChange(value);
+                }
+              }}
+            >
+              <Tooltip title="ファイル">
+                <ToggleButton
+                  aria-label="ファイル"
+                  value="detail"
+                  sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+                >
+                  <InsertDriveFileOutlined fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+              <Tooltip title="履歴">
+                <ToggleButton
+                  aria-label="履歴"
                   value="history"
                   disabled={isVirtual}
-                  sx={{ minHeight: 36, px: 1.5, py: 0 }}
-                />
-              </Tabs>
-            </Box>
+                  sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+                >
+                  <HistoryRounded fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+            </ToggleButtonGroup>
             {!readOnly && (
               <IconButton
                 aria-label={file.is_favorite ? "お気に入り解除" : "お気に入り"}

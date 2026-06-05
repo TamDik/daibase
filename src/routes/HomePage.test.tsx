@@ -619,9 +619,18 @@ describe("HomePage", () => {
     await user.click(within(pageList).getByText("logo.png"));
 
     expect(await screen.findByRole("heading", { name: "logo.png" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "ファイル" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "履歴" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "ファイル" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "履歴" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "履歴" }));
+    expect(await screen.findByRole("heading", { name: "ファイル履歴" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "ファイル" }));
+    expect(await screen.findByRole("heading", { name: "logo.png" })).toBeInTheDocument();
+
     const note = screen.getByRole("textbox", { name: "ファイル説明" });
     expect(note).toHaveValue("説明");
-
     await user.clear(note);
     await user.type(note, "新しい説明");
     await user.click(screen.getByRole("button", { name: "説明を保存" }));
