@@ -99,7 +99,7 @@ export function CommandLauncher({
             onClick={(event) => event.stopPropagation()}
             sx={{
               border: "1px solid #d0d7de",
-              borderRadius: 1,
+              borderRadius: 3,
               mt: { xs: 7, sm: 9 },
               overflow: "hidden",
               width: "min(720px, calc(100vw - 32px))",
@@ -132,9 +132,19 @@ export function CommandLauncher({
                 sx={{
                   bgcolor: "#ffffff",
                   "& .MuiInputBase-root": {
+                    borderRadius: 2.5,
                     fontSize: 18,
                     gap: 1,
                     minHeight: 52,
+                  },
+                  "& .MuiOutlinedInput-root .MuiOutlinedInput-notchedOutline": {
+                    border: 0,
+                  },
+                  "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
+                    border: 0,
+                  },
+                  "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                    border: 0,
                   },
                 }}
               />
