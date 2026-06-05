@@ -11,15 +11,22 @@ import {
   ListItemButton,
   ListItemText,
   Stack,
-  Tab,
-  Tabs,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
   Typography,
 } from "@mui/material";
-import { ArrowBackRounded, Article, Code, Star, StarBorder } from "@mui/icons-material";
+import {
+  ArrowBackRounded,
+  ArrowForwardRounded,
+  Article,
+  Code,
+  HistoryRounded,
+  Star,
+  StarBorder,
+  TerminalRounded,
+} from "@mui/icons-material";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
@@ -63,8 +70,13 @@ export function PageSurface({
   pageContext,
   plugins,
   readOnly = false,
+  canGoBack,
+  canGoForward,
+  onToggleTerminal,
   onDraftChange,
   onCategoriesChange,
+  onGoBack,
+  onGoForward,
   onModeChange,
   onToggleFavorite,
   onOpenLocation,
@@ -92,8 +104,13 @@ export function PageSurface({
   pageContext: PagePluginContext;
   plugins: InstalledPluginSummary[];
   readOnly?: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  onToggleTerminal: () => void;
   onDraftChange: (value: string) => void;
   onCategoriesChange: (categories: string[]) => void;
+  onGoBack: () => void;
+  onGoForward: () => void;
   onModeChange: (mode: PageMode) => void;
   onToggleFavorite: () => void;
   onOpenLocation: (location: string) => void;
@@ -122,6 +139,7 @@ export function PageSurface({
   const [categoryInput, setCategoryInput] = useState("");
   const [categoryValues, setCategoryValues] = useState<string[]>([]);
   const pluginViewMatch = editorView === "wysiwyg" ? findPageViewPlugin(draft, plugins) : null;
+  const activeTool = mode === "history" ? "history" : editorView;
 
   useEffect(() => {
     setCategoryInput("");
@@ -151,71 +169,6 @@ export function PageSurface({
     updateCategories([...categoryValues, ...inputCategories]);
   };
 
-  const viewToolbar = mode === "view" && (
-    <Stack
-      direction="row"
-      spacing={1}
-      sx={{
-        alignItems: "center",
-        justifyContent: "flex-end",
-        position: "absolute",
-        right: 24,
-        top: 52,
-        zIndex: 2,
-      }}
-    >
-      {isDirty && (
-        <Chip
-          aria-label="未保存"
-          label="未保存"
-          size="small"
-          variant="outlined"
-          sx={{
-            bgcolor: "#ffffff",
-            borderColor: "#cf222e",
-            color: "#a40e26",
-            fontWeight: 600,
-            minWidth: 72,
-          }}
-        />
-      )}
-      <ToggleButtonGroup
-        exclusive
-        size="small"
-        value={editorView}
-        sx={{
-          background: "#FFF",
-        }}
-        onChange={(_, value: "wysiwyg" | "source" | null) => {
-          if (value) {
-            setEditorView(value);
-          }
-        }}
-      >
-        <Tooltip title="WYSIWYG">
-          <ToggleButton
-            aria-label="WYSIWYG"
-            value="wysiwyg"
-            disabled={isSaving}
-            sx={{ minHeight: 32, minWidth: 36, px: 1 }}
-          >
-            <Article fontSize="small" />
-          </ToggleButton>
-        </Tooltip>
-        <Tooltip title="Markdownソース">
-          <ToggleButton
-            aria-label="Markdownソース"
-            value="source"
-            disabled={isSaving}
-            sx={{ minHeight: 32, minWidth: 36, px: 1 }}
-          >
-            <Code fontSize="small" />
-          </ToggleButton>
-        </Tooltip>
-      </ToggleButtonGroup>
-    </Stack>
-  );
-
   return (
     <Box
       sx={{
@@ -237,21 +190,97 @@ export function PageSurface({
           pt: 0.5,
         }}
       >
-        <Box sx={{ borderBottom: 1, borderColor: "divider", flex: 1 }}>
-          <Tabs
-            value={mode}
-            onChange={(_, value: PageMode) => onModeChange(value)}
-            sx={{ minHeight: 36 }}
-          >
-            <Tab label="閲覧" value="view" sx={{ minHeight: 36, px: 1.5, py: 0 }} />
-            <Tab
-              label="履歴"
+        <Stack direction="row" spacing={0.25} sx={{ alignItems: "center", mr: 1 }}>
+          <Tooltip title="戻る">
+            <span>
+              <IconButton aria-label="戻る" disabled={!canGoBack} size="small" onClick={onGoBack}>
+                <ArrowBackRounded fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="進む">
+            <span>
+              <IconButton
+                aria-label="進む"
+                disabled={!canGoForward}
+                size="small"
+                onClick={onGoForward}
+              >
+                <ArrowForwardRounded fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="ターミナル">
+            <IconButton aria-label="ターミナル" size="small" onClick={onToggleTerminal}>
+              <TerminalRounded fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+        <Box sx={{ flex: 1, minWidth: 0 }} />
+        {isDirty && (
+          <Chip
+            aria-label="未保存"
+            label="未保存"
+            size="small"
+            variant="outlined"
+            sx={{
+              bgcolor: "#ffffff",
+              borderColor: "#cf222e",
+              color: "#a40e26",
+              fontWeight: 600,
+              mr: 1,
+              minWidth: 72,
+            }}
+          />
+        )}
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          value={activeTool}
+          sx={{ flex: "0 0 auto" }}
+          onChange={(_, value: "wysiwyg" | "source" | "history" | null) => {
+            if (!value) {
+              return;
+            }
+            if (value === "history") {
+              onModeChange("history");
+              return;
+            }
+            setEditorView(value);
+            onModeChange("view");
+          }}
+        >
+          <Tooltip title="Milkdown">
+            <ToggleButton
+              aria-label="Milkdown"
+              value="wysiwyg"
+              disabled={isSaving}
+              sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+            >
+              <Article fontSize="small" />
+            </ToggleButton>
+          </Tooltip>
+          <Tooltip title="Markdown">
+            <ToggleButton
+              aria-label="Markdown"
+              value="source"
+              disabled={isSaving}
+              sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+            >
+              <Code fontSize="small" />
+            </ToggleButton>
+          </Tooltip>
+          <Tooltip title="履歴">
+            <ToggleButton
+              aria-label="履歴"
               value="history"
               disabled={isVirtual}
-              sx={{ minHeight: 36, px: 1.5, py: 0 }}
-            />
-          </Tabs>
-        </Box>
+              sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+            >
+              <HistoryRounded fontSize="small" />
+            </ToggleButton>
+          </Tooltip>
+        </ToggleButtonGroup>
         {!readOnly && (
           <Tooltip title={isFavorite ? "お気に入り解除" : "お気に入り"}>
             <span>
@@ -272,8 +301,6 @@ export function PageSurface({
           </Tooltip>
         )}
       </Box>
-      {viewToolbar}
-
       <Box sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}>
         {mode === "history" ? (
           <HistoryPanel

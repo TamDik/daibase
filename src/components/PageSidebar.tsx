@@ -263,32 +263,32 @@ function SidebarToolbar({
 
   return (
     <Stack
-      aria-label="サイドバー操作"
-      direction="row"
-      spacing={0.5}
+      spacing={1}
       sx={{
-        alignItems: "center",
-        borderBottom: "1px solid",
-        borderColor: "divider",
         px: 1,
-        py: 0.75,
+        py: 1,
       }}
     >
-      {sidebarActions.map((action) => (
-        <Tooltip key={action.label} title={action.tooltip ?? action.label}>
-          <span>
-            <IconButton
-              aria-label={action.label}
-              aria-pressed={action.pressed}
-              disabled={action.disabled}
-              size="small"
-              onClick={action.onClick}
-            >
-              <action.Icon fontSize="small" />
-            </IconButton>
-          </span>
-        </Tooltip>
-      ))}
+      <Typography variant="h6" component="h1" sx={{ fontSize: 16, fontWeight: 700 }}>
+        Daibase
+      </Typography>
+      <Stack aria-label="サイドバー操作" direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+        {sidebarActions.map((action) => (
+          <Tooltip key={action.label} title={action.tooltip ?? action.label}>
+            <span>
+              <IconButton
+                aria-label={action.label}
+                aria-pressed={action.pressed}
+                disabled={action.disabled}
+                size="small"
+                onClick={action.onClick}
+              >
+                <action.Icon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        ))}
+      </Stack>
     </Stack>
   );
 }

@@ -3,6 +3,7 @@ import {
   Box,
   Button,
   CircularProgress,
+  Divider,
   IconButton,
   Link,
   List,
@@ -12,9 +13,18 @@ import {
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
-import { CloudUploadOutlined, SaveOutlined, Star, StarBorder } from "@mui/icons-material";
+import {
+  ArrowBackRounded,
+  ArrowForwardRounded,
+  CloudUploadOutlined,
+  SaveOutlined,
+  Star,
+  StarBorder,
+  TerminalRounded,
+} from "@mui/icons-material";
 
 import type { BacklinkSummary, FileHistoryEntry, ManagedFileContent } from "../api/tauriCommands";
 
@@ -30,6 +40,11 @@ export function FileSurface({
   mode,
   noteDraft,
   readOnly = false,
+  canGoBack,
+  canGoForward,
+  onGoBack,
+  onGoForward,
+  onToggleTerminal,
   onModeChange,
   onNoteChange,
   onOpenLocation,
@@ -48,6 +63,11 @@ export function FileSurface({
   mode: FileMode;
   noteDraft: string;
   readOnly?: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  onGoBack: () => void;
+  onGoForward: () => void;
+  onToggleTerminal: () => void;
   onModeChange: (mode: FileMode) => void;
   onNoteChange: (value: string) => void;
   onOpenLocation: (location: string) => void;
@@ -74,6 +94,33 @@ export function FileSurface({
       }}
     >
       <Box sx={{ alignItems: "center", display: "flex", flex: "0 0 auto", px: 1.5, pt: 0.5 }}>
+        <Stack direction="row" spacing={0.25} sx={{ alignItems: "center", mr: 1 }}>
+          <Tooltip title="戻る">
+            <span>
+              <IconButton aria-label="戻る" disabled={!canGoBack} size="small" onClick={onGoBack}>
+                <ArrowBackRounded fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="進む">
+            <span>
+              <IconButton
+                aria-label="進む"
+                disabled={!canGoForward}
+                size="small"
+                onClick={onGoForward}
+              >
+                <ArrowForwardRounded fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="ターミナル">
+            <IconButton aria-label="ターミナル" size="small" onClick={onToggleTerminal}>
+              <TerminalRounded fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+        <Divider flexItem orientation="vertical" sx={{ mr: 1 }} />
         <Box sx={{ borderBottom: 1, borderColor: "divider", flex: 1 }}>
           <Tabs
             value={mode}
