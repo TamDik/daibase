@@ -20,18 +20,33 @@ import {
   Typography,
 } from "@mui/material";
 import { ArrowBackRounded, Article, Code, Star, StarBorder } from "@mui/icons-material";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { BacklinkSummary, FileHistoryEntry, PageHistorySnapshot } from "../api/tauriCommands";
+import type {
+  BacklinkSummary,
+  FileHistoryEntry,
+  InstalledPluginSummary,
+  PageHistorySnapshot,
+} from "../api/tauriCommands";
+import { resolvePluginMain } from "../api/tauriCommands";
 import {
   categoriesFromMarkdown,
   markdownBodyFromMarkdown,
   updateMarkdownBodyPreservingFrontmatter,
 } from "../lib/pageCategories";
+import { findPageViewPlugin, markdownContext } from "../lib/pluginHost";
 import { MarkdownWysiwygEditor } from "./MarkdownWysiwygEditor";
 import { SideBySideDiffView } from "./SideBySideDiffView";
 
 export type PageMode = "view" | "history";
+
+export type PagePluginContext = {
+  namespaceId: string;
+  namespaceName: string;
+  path: string;
+  location: string;
+  title: string;
+};
 
 export function PageSurface({
   backlinks,
@@ -45,6 +60,8 @@ export function PageSurface({
   isVirtual,
   isFavorite,
   mode,
+  pageContext,
+  plugins,
   readOnly = false,
   onDraftChange,
   onCategoriesChange,
@@ -72,6 +89,8 @@ export function PageSurface({
   isVirtual: boolean;
   isFavorite: boolean;
   mode: PageMode;
+  pageContext: PagePluginContext;
+  plugins: InstalledPluginSummary[];
   readOnly?: boolean;
   onDraftChange: (value: string) => void;
   onCategoriesChange: (categories: string[]) => void;
@@ -102,6 +121,7 @@ export function PageSurface({
   const [editorView, setEditorView] = useState<"wysiwyg" | "source">("wysiwyg");
   const [categoryInput, setCategoryInput] = useState("");
   const [categoryValues, setCategoryValues] = useState<string[]>([]);
+  const pluginViewMatch = editorView === "wysiwyg" ? findPageViewPlugin(draft, plugins) : null;
 
   useEffect(() => {
     setCategoryInput("");
@@ -163,6 +183,9 @@ export function PageSurface({
         exclusive
         size="small"
         value={editorView}
+        sx={{
+          background: "#FFF",
+        }}
         onChange={(_, value: "wysiwyg" | "source" | null) => {
           if (value) {
             setEditorView(value);
@@ -275,35 +298,49 @@ export function PageSurface({
             )}
             <>
               {editorView === "source" ? (
-                <TextField
-                  label="Markdownソース"
-                  value={draft}
-                  onChange={(event) => onDraftChange(event.target.value)}
-                  disabled={isSaving || readOnly}
-                  multiline
-                  minRows={24}
-                  fullWidth
-                  sx={{
-                    "& textarea": {
-                      fontFamily:
-                        'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-                      lineHeight: 1.6,
-                    },
-                  }}
-                />
+                <Box sx={{ mx: 2, mt: 4 }}>
+                  <TextField
+                    label="Markdownソース"
+                    value={draft}
+                    onChange={(event) => onDraftChange(event.target.value)}
+                    disabled={isSaving || readOnly}
+                    multiline
+                    minRows={24}
+                    fullWidth
+                    sx={{
+                      "& textarea": {
+                        fontFamily:
+                          'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+                        lineHeight: 1.6,
+                      },
+                    }}
+                  />
+                </Box>
               ) : (
-                <MarkdownWysiwygEditor
-                  key={editorKey}
-                  ariaLabel="Markdown"
-                  disabled={isSaving || readOnly}
-                  value={markdownBodyFromMarkdown(draft)}
-                  onChange={(value) =>
-                    onDraftChange(updateMarkdownBodyPreservingFrontmatter(draft, value))
-                  }
-                  onOpenMarkdownLink={onOpenMarkdownLink}
-                  onResolveMarkdownImage={onResolveMarkdownImage}
-                  onResolveMarkdownLinkStatus={onResolveMarkdownLinkStatus}
-                />
+                <>
+                  {pluginViewMatch ? (
+                    <PluginHostView
+                      content={draft}
+                      contribution={pluginViewMatch.contribution}
+                      pageContext={pageContext}
+                      plugin={pluginViewMatch.plugin}
+                      readOnly={readOnly}
+                    />
+                  ) : (
+                    <MarkdownWysiwygEditor
+                      key={editorKey}
+                      ariaLabel="Markdown"
+                      disabled={isSaving || readOnly}
+                      value={markdownBodyFromMarkdown(draft)}
+                      onChange={(value) =>
+                        onDraftChange(updateMarkdownBodyPreservingFrontmatter(draft, value))
+                      }
+                      onOpenMarkdownLink={onOpenMarkdownLink}
+                      onResolveMarkdownImage={onResolveMarkdownImage}
+                      onResolveMarkdownLinkStatus={onResolveMarkdownLinkStatus}
+                    />
+                  )}
+                </>
               )}
               <BacklinksPanel backlinks={backlinks} onOpenLocation={onOpenLocation} />
               <Box sx={{ px: 2, pb: 2, pt: 1 }}>
@@ -342,6 +379,209 @@ export function PageSurface({
       </Box>
     </Box>
   );
+}
+
+function PluginHostView({
+  content,
+  contribution,
+  pageContext,
+  plugin,
+  readOnly,
+}: {
+  content: string;
+  contribution: InstalledPluginSummary["manifest"]["contributions"][number];
+  pageContext: PagePluginContext;
+  plugin: InstalledPluginSummary;
+  readOnly: boolean;
+}) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const iframeResizeCleanupRef = useRef<(() => void) | null>(null);
+  const [pluginHtml, setPluginHtml] = useState<string | null>(null);
+  const [iframeHeight, setIframeHeight] = useState(420);
+  const [error, setError] = useState<string | null>(null);
+  const parsedMarkdown = useMemo(() => markdownContext(content), [content]);
+
+  useEffect(() => {
+    let isMounted = true;
+    setPluginHtml(null);
+    setError(null);
+
+    resolvePluginMain(plugin.id)
+      .then((entry) => {
+        if (!isMounted) {
+          return;
+        }
+        setPluginHtml(entry.html);
+      })
+      .catch((caught) => {
+        if (!isMounted) {
+          return;
+        }
+        setError(errorMessage(caught));
+      });
+
+    return () => {
+      isMounted = false;
+      iframeResizeCleanupRef.current?.();
+      iframeResizeCleanupRef.current = null;
+    };
+  }, [plugin.id]);
+
+  useEffect(() => {
+    if (!pluginHtml) {
+      return;
+    }
+    postRenderMessage(iframeRef.current, {
+      contributionId: contribution.id,
+      content,
+      isReadOnly: readOnly,
+      pageContext,
+      parsedMarkdown,
+      pluginId: plugin.id,
+    });
+    window.setTimeout(() => updateIframeHeight(iframeRef.current, setIframeHeight), 0);
+    window.setTimeout(() => updateIframeHeight(iframeRef.current, setIframeHeight), 50);
+  }, [content, contribution.id, pageContext, parsedMarkdown, plugin.id, pluginHtml, readOnly]);
+
+  if (error) {
+    return (
+      <Alert severity="error" sx={{ m: 2 }}>
+        プラグインを読み込めません: {error}
+      </Alert>
+    );
+  }
+
+  if (!pluginHtml) {
+    return (
+      <Stack direction="row" spacing={1} sx={{ alignItems: "center", p: 2 }}>
+        <CircularProgress size={16} />
+        <Typography variant="body2" color="text.secondary">
+          プラグインを読み込み中
+        </Typography>
+      </Stack>
+    );
+  }
+
+  return (
+    <Box
+      component="iframe"
+      ref={iframeRef}
+      title={contribution.name}
+      srcDoc={pluginHtml}
+      scrolling="no"
+      onLoad={() => {
+        iframeResizeCleanupRef.current?.();
+        iframeResizeCleanupRef.current = observeIframeHeight(iframeRef.current, setIframeHeight);
+        postRenderMessage(iframeRef.current, {
+          contributionId: contribution.id,
+          content,
+          isReadOnly: readOnly,
+          pageContext,
+          parsedMarkdown,
+          pluginId: plugin.id,
+        });
+      }}
+      sx={{
+        border: 0,
+        display: "block",
+        height: iframeHeight,
+        minHeight: 420,
+        overflow: "hidden",
+        width: "100%",
+      }}
+    />
+  );
+}
+
+function observeIframeHeight(
+  iframe: HTMLIFrameElement | null,
+  setIframeHeight: (height: number) => void,
+) {
+  updateIframeHeight(iframe, setIframeHeight);
+
+  const document = iframe?.contentDocument;
+  if (!document || typeof ResizeObserver === "undefined") {
+    return null;
+  }
+
+  const observer = new ResizeObserver(() => updateIframeHeight(iframe, setIframeHeight));
+  if (document.documentElement) {
+    observer.observe(document.documentElement);
+  }
+  if (document.body) {
+    observer.observe(document.body);
+  }
+
+  return () => observer.disconnect();
+}
+
+function updateIframeHeight(
+  iframe: HTMLIFrameElement | null,
+  setIframeHeight: (height: number) => void,
+) {
+  const document = iframe?.contentDocument;
+  if (!document) {
+    return;
+  }
+
+  const body = document.body;
+  const documentElement = document.documentElement;
+  const contentHeight = Math.max(
+    body?.scrollHeight ?? 0,
+    body?.offsetHeight ?? 0,
+    documentElement?.scrollHeight ?? 0,
+    documentElement?.offsetHeight ?? 0,
+  );
+  setIframeHeight(Math.max(420, Math.ceil(contentHeight)));
+}
+
+function postRenderMessage(
+  iframe: HTMLIFrameElement | null,
+  payload: {
+    contributionId: string;
+    content: string;
+    isReadOnly: boolean;
+    pageContext: PagePluginContext;
+    parsedMarkdown: ReturnType<typeof markdownContext>;
+    pluginId: string;
+  },
+) {
+  iframe?.contentWindow?.postMessage(
+    {
+      type: "daibase:render",
+      requestId: requestId(),
+      context: {
+        namespace: {
+          id: payload.pageContext.namespaceId,
+          name: payload.pageContext.namespaceName,
+        },
+        page: {
+          namespaceId: payload.pageContext.namespaceId,
+          path: payload.pageContext.path,
+          location: payload.pageContext.location,
+          title: payload.pageContext.title,
+          content: payload.content,
+          frontmatter: payload.parsedMarkdown.frontmatter,
+          body: payload.parsedMarkdown.body,
+          isDirty: false,
+          isReadOnly: payload.isReadOnly,
+        },
+        view: {
+          contributionId: payload.contributionId,
+          pluginId: payload.pluginId,
+        },
+      },
+    },
+    "*",
+  );
+}
+
+function requestId() {
+  return globalThis.crypto?.randomUUID?.() ?? `request-${Date.now()}-${Math.random()}`;
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function splitCategoryInput(value: string) {

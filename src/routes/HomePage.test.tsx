@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ContentTree,
   FileHistoryEntry,
+  InstalledPluginSummary,
   ManagedFileContent,
   NamespaceSummary,
   PageContent,
@@ -31,22 +32,28 @@ vi.mock("../api/tauriCommands", () => ({
   deleteFile: vi.fn(),
   deleteFolder: vi.fn(),
   deletePage: vi.fn(),
+  installPluginFromFolder: vi.fn(),
   listDeletedContent: vi.fn(),
   listFavoriteContent: vi.fn(),
   listFileHistory: vi.fn(),
   listPageHistory: vi.fn(),
+  listPlugins: vi.fn(),
   listNamespaces: vi.fn(),
   openInitialLocation: vi.fn(),
   openLocation: vi.fn(),
+  readPluginDocumentation: vi.fn(),
   readDeletedFile: vi.fn(),
   readDeletedPage: vi.fn(),
   readPageHistorySnapshot: vi.fn(),
+  removePlugin: vi.fn(),
+  resolvePluginMain: vi.fn(),
   resolveMarkdownLink: vi.fn(),
   resolveMarkdownImage: vi.fn(),
   resolveMarkdownLinkStatus: vi.fn(),
   restoreDeletedContent: vi.fn(),
   savePage: vi.fn(),
   setFavoriteContent: vi.fn(),
+  setPluginEnabled: vi.fn(),
   uploadFile: vi.fn(),
   writeFileNote: vi.fn(),
 }));
@@ -114,30 +121,47 @@ describe("HomePage", () => {
     vi.mocked(api.deleteFile).mockReset();
     vi.mocked(api.deleteFolder).mockReset();
     vi.mocked(api.deletePage).mockReset();
+    vi.mocked(api.installPluginFromFolder).mockReset();
     vi.mocked(api.listDeletedContent).mockReset();
     vi.mocked(api.listFavoriteContent).mockReset();
+    vi.mocked(api.listPlugins).mockReset();
     vi.mocked(api.listNamespaces).mockReset();
     vi.mocked(api.listFileHistory).mockReset();
     vi.mocked(api.listPageHistory).mockReset();
     vi.mocked(api.openInitialLocation).mockReset();
     vi.mocked(api.openLocation).mockReset();
+    vi.mocked(api.readPluginDocumentation).mockReset();
     vi.mocked(api.readDeletedFile).mockReset();
     vi.mocked(api.readDeletedPage).mockReset();
     vi.mocked(api.readPageHistorySnapshot).mockReset();
+    vi.mocked(api.removePlugin).mockReset();
+    vi.mocked(api.resolvePluginMain).mockReset();
     vi.mocked(api.resolveMarkdownLink).mockReset();
     vi.mocked(api.resolveMarkdownImage).mockReset();
     vi.mocked(api.resolveMarkdownLinkStatus).mockReset();
     vi.mocked(api.restoreDeletedContent).mockReset();
     vi.mocked(api.savePage).mockReset();
     vi.mocked(api.setFavoriteContent).mockReset();
+    vi.mocked(api.setPluginEnabled).mockReset();
     vi.mocked(api.uploadFile).mockReset();
     vi.mocked(api.writeFileNote).mockReset();
 
     vi.mocked(api.listNamespaces).mockResolvedValue([workNamespace]);
     vi.mocked(api.listDeletedContent).mockResolvedValue(deletedContentItems());
     vi.mocked(api.listFavoriteContent).mockResolvedValue(favoriteContentItems());
+    vi.mocked(api.listPlugins).mockResolvedValue(pluginItems());
     vi.mocked(api.listFileHistory).mockResolvedValue(fileHistoryEntries());
     vi.mocked(api.listPageHistory).mockResolvedValue(historyEntries());
+    vi.mocked(api.resolvePluginMain).mockResolvedValue({
+      path: "/tmp/calendar-plugin/dist/index.html",
+      html: "<!doctype html><html><body>Calendar</body></html>",
+    });
+    vi.mocked(api.readPluginDocumentation).mockResolvedValue({
+      plugin_id: "com.example.calendar",
+      path: "/tmp/calendar-plugin/README.md",
+      markdown: "# Calendar Plugin\n\nUse `daibase.view: calendar`.",
+    });
+    vi.mocked(api.removePlugin).mockResolvedValue(undefined);
     vi.mocked(api.readPageHistorySnapshot).mockResolvedValue({
       entry: historyEntries()[0],
       previous_content: "# Main\n\nBefore\n",
@@ -299,6 +323,11 @@ describe("HomePage", () => {
               description: "カテゴリ別にページを表示します。",
               location: "Work:Special:Categories",
             },
+            {
+              title: "Plugins",
+              description: "登録済みプラグインの確認と有効化を行います。",
+              location: "Work:Special:Plugins",
+            },
           ],
         };
       }
@@ -355,6 +384,15 @@ describe("HomePage", () => {
               location: "Work:Guide/Intro.md",
             },
           ],
+        };
+      }
+      if (location === "Special:Plugins" || location === "Work:Special:Plugins") {
+        return {
+          kind: "specialPlugins",
+          namespace,
+          location: "Work:Special:Plugins",
+          content: contentTree,
+          plugins: pluginItems(),
         };
       }
       const contentPath = location.replace(/^Work:/, "");
@@ -460,6 +498,28 @@ describe("HomePage", () => {
     await user.click(screen.getByRole("button", { name: "WYSIWYG" }));
 
     expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue("# Raw");
+  });
+
+  it("有効な page view plugin が frontmatter に一致すると Plugin Host view を表示する", async () => {
+    vi.mocked(api.listPlugins).mockResolvedValue([pluginItems({ enabled: true })[0]]);
+    vi.mocked(api.openInitialLocation).mockResolvedValue({
+      kind: "page",
+      namespace: workNamespace,
+      location: "Work:Calendar.md",
+      content: contentTree,
+      page: page(
+        "Calendar.md",
+        "---\ndaibase.view: calendar\n---\n# Calendar\n\n- 2026-06-04 Review",
+      ),
+    });
+
+    renderHomePage();
+
+    const frame = await screen.findByTitle("Calendar");
+    expect(frame).toHaveAttribute("srcdoc", "<!doctype html><html><body>Calendar</body></html>");
+    expect(frame).toHaveAttribute("scrolling", "no");
+    expect(api.resolvePluginMain).toHaveBeenCalledWith("com.example.calendar");
+    expect(screen.queryByRole("textbox", { name: "Markdown" })).not.toBeInTheDocument();
   });
 
   it("ロケーションバーで namespace を省略しても遷移後は完全ロケーションを表示する", async () => {
@@ -801,6 +861,22 @@ describe("HomePage", () => {
     expect(screen.getByText("Work:Guide/Intro.md")).toBeInTheDocument();
   });
 
+  it("Special ページのコンテンツ領域をスクロール可能にする", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:Pages");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    await screen.findByDisplayValue("Work:Special:Pages");
+    expect(screen.getByTestId("special-page-scroll")).toHaveStyle({
+      minHeight: "0px",
+      overflow: "auto",
+    });
+  });
+
   it("Special:SpecialPages で全ての Special ページを表示する", async () => {
     const user = userEvent.setup();
     renderHomePage();
@@ -821,7 +897,107 @@ describe("HomePage", () => {
     expect(screen.getByText("お気に入りのページとファイルを表示します。")).toBeInTheDocument();
     expect(screen.getByText("Categories")).toBeInTheDocument();
     expect(screen.getByText("カテゴリ別にページを表示します。")).toBeInTheDocument();
+    expect(screen.getByText("Plugins")).toBeInTheDocument();
+    expect(
+      screen.getByText("登録済みプラグインの確認と有効化を行います。"),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Work namespace/)).not.toBeInTheDocument();
+  });
+
+  it("Special:Plugins で登録済みプラグインを表示する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:Plugins");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    expect(await screen.findByDisplayValue("Work:Special:Plugins")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Plugins" })).toBeInTheDocument();
+    expect(screen.getByText("Calendar")).toBeInTheDocument();
+    expect(screen.getByText("page-read")).toBeInTheDocument();
+    expect(screen.getByText("location-open")).toBeInTheDocument();
+  });
+
+  it("Special:Plugins で壊れたプラグインをエラー表示する", async () => {
+    vi.mocked(api.listPlugins).mockResolvedValue([
+      pluginItems({
+        loadError: "manifest.json が見つからないか読み込めません。",
+      })[0],
+    ]);
+    vi.mocked(api.openLocation).mockImplementation(async (location) => {
+      if (location === "Special:Plugins" || location === "Work:Special:Plugins") {
+        return {
+          kind: "specialPlugins",
+          namespace: workNamespace,
+          location: "Work:Special:Plugins",
+          title: "Plugins",
+          content: contentTree,
+          plugins: pluginItems({
+            loadError: "manifest.json が見つからないか読み込めません。",
+          }),
+        };
+      }
+      return {
+        kind: "page",
+        namespace: workNamespace,
+        location: `Work:${location}`,
+        content: contentTree,
+        page: page(location, "# Main"),
+      };
+    });
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:Plugins");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    expect(await screen.findByDisplayValue("Work:Special:Plugins")).toBeInTheDocument();
+    expect(screen.getByText("Calendar")).toBeInTheDocument();
+    expect(screen.getByText("読み込みエラー")).toBeInTheDocument();
+    expect(screen.getByText("manifest.json が見つからないか読み込めません。")).toBeInTheDocument();
+  });
+
+  it("Special:Plugins でプラグインの README を表示する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:Plugins");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    await user.click(await screen.findByRole("button", { name: "Calendar のドキュメントを表示" }));
+
+    expect(api.readPluginDocumentation).toHaveBeenCalledWith("com.example.calendar");
+    expect(await screen.findByRole("dialog", { name: "Calendar" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Calendar Plugin" })).toBeInTheDocument();
+    expect(screen.getByText(/daibase\.view: calendar/)).toBeInTheDocument();
+  });
+
+  it("Special:Plugins でプラグイン登録を削除する", async () => {
+    vi.mocked(api.listPlugins)
+      .mockResolvedValueOnce(pluginItems())
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const locationInput = await screen.findByDisplayValue("Work:Main.md");
+    await user.clear(locationInput);
+    await user.type(locationInput, "Special:Plugins");
+    await user.click(screen.getByRole("button", { name: "開く" }));
+
+    await user.click(await screen.findByRole("button", { name: "Calendar を削除" }));
+    expect(await screen.findByRole("dialog", { name: "プラグインを削除" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "削除" }));
+
+    expect(api.removePlugin).toHaveBeenCalledWith("com.example.calendar");
+    expect(await screen.findByText("登録済みプラグインはありません。")).toBeInTheDocument();
+    expect(screen.queryByText("Calendar")).not.toBeInTheDocument();
   });
 
   it("Special:Categories でカテゴリ別にページを表示する", async () => {
@@ -1193,6 +1369,54 @@ function favoriteContentItems() {
       title: "Intro",
       location: "Work:Guide/Intro.md",
       content_kind: "page",
+    },
+  ];
+}
+
+function pluginItems({
+  enabled = false,
+  loadError = null,
+}: { enabled?: boolean; loadError?: string | null } = {}): InstalledPluginSummary[] {
+  return [
+    {
+      id: "com.example.calendar",
+      name: "Calendar",
+      version: "0.1.0",
+      description: "Calendar view",
+      enabled,
+      load_error: loadError,
+      source: {
+        kind: "localFolder",
+        path: "/tmp/calendar-plugin",
+      },
+      manifest: {
+        schemaVersion: 1,
+        id: "com.example.calendar",
+        name: "Calendar",
+        version: "0.1.0",
+        description: "Calendar view",
+        main: "dist/index.html",
+        contributions: [
+          {
+            kind: "pageView",
+            id: "calendar",
+            name: "Calendar",
+            slot: "main",
+            match: {
+              frontmatter: {
+                "daibase.view": "calendar",
+              },
+            },
+            view: {
+              kind: "custom",
+            },
+            activation: {
+              autoOpen: true,
+            },
+          },
+        ],
+        permissions: ["page-read", "location-open"],
+      },
     },
   ];
 }

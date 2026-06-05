@@ -6,6 +6,7 @@ pub const SPECIAL_PAGES_LOCATION: &str = "Special:SpecialPages";
 pub const DELETED_PAGES_LOCATION: &str = "Special:DeletedPages";
 pub const FAVORITES_LOCATION: &str = "Special:Favorites";
 pub const CATEGORIES_LOCATION: &str = "Special:Categories";
+pub const PLUGINS_LOCATION: &str = "Special:Plugins";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -42,6 +43,10 @@ pub enum ResolvedLocation {
         location: String,
     },
     SpecialCategories {
+        namespace: NamespaceSummary,
+        location: String,
+    },
+    SpecialPlugins {
         namespace: NamespaceSummary,
         location: String,
     },
@@ -99,6 +104,13 @@ pub fn resolve_location(
         return Ok(ResolvedLocation::SpecialCategories {
             namespace: namespace.clone(),
             location: format!("{}:{CATEGORIES_LOCATION}", namespace.name),
+        });
+    }
+
+    if path == PLUGINS_LOCATION || path == "Special:Plugins" {
+        return Ok(ResolvedLocation::SpecialPlugins {
+            namespace: namespace.clone(),
+            location: format!("{}:{PLUGINS_LOCATION}", namespace.name),
         });
     }
 
@@ -427,6 +439,21 @@ mod tests {
             ResolvedLocation::SpecialCategories {
                 namespace: namespaces[1].clone(),
                 location: "Work:Special:Categories".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_plugins_special_page_from_source_namespace() {
+        let namespaces = namespaces();
+        let resolved =
+            resolve_location("Special:Plugins", &namespaces, Some(&namespaces[1])).unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedLocation::SpecialPlugins {
+                namespace: namespaces[1].clone(),
+                location: "Work:Special:Plugins".to_string(),
             }
         );
     }

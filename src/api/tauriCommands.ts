@@ -181,6 +181,84 @@ export type CategoryGroupSummary = {
   pages: CategoryPageSummary[];
 };
 
+export type PluginInstallSource = {
+  kind: "localFolder";
+  path: string;
+};
+
+export type PluginManifest = {
+  schemaVersion: number;
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  main: string;
+  contributions: PluginContribution[];
+  permissions: PluginPermission[];
+};
+
+export type PluginContribution = {
+  kind: "pageView";
+  id: string;
+  name: string;
+  slot?: PluginViewSlot;
+  match?: PluginContributionMatch;
+  view: PluginViewContribution;
+  activation?: PluginActivation;
+};
+
+export type PluginViewSlot =
+  | "main"
+  | "sidebarSection"
+  | "rightPanel"
+  | "bottomPanel"
+  | "toolbar"
+  | "statusBar";
+
+export type PluginContributionMatch = {
+  frontmatter?: unknown;
+};
+
+export type PluginViewContribution = {
+  kind: "custom";
+};
+
+export type PluginActivation = {
+  autoOpen?: boolean;
+};
+
+export type PluginPermission =
+  | "page-read"
+  | "page-write"
+  | "file-read"
+  | "file-write"
+  | "namespace-read"
+  | "history-read"
+  | "location-open"
+  | "ui-notify";
+
+export type InstalledPluginSummary = {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  enabled: boolean;
+  load_error: string | null;
+  source: PluginInstallSource;
+  manifest: PluginManifest;
+};
+
+export type PluginMainResolution = {
+  path: string;
+  html: string;
+};
+
+export type PluginDocumentation = {
+  plugin_id: string;
+  path: string;
+  markdown: string;
+};
+
 export type MarkdownLinkStatus = {
   location: string;
   exists: boolean;
@@ -235,6 +313,11 @@ export type ResolvedLocation =
     }
   | {
       kind: "specialCategories";
+      namespace: NamespaceSummary;
+      location: string;
+    }
+  | {
+      kind: "specialPlugins";
       namespace: NamespaceSummary;
       location: string;
     };
@@ -293,6 +376,13 @@ export type OpenLocationResult =
       content: ContentTree;
       categories: CategoryGroupSummary[];
       uncategorized_pages: CategoryPageSummary[];
+    }
+  | {
+      kind: "specialPlugins";
+      location: string;
+      namespace: NamespaceSummary;
+      content: ContentTree;
+      plugins: InstalledPluginSummary[];
     };
 
 export function listNamespaces() {
@@ -301,6 +391,41 @@ export function listNamespaces() {
 
 export function getMcpServerStatus() {
   return invoke<McpServerStatus>("get_mcp_server_status");
+}
+
+export function listPlugins() {
+  return invoke<InstalledPluginSummary[]>("list_plugins");
+}
+
+export function installPluginFromFolder(sourcePath: string) {
+  return invoke<InstalledPluginSummary>("install_plugin_from_folder", {
+    sourcePath,
+  });
+}
+
+export function setPluginEnabled(pluginId: string, enabled: boolean) {
+  return invoke<InstalledPluginSummary>("set_plugin_enabled", {
+    pluginId,
+    enabled,
+  });
+}
+
+export function removePlugin(pluginId: string) {
+  return invoke<void>("remove_plugin", {
+    pluginId,
+  });
+}
+
+export function resolvePluginMain(pluginId: string) {
+  return invoke<PluginMainResolution>("resolve_plugin_main", {
+    pluginId,
+  });
+}
+
+export function readPluginDocumentation(pluginId: string) {
+  return invoke<PluginDocumentation>("read_plugin_documentation", {
+    pluginId,
+  });
 }
 
 export function startTerminal(columns?: number, rows?: number) {

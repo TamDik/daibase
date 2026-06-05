@@ -199,6 +199,134 @@ pub struct CategoryGroupSummary {
     pub pages: Vec<CategoryPageSummary>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PluginRegistry {
+    pub schema_version: u32,
+    #[serde(default)]
+    pub plugins: Vec<InstalledPluginSummary>,
+}
+
+impl Default for PluginRegistry {
+    fn default() -> Self {
+        Self {
+            schema_version: 1,
+            plugins: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct InstalledPluginSummary {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub enabled: bool,
+    #[serde(default)]
+    pub load_error: Option<String>,
+    pub source: PluginInstallSource,
+    pub manifest: PluginManifest,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PluginMainResolution {
+    pub path: PathBuf,
+    pub html: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PluginDocumentation {
+    pub plugin_id: String,
+    pub path: PathBuf,
+    pub markdown: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum PluginInstallSource {
+    LocalFolder { path: String },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PluginManifest {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: u32,
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    #[serde(default)]
+    pub description: String,
+    pub main: String,
+    #[serde(default)]
+    pub contributions: Vec<PluginContribution>,
+    #[serde(default)]
+    pub permissions: Vec<PluginPermission>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum PluginContribution {
+    PageView {
+        id: String,
+        name: String,
+        #[serde(default)]
+        slot: PluginViewSlot,
+        #[serde(default)]
+        r#match: PluginContributionMatch,
+        view: PluginViewContribution,
+        #[serde(default)]
+        activation: PluginActivation,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum PluginViewSlot {
+    #[default]
+    Main,
+    SidebarSection,
+    RightPanel,
+    BottomPanel,
+    Toolbar,
+    StatusBar,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct PluginContributionMatch {
+    #[serde(default)]
+    pub frontmatter: serde_json::Value,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PluginViewContribution {
+    pub kind: PluginViewKind,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum PluginViewKind {
+    Custom,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct PluginActivation {
+    #[serde(default, rename = "autoOpen")]
+    pub auto_open: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub enum PluginPermission {
+    PageRead,
+    PageWrite,
+    FileRead,
+    FileWrite,
+    NamespaceRead,
+    HistoryRead,
+    LocationOpen,
+    UiNotify,
+}
+
 #[derive(Debug, Serialize)]
 pub struct MarkdownLinkStatus {
     pub location: String,
@@ -264,6 +392,12 @@ pub enum OpenLocationResult {
         content: ContentTree,
         categories: Vec<CategoryGroupSummary>,
         uncategorized_pages: Vec<CategoryPageSummary>,
+    },
+    SpecialPlugins {
+        location: String,
+        namespace: NamespaceSummary,
+        content: ContentTree,
+        plugins: Vec<InstalledPluginSummary>,
     },
 }
 

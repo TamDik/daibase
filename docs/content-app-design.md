@@ -443,6 +443,59 @@ verify_history(namespace_id: String) -> HistoryCheckResult
 
 最初の実用マイルストーンでは、ネームスペース管理とページの読み書き command だけで十分です。履歴系 command は、ストレージと保存フローが安定してから実装します。
 
+## プラグイン
+
+プラグインは、Daibase のコンテンツ表示や操作を拡張するための仕組みです。初期実装では任意のリモートコード実行を避け、ローカルの unpacked plugin folder をユーザーが選択して登録する方式から始めます。GitHub や marketplace からの取得は、署名、チェックサム、更新確認、権限承認 UI が揃ってから扱います。
+
+プラグインはアプリ全体の設定として管理し、namespace のコンテンツ本体とは分離します。保存先は Tauri の app data directory 配下です。
+
+```text
+<app-data-dir>/
+  plugins/
+    registry.json
+```
+
+`registry.json` には、登録済みプラグインの ID、名前、バージョン、有効状態、登録元ローカルフォルダ、manifest の内容を保存します。登録直後は無効にし、ユーザーが `Special:Plugins` で有効化します。ローカルフォルダ登録は開発用途を主目的にし、プラグイン本体を app data directory へコピーせず、`manifest.json`, `README.md`, `main` HTML を登録元フォルダから直接読みます。
+
+各プラグインはルートに `manifest.json` を持ちます。初期 schema は `schemaVersion: 1` とし、プラグイン ID、表示名、バージョン、main、contributions、permissions を含めます。ルートの `README.md` はアプリ内ドキュメントとして扱い、`Special:Plugins` から確認できるようにします。
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "com.example.calendar",
+  "name": "Calendar",
+  "version": "0.1.0",
+  "description": "Markdown ページをカレンダーとして表示します。",
+  "main": "dist/index.html",
+  "contributions": [
+    {
+      "kind": "pageView",
+      "id": "calendar",
+      "name": "Calendar",
+      "slot": "main",
+      "match": {
+        "frontmatter": {
+          "daibase.view": "calendar"
+        }
+      },
+      "view": {
+        "kind": "custom"
+      },
+      "activation": {
+        "autoOpen": true
+      }
+    }
+  ],
+  "permissions": ["page-read", "location-open"]
+}
+```
+
+最初に対応する contribution は `pageView` です。Daibase 側で Markdown の frontmatter を読み、`daibase.view` などの Daibase 管理 key によって適用する view を判断します。Plugin Host は該当プラグインの `main` HTML を sandbox iframe として MainView に表示し、Daibase DOM や Tauri command は直接触らせません。namespace 名、`Special:*`、`.md` 判定、ロケーション正規化は Rust 側を正とし、プラグインやフロントエンドが独自に正規ロケーションを組み立てないようにします。
+
+プラグインに Daibase 操作 API を渡す場合は capability 制にします。初期 permission は `page-read`, `page-write`, `file-read`, `file-write`, `namespace-read`, `history-read`, `location-open`, `ui-notify` を候補にし、実行時には manifest の permission とユーザーの承認状態を確認してから command を proxy します。
+
+プラグイン管理画面は `Special:Plugins` として提供します。初期 UI は登録済み一覧、ローカルフォルダ登録、有効/無効切り替え、要求 permission、README 表示に絞ります。MCP には当面、プラグイン登録や有効化のような実行コード管理操作を公開しません。必要になった場合も、まずは `list_plugins` のような読み取り系だけを検討します。
+
 ## セキュリティ
 
 最もリスクが高いのはパス処理です。

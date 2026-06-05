@@ -1,9 +1,10 @@
 use crate::location::ResolvedLocation;
 use crate::models::{
     ContentTree, DeletedContentSummary, FavoriteContentSummary, FileHistoryEntry,
-    MarkdownImageResolution, MarkdownLinkStatus, McpServerStatus, NamespaceDetail,
-    NamespaceSummary, OpenLocationResult, PageContent, PageHistorySnapshot, SaveFileResult,
-    SavePageResult, SaveResult, SpecialPageSummary,
+    InstalledPluginSummary, MarkdownImageResolution, MarkdownLinkStatus, McpServerStatus,
+    NamespaceDetail, NamespaceSummary, OpenLocationResult, PageContent, PageHistorySnapshot,
+    PluginDocumentation, PluginMainResolution, SaveFileResult, SavePageResult, SaveResult,
+    SpecialPageSummary,
 };
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
@@ -16,6 +17,49 @@ pub fn list_namespaces(app: AppHandle) -> Result<Vec<NamespaceSummary>, String> 
 #[tauri::command]
 pub fn get_mcp_server_status() -> McpServerStatus {
     crate::mcp::server_status()
+}
+
+#[tauri::command]
+pub fn list_plugins(app: AppHandle) -> Result<Vec<InstalledPluginSummary>, String> {
+    crate::plugins::list_plugins(&app)
+}
+
+#[tauri::command]
+pub fn install_plugin_from_folder(
+    app: AppHandle,
+    source_path: PathBuf,
+) -> Result<InstalledPluginSummary, String> {
+    crate::plugins::install_plugin_from_folder(&app, source_path)
+}
+
+#[tauri::command]
+pub fn set_plugin_enabled(
+    app: AppHandle,
+    plugin_id: String,
+    enabled: bool,
+) -> Result<InstalledPluginSummary, String> {
+    crate::plugins::set_plugin_enabled(&app, plugin_id, enabled)
+}
+
+#[tauri::command]
+pub fn remove_plugin(app: AppHandle, plugin_id: String) -> Result<(), String> {
+    crate::plugins::remove_plugin(&app, plugin_id)
+}
+
+#[tauri::command]
+pub fn resolve_plugin_main(
+    app: AppHandle,
+    plugin_id: String,
+) -> Result<PluginMainResolution, String> {
+    crate::plugins::resolve_plugin_main(&app, plugin_id)
+}
+
+#[tauri::command]
+pub fn read_plugin_documentation(
+    app: AppHandle,
+    plugin_id: String,
+) -> Result<PluginDocumentation, String> {
+    crate::plugins::read_plugin_documentation(&app, plugin_id)
 }
 
 #[tauri::command]
@@ -340,7 +384,8 @@ pub fn resolve_markdown_link_status(
         | ResolvedLocation::SpecialPagesList { .. }
         | ResolvedLocation::SpecialDeletedPages { .. }
         | ResolvedLocation::SpecialFavorites { .. }
-        | ResolvedLocation::SpecialCategories { .. } => true,
+        | ResolvedLocation::SpecialCategories { .. }
+        | ResolvedLocation::SpecialPlugins { .. } => true,
     };
 
     Ok(MarkdownLinkStatus {
@@ -536,6 +581,19 @@ pub fn open_location(
                 uncategorized_pages,
             })
         }
+        ResolvedLocation::SpecialPlugins {
+            namespace,
+            location,
+        } => {
+            let detail = crate::namespace::open_namespace(&app, namespace.id.clone())?;
+            let plugins = crate::plugins::list_plugins(&app)?;
+            Ok(OpenLocationResult::SpecialPlugins {
+                location,
+                namespace: detail.namespace,
+                content: detail.content,
+                plugins,
+            })
+        }
     }
 }
 
@@ -600,6 +658,11 @@ fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialPageS
             title: "Categories".to_string(),
             description: "カテゴリ別にページを表示します。".to_string(),
             location: format!("{}:Special:Categories", namespace.name),
+        },
+        SpecialPageSummary {
+            title: "Plugins".to_string(),
+            description: "登録済みプラグインの確認と有効化を行います。".to_string(),
+            location: format!("{}:Special:Plugins", namespace.name),
         },
     ]
 }
