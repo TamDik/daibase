@@ -86,6 +86,7 @@ export function PageSurface({
   onToggleFavorite,
   onOpenLocation,
   onOpenMarkdownLink,
+  onPluginWriteCurrentPage,
   onResolveMarkdownImage,
   onResolveMarkdownLinkStatus,
   onSelectHistoryEntry,
@@ -119,6 +120,7 @@ export function PageSurface({
   onToggleFavorite: () => void;
   onOpenLocation: (location: string) => void;
   onOpenMarkdownLink: (target: string) => void;
+  onPluginWriteCurrentPage: (content: string) => Promise<void>;
   onResolveMarkdownImage: (target: string) => Promise<{
     content_type: string | null;
     data_url: string | null;
@@ -376,6 +378,7 @@ export function PageSurface({
                       pageContext={pageContext}
                       plugin={pluginViewMatch.plugin}
                       readOnly={readOnly}
+                      onWriteCurrentPage={onPluginWriteCurrentPage}
                     />
                   ) : (
                     <MarkdownWysiwygEditor
@@ -578,12 +581,14 @@ function PageSearchBar({
 function PluginHostView({
   content,
   contribution,
+  onWriteCurrentPage,
   pageContext,
   plugin,
   readOnly,
 }: {
   content: string;
   contribution: InstalledPluginSummary["manifest"]["contributions"][number];
+  onWriteCurrentPage: (content: string) => Promise<void>;
   pageContext: PagePluginContext;
   plugin: InstalledPluginSummary;
   readOnly: boolean;
@@ -594,6 +599,7 @@ function PluginHostView({
   const [iframeHeight, setIframeHeight] = useState(420);
   const [error, setError] = useState<string | null>(null);
   const parsedMarkdown = useMemo(() => markdownContext(content), [content]);
+  const frameHtml = useMemo(() => injectDaibasePluginApi(pluginHtml), [pluginHtml]);
 
   useEffect(() => {
     let isMounted = true;
@@ -637,6 +643,36 @@ function PluginHostView({
     window.setTimeout(() => updateIframeHeight(iframeRef.current, setIframeHeight), 50);
   }, [content, contribution.id, pageContext, parsedMarkdown, plugin.id, pluginHtml, readOnly]);
 
+  useEffect(() => {
+    if (!pluginHtml) {
+      return;
+    }
+
+    const handleMessage = (event: MessageEvent<PluginApiRequestMessage>) => {
+      if (event.source !== iframeRef.current?.contentWindow) {
+        return;
+      }
+
+      const message = event.data;
+      if (!message || message.type !== "daibase:api-request") {
+        return;
+      }
+
+      void handlePluginApiRequest({
+        message,
+        onWriteCurrentPage,
+        plugin,
+        readOnly,
+        respond: (response) => {
+          iframeRef.current?.contentWindow?.postMessage(response, "*");
+        },
+      });
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [onWriteCurrentPage, plugin, pluginHtml, readOnly]);
+
   if (error) {
     return (
       <Alert severity="error" sx={{ m: 2 }}>
@@ -661,7 +697,7 @@ function PluginHostView({
       component="iframe"
       ref={iframeRef}
       title={contribution.name}
-      srcDoc={pluginHtml}
+      srcDoc={frameHtml}
       scrolling="no"
       onLoad={() => {
         iframeResizeCleanupRef.current?.();
@@ -685,6 +721,121 @@ function PluginHostView({
       }}
     />
   );
+}
+
+type PluginApiRequestMessage = {
+  type: "daibase:api-request";
+  requestId: string;
+  method: string;
+  params?: unknown;
+};
+
+type PluginApiResponseMessage = {
+  type: "daibase:api-response";
+  requestId: string;
+} & ({ ok: true; result?: unknown } | { ok: false; error: string });
+
+async function handlePluginApiRequest({
+  message,
+  onWriteCurrentPage,
+  plugin,
+  readOnly,
+  respond,
+}: {
+  message: PluginApiRequestMessage;
+  onWriteCurrentPage: (content: string) => Promise<void>;
+  plugin: InstalledPluginSummary;
+  readOnly: boolean;
+  respond: (response: PluginApiResponseMessage) => void;
+}) {
+  try {
+    if (message.method !== "writeCurrentPage") {
+      throw new Error(`未対応の Plugin API です: ${message.method}`);
+    }
+    if (!plugin.manifest.permissions.includes("page-write")) {
+      throw new Error("page-write permission が必要です。");
+    }
+    if (readOnly) {
+      throw new Error("読み取り専用ページは書き込めません。");
+    }
+
+    const params = message.params;
+    if (!isRecord(params) || typeof params.content !== "string") {
+      throw new Error("writeCurrentPage には Markdown 文字列を指定してください。");
+    }
+
+    await onWriteCurrentPage(params.content);
+    respond({ type: "daibase:api-response", requestId: message.requestId, ok: true });
+  } catch (caught) {
+    respond({
+      type: "daibase:api-response",
+      requestId: message.requestId,
+      ok: false,
+      error: errorMessage(caught),
+    });
+  }
+}
+
+function injectDaibasePluginApi(html: string | null) {
+  if (html === null) {
+    return "";
+  }
+
+  const bootstrap = `<script>${daibasePluginApiBootstrap()}<\/script>`;
+  if (/<head(\s[^>]*)?>/i.test(html)) {
+    return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${bootstrap}`);
+  }
+  if (/<html(\s[^>]*)?>/i.test(html)) {
+    return html.replace(/<html(\s[^>]*)?>/i, (match) => `${match}<head>${bootstrap}</head>`);
+  }
+  return `${bootstrap}${html}`;
+}
+
+function daibasePluginApiBootstrap() {
+  return `
+(() => {
+  const pending = new Map();
+  const request = (method, params) =>
+    new Promise((resolve, reject) => {
+      const requestId =
+        globalThis.crypto?.randomUUID?.() ??
+        \`plugin-request-\${Date.now()}-\${Math.random()}\`;
+      pending.set(requestId, { resolve, reject });
+      window.parent.postMessage(
+        { type: "daibase:api-request", requestId, method, params },
+        "*",
+      );
+    });
+
+  window.addEventListener("message", (event) => {
+    const message = event.data;
+    if (!message || message.type !== "daibase:api-response") {
+      return;
+    }
+    const callbacks = pending.get(message.requestId);
+    if (!callbacks) {
+      return;
+    }
+    pending.delete(message.requestId);
+    if (message.ok) {
+      callbacks.resolve(message.result);
+      return;
+    }
+    callbacks.reject(new Error(message.error || "Daibase API request failed."));
+  });
+
+  Object.defineProperty(window, "daibase", {
+    configurable: false,
+    enumerable: true,
+    value: Object.freeze({
+      writeCurrentPage(content) {
+        return request("writeCurrentPage", { content: String(content) });
+      },
+    }),
+    writable: false,
+  });
+})();
+`;
 }
 
 function observeIframeHeight(
@@ -776,6 +927,10 @@ function requestId() {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function splitCategoryInput(value: string) {

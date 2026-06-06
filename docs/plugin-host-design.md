@@ -72,7 +72,7 @@ Plugin HTML
 
 - Plugin Host が渡した context の参照
 - 自分の sandbox 内での DOM / CSS / state 管理
-- 将来公開される Plugin Host API への request
+- `window.daibase` として公開される Plugin API への request
 
 ## GitHub 配布との関係
 
@@ -119,24 +119,22 @@ Structured View の利点:
 
 ## Host API
 
-プラグインに Daibase 操作 API を渡す場合は capability 制にします。初期候補は次の通りです。
+プラグインに Daibase 操作 API を渡す場合は capability 制にします。現行実装では `window.daibase.writeCurrentPage` を公開しています。
 
 ```ts
 type PluginHostApi = {
-  openLocation(location: string): Promise<void>;
-  notify(message: string, options?: NotifyOptions): Promise<void>;
-  readPage(location: string): Promise<PageSnapshot>;
   writeCurrentPage(content: string): Promise<void>;
 };
 ```
 
 API 呼び出しは manifest の permission と現在の context で検査します。
 
-例:
+現行 API:
 
-- `readPage` には `page-read` が必要。
 - `writeCurrentPage` には `page-write` が必要。
-- `openLocation` には `location-open` が必要。
-- `notify` には `ui-notify` が必要。
 
-現行実装では任意の Host API proxy はまだ公開していません。
+将来候補:
+
+- `openLocation(location)` には `location-open` が必要。
+- `notify(message)` には `ui-notify` が必要。
+- `readPage(location)` には `page-read` が必要。

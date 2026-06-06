@@ -594,10 +594,98 @@ describe("HomePage", () => {
     renderHomePage();
 
     const frame = await screen.findByTitle("Calendar");
-    expect(frame).toHaveAttribute("srcdoc", "<!doctype html><html><body>Calendar</body></html>");
+    expect(frame.getAttribute("srcdoc")).toContain('window, "daibase"');
+    expect(frame.getAttribute("srcdoc")).toContain("<body>Calendar</body>");
     expect(frame).toHaveAttribute("scrolling", "no");
     expect(api.resolvePluginMain).toHaveBeenCalledWith("com.example.calendar");
     expect(screen.queryByRole("textbox", { name: "Markdown" })).not.toBeInTheDocument();
+  });
+
+  it("page-write 権限を持つプラグインは現在のページを書き込める", async () => {
+    vi.mocked(api.listPlugins).mockResolvedValue([
+      pluginItems({ enabled: true, permissions: ["page-read", "page-write"] })[0],
+    ]);
+    vi.mocked(api.openInitialLocation).mockResolvedValue({
+      kind: "page",
+      namespace: workNamespace,
+      location: "Work:Calendar.md",
+      content: contentTree,
+      page: page(
+        "Calendar.md",
+        "---\ndaibase.view: calendar\n---\n# Calendar\n\n- 2026-06-04 Review",
+      ),
+    });
+    vi.mocked(api.resolvePluginMain).mockResolvedValue({
+      path: "/tmp/calendar-plugin/dist/index.html",
+      html: "<!doctype html><html><body>Calendar</body></html>",
+    });
+    vi.mocked(api.savePage).mockResolvedValue({
+      location: "Work:Calendar.md",
+      namespace: workNamespace,
+      content: contentTree,
+      page: page("Calendar.md", "---\ndaibase.view: calendar\n---\n# Updated"),
+      save: saveResult("file-calendar"),
+    });
+
+    renderHomePage();
+    const frame = (await screen.findByTitle("Calendar")) as HTMLIFrameElement;
+
+    await waitFor(() => {
+      dispatchPluginApiRequest(frame, {
+        type: "daibase:api-request",
+        requestId: "plugin-write-1",
+        method: "writeCurrentPage",
+        params: {
+          content: "---\ndaibase.view: calendar\n---\n# Updated",
+        },
+      });
+      expect(api.savePage).toHaveBeenCalledWith(
+        "ns-work",
+        "Calendar.md",
+        "---\ndaibase.view: calendar\n---\n# Updated",
+      );
+    });
+    expect(screen.queryByLabelText("未保存")).not.toBeInTheDocument();
+  });
+
+  it("page-write 権限のないプラグインからの書き込みを拒否する", async () => {
+    vi.mocked(api.listPlugins).mockResolvedValue([pluginItems({ enabled: true })[0]]);
+    vi.mocked(api.openInitialLocation).mockResolvedValue({
+      kind: "page",
+      namespace: workNamespace,
+      location: "Work:Calendar.md",
+      content: contentTree,
+      page: page("Calendar.md", "---\ndaibase.view: calendar\n---\n# Calendar"),
+    });
+    vi.mocked(api.resolvePluginMain).mockResolvedValue({
+      path: "/tmp/calendar-plugin/dist/index.html",
+      html: "<!doctype html><html><body>Calendar</body></html>",
+    });
+
+    renderHomePage();
+    const frame = (await screen.findByTitle("Calendar")) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await waitFor(() => {
+      dispatchPluginApiRequest(frame, {
+        type: "daibase:api-request",
+        requestId: "plugin-write-2",
+        method: "writeCurrentPage",
+        params: {
+          content: "# Rejected",
+        },
+      });
+      expect(postMessage).toHaveBeenCalledWith(
+        {
+          type: "daibase:api-response",
+          requestId: "plugin-write-2",
+          ok: false,
+          error: "page-write permission が必要です。",
+        },
+        "*",
+      );
+    });
+    expect(api.savePage).not.toHaveBeenCalled();
   });
 
   it("ページ下部にこのページへリンクしているページを表示して開ける", async () => {
@@ -1443,7 +1531,12 @@ function searchResults(): SearchContentResult[] {
 function pluginItems({
   enabled = false,
   loadError = null,
-}: { enabled?: boolean; loadError?: string | null } = {}): InstalledPluginSummary[] {
+  permissions = ["page-read", "location-open"],
+}: {
+  enabled?: boolean;
+  loadError?: string | null;
+  permissions?: InstalledPluginSummary["manifest"]["permissions"];
+} = {}): InstalledPluginSummary[] {
   return [
     {
       id: "com.example.calendar",
@@ -1482,10 +1575,40 @@ function pluginItems({
             },
           },
         ],
-        permissions: ["page-read", "location-open"],
+        permissions,
       },
     },
   ];
+}
+
+function saveResult(fileId: string) {
+  return {
+    namespace_id: workNamespace.id,
+    file_id: fileId,
+    path: "Calendar.md",
+    revision_id: "rev-plugin-write",
+    object_id: "obj-plugin-write",
+    saved_at: "2026-06-06T00:00:00Z",
+  };
+}
+
+function dispatchPluginApiRequest(
+  frame: HTMLIFrameElement,
+  message: {
+    type: "daibase:api-request";
+    requestId: string;
+    method: string;
+    params?: unknown;
+  },
+) {
+  act(() => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: message,
+        source: frame.contentWindow,
+      }),
+    );
+  });
 }
 
 function favoriteContentTree(path: string, isFavorite: boolean): ContentTree {

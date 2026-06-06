@@ -432,6 +432,66 @@ export function HomePage() {
     [pageMode],
   );
 
+  const handlePluginWriteCurrentPage = useCallback(
+    async (nextContent: string) => {
+      const currentPageView = pageViewRef.current;
+
+      if (!currentPageView) {
+        throw new Error("書き込み対象のページがありません。");
+      }
+      if (currentPageView.isReadOnly) {
+        throw new Error("読み取り専用ページは書き込めません。");
+      }
+      if (isSavingRef.current) {
+        throw new Error("保存中のため、ページを書き込めません。");
+      }
+
+      isSavingRef.current = true;
+      setIsSaving(true);
+      setError(null);
+      setDraft(nextContent);
+      draftRef.current = nextContent;
+
+      try {
+        const saved = await savePage(
+          currentPageView.namespace.id,
+          currentPageView.page.path,
+          nextContent,
+        );
+        setPageView({
+          kind: "page",
+          namespace: saved.namespace,
+          page: saved.page,
+        });
+        pageViewRef.current = {
+          kind: "page",
+          namespace: saved.namespace,
+          page: saved.page,
+        };
+        setActiveNamespace(saved.namespace);
+        setSidebarContent(saved.content);
+        setDraft(saved.page.content);
+        draftRef.current = saved.page.content;
+        setCurrentLocation(saved.location);
+        if (pageMode === "history") {
+          const entries = await listPageHistory(saved.namespace.id, saved.page.path);
+          setHistoryEntries(entries);
+          setSelectedHistoryRevisionId(null);
+          setSelectedHistorySnapshot(null);
+          setSelectedHistoryError(null);
+          setIsSelectedHistoryLoading(false);
+        }
+      } catch (caught) {
+        setError(errorMessage(caught));
+        throw caught;
+      } finally {
+        isSavingRef.current = false;
+        setIsSaving(false);
+      }
+    },
+    [pageMode],
+  );
+
   const navigate = useCallback(
     async (
       rawLocation: string,
@@ -1304,6 +1364,7 @@ export function HomePage() {
                   }
                   onOpenLocation={(location) => void navigate(location)}
                   onOpenMarkdownLink={(target) => void handleOpenPageMarkdownLink(target)}
+                  onPluginWriteCurrentPage={handlePluginWriteCurrentPage}
                   onResolveMarkdownImage={handleResolvePageMarkdownImage}
                   onResolveMarkdownLinkStatus={handleResolvePageMarkdownLinkStatus}
                   onSelectHistoryEntry={handleSelectHistoryEntry}
