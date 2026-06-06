@@ -20,6 +20,14 @@ export type FileSummary = {
   is_favorite: boolean;
 };
 
+export type SearchContentResult = {
+  content_kind: "page" | "file" | "special" | string;
+  path: string;
+  title: string;
+  location: string;
+  snippet: string | null;
+};
+
 export type FolderSummary = {
   path: string;
   title: string;
@@ -553,6 +561,13 @@ export function writeFileNote(namespaceId: string, path: string, note: string) {
 export function listContent(namespaceId: string) {
   return invoke<ContentTree>("list_content", {
     namespaceId,
+  });
+}
+
+export function searchContent(namespaceId: string, query: string) {
+  return invoke<SearchContentResult[]>("search_content", {
+    namespaceId,
+    query,
   });
 }
 

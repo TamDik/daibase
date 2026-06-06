@@ -5,21 +5,30 @@ import {
   Button,
   Chip,
   CircularProgress,
+  InputAdornment,
   IconButton,
   Link,
   List,
   ListItemButton,
   ListItemText,
+  Paper,
   Stack,
-  Tab,
-  Tabs,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
   Typography,
 } from "@mui/material";
-import { ArrowBackRounded, Article, Code, Star, StarBorder } from "@mui/icons-material";
+import {
+  Article,
+  ArrowBackRounded,
+  CloseRounded,
+  Code,
+  FindInPageRounded,
+  HistoryRounded,
+  KeyboardArrowDownRounded,
+  KeyboardArrowUpRounded,
+} from "@mui/icons-material";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
@@ -34,7 +43,11 @@ import {
   markdownBodyFromMarkdown,
   updateMarkdownBodyPreservingFrontmatter,
 } from "../lib/pageCategories";
+import { findPageSearchMatches } from "../lib/pageSearch";
 import { findPageViewPlugin, markdownContext } from "../lib/pluginHost";
+import { FavoriteToggleButton } from "./FavoriteToggleButton";
+import { MainContentTop } from "./MainContentTop";
+import { MarkdownEditor } from "./MarkdownEditor";
 import { MarkdownWysiwygEditor } from "./MarkdownWysiwygEditor";
 import { SideBySideDiffView } from "./SideBySideDiffView";
 
@@ -63,8 +76,12 @@ export function PageSurface({
   pageContext,
   plugins,
   readOnly = false,
+  canGoBack,
+  canGoForward,
   onDraftChange,
   onCategoriesChange,
+  onGoBack,
+  onGoForward,
   onModeChange,
   onToggleFavorite,
   onOpenLocation,
@@ -92,8 +109,12 @@ export function PageSurface({
   pageContext: PagePluginContext;
   plugins: InstalledPluginSummary[];
   readOnly?: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
   onDraftChange: (value: string) => void;
   onCategoriesChange: (categories: string[]) => void;
+  onGoBack: () => void;
+  onGoForward: () => void;
   onModeChange: (mode: PageMode) => void;
   onToggleFavorite: () => void;
   onOpenLocation: (location: string) => void;
@@ -121,11 +142,23 @@ export function PageSurface({
   const [editorView, setEditorView] = useState<"wysiwyg" | "source">("wysiwyg");
   const [categoryInput, setCategoryInput] = useState("");
   const [categoryValues, setCategoryValues] = useState<string[]>([]);
+  const [pageSearchOpen, setPageSearchOpen] = useState(false);
+  const [pageSearchQuery, setPageSearchQuery] = useState("");
+  const [pageSearchIndex, setPageSearchIndex] = useState(0);
   const pluginViewMatch = editorView === "wysiwyg" ? findPageViewPlugin(draft, plugins) : null;
+  const activeTool = mode === "history" ? "history" : editorView;
+  const pageSearchMatches = useMemo(
+    () => findPageSearchMatches(draft, pageSearchQuery),
+    [draft, pageSearchQuery],
+  );
+  const activePageSearchMatch = pageSearchMatches[pageSearchIndex] ?? null;
 
   useEffect(() => {
     setCategoryInput("");
     setCategoryValues(categoriesFromMarkdown(draft));
+    setPageSearchOpen(false);
+    setPageSearchQuery("");
+    setPageSearchIndex(0);
   }, [editorKey]);
 
   useEffect(() => {
@@ -134,6 +167,40 @@ export function PageSurface({
       setCategoryValues(draftCategories);
     }
   }, [categoryValues, draft]);
+
+  useEffect(() => {
+    setPageSearchIndex(0);
+  }, [pageSearchQuery]);
+
+  useEffect(() => {
+    if (pageSearchIndex >= pageSearchMatches.length) {
+      setPageSearchIndex(Math.max(0, pageSearchMatches.length - 1));
+    }
+  }, [pageSearchIndex, pageSearchMatches.length]);
+
+  const openPageSearch = () => {
+    setPageSearchOpen(true);
+  };
+
+  const closePageSearch = () => {
+    setPageSearchOpen(false);
+    setPageSearchQuery("");
+    setPageSearchIndex(0);
+  };
+
+  const goToPreviousPageSearchMatch = () => {
+    if (pageSearchMatches.length === 0) {
+      return;
+    }
+    setPageSearchIndex((current) => (current <= 0 ? pageSearchMatches.length - 1 : current - 1));
+  };
+
+  const goToNextPageSearchMatch = () => {
+    if (pageSearchMatches.length === 0) {
+      return;
+    }
+    setPageSearchIndex((current) => (current + 1) % pageSearchMatches.length);
+  };
 
   const updateCategories = (categories: string[]) => {
     const nextCategories = uniqueCategories(categories);
@@ -151,71 +218,6 @@ export function PageSurface({
     updateCategories([...categoryValues, ...inputCategories]);
   };
 
-  const viewToolbar = mode === "view" && (
-    <Stack
-      direction="row"
-      spacing={1}
-      sx={{
-        alignItems: "center",
-        justifyContent: "flex-end",
-        position: "absolute",
-        right: 24,
-        top: 52,
-        zIndex: 2,
-      }}
-    >
-      {isDirty && (
-        <Chip
-          aria-label="未保存"
-          label="未保存"
-          size="small"
-          variant="outlined"
-          sx={{
-            bgcolor: "#ffffff",
-            borderColor: "#cf222e",
-            color: "#a40e26",
-            fontWeight: 600,
-            minWidth: 72,
-          }}
-        />
-      )}
-      <ToggleButtonGroup
-        exclusive
-        size="small"
-        value={editorView}
-        sx={{
-          background: "#FFF",
-        }}
-        onChange={(_, value: "wysiwyg" | "source" | null) => {
-          if (value) {
-            setEditorView(value);
-          }
-        }}
-      >
-        <Tooltip title="WYSIWYG">
-          <ToggleButton
-            aria-label="WYSIWYG"
-            value="wysiwyg"
-            disabled={isSaving}
-            sx={{ minHeight: 32, minWidth: 36, px: 1 }}
-          >
-            <Article fontSize="small" />
-          </ToggleButton>
-        </Tooltip>
-        <Tooltip title="Markdownソース">
-          <ToggleButton
-            aria-label="Markdownソース"
-            value="source"
-            disabled={isSaving}
-            sx={{ minHeight: 32, minWidth: 36, px: 1 }}
-          >
-            <Code fontSize="small" />
-          </ToggleButton>
-        </Tooltip>
-      </ToggleButtonGroup>
-    </Stack>
-  );
-
   return (
     <Box
       sx={{
@@ -228,52 +230,109 @@ export function PageSurface({
         position: "relative",
       }}
     >
-      <Box
-        sx={{
-          alignItems: "center",
-          display: "flex",
-          flex: "0 0 auto",
-          px: 1.5,
-          pt: 0.5,
-        }}
-      >
-        <Box sx={{ borderBottom: 1, borderColor: "divider", flex: 1 }}>
-          <Tabs
-            value={mode}
-            onChange={(_, value: PageMode) => onModeChange(value)}
-            sx={{ minHeight: 36 }}
-          >
-            <Tab label="閲覧" value="view" sx={{ minHeight: 36, px: 1.5, py: 0 }} />
-            <Tab
-              label="履歴"
-              value="history"
-              disabled={isVirtual}
-              sx={{ minHeight: 36, px: 1.5, py: 0 }}
-            />
-          </Tabs>
-        </Box>
-        {!readOnly && (
-          <Tooltip title={isFavorite ? "お気に入り解除" : "お気に入り"}>
-            <span>
-              <IconButton
-                aria-label={isFavorite ? "お気に入り解除" : "お気に入り"}
-                disabled={isVirtual || isSaving}
+      <MainContentTop
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        onGoBack={onGoBack}
+        onGoForward={onGoForward}
+        rightSlot={
+          <>
+            <Box sx={{ flex: 1, minWidth: 0 }} />
+            {isDirty && (
+              <Chip
+                aria-label="未保存"
+                label="未保存"
                 size="small"
-                onClick={onToggleFavorite}
-                sx={{ ml: 0.5 }}
+                variant="outlined"
+                sx={{
+                  bgcolor: "#ffffff",
+                  borderColor: "#cf222e",
+                  color: "#a40e26",
+                  fontWeight: 600,
+                  mr: 1,
+                  minWidth: 72,
+                }}
+              />
+            )}
+            <Tooltip title="ページ内検索">
+              <IconButton
+                aria-label="ページ内検索"
+                aria-pressed={pageSearchOpen}
+                size="small"
+                onClick={pageSearchOpen ? closePageSearch : openPageSearch}
               >
-                {isFavorite ? (
-                  <Star sx={{ color: "#bf8700" }} fontSize="small" />
-                ) : (
-                  <StarBorder fontSize="small" />
-                )}
+                <FindInPageRounded fontSize="small" />
               </IconButton>
-            </span>
-          </Tooltip>
-        )}
-      </Box>
-      {viewToolbar}
-
+            </Tooltip>
+            {!readOnly && (
+              <FavoriteToggleButton
+                disabled={isVirtual || isSaving}
+                isFavorite={isFavorite}
+                onToggleFavorite={onToggleFavorite}
+              />
+            )}
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={activeTool}
+              sx={{ flex: "0 0 auto" }}
+              onChange={(_, value: "wysiwyg" | "source" | "history" | null) => {
+                if (!value) {
+                  return;
+                }
+                if (value === "history") {
+                  onModeChange("history");
+                  return;
+                }
+                setEditorView(value);
+                onModeChange("view");
+              }}
+            >
+              <Tooltip title="Milkdown">
+                <ToggleButton
+                  aria-label="Milkdown"
+                  value="wysiwyg"
+                  disabled={isSaving}
+                  sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+                >
+                  <Article fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+              <Tooltip title="Markdown">
+                <ToggleButton
+                  aria-label="Markdown"
+                  value="source"
+                  disabled={isSaving}
+                  sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+                >
+                  <Code fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+              <Tooltip title="履歴">
+                <ToggleButton
+                  aria-label="履歴"
+                  value="history"
+                  disabled={isVirtual}
+                  sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+                >
+                  <HistoryRounded fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+            </ToggleButtonGroup>
+          </>
+        }
+      />
+      {pageSearchOpen && (
+        <PageSearchBar
+          currentIndex={pageSearchIndex}
+          matchCount={pageSearchMatches.length}
+          query={pageSearchQuery}
+          onClose={closePageSearch}
+          onNext={goToNextPageSearchMatch}
+          onPrevious={goToPreviousPageSearchMatch}
+          onQueryChange={setPageSearchQuery}
+        />
+      )}
       <Box sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}>
         {mode === "history" ? (
           <HistoryPanel
@@ -298,22 +357,14 @@ export function PageSurface({
             )}
             <>
               {editorView === "source" ? (
-                <Box sx={{ mx: 2, mt: 4 }}>
-                  <TextField
-                    label="Markdownソース"
-                    value={draft}
-                    onChange={(event) => onDraftChange(event.target.value)}
+                <Box sx={{ p: 0 }}>
+                  <MarkdownEditor
+                    activeSearchMatch={activePageSearchMatch}
+                    ariaLabel="Markdownソース"
                     disabled={isSaving || readOnly}
-                    multiline
-                    minRows={24}
-                    fullWidth
-                    sx={{
-                      "& textarea": {
-                        fontFamily:
-                          'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-                        lineHeight: 1.6,
-                      },
-                    }}
+                    searchMatches={pageSearchMatches}
+                    value={draft}
+                    onChange={onDraftChange}
                   />
                 </Box>
               ) : (
@@ -329,8 +380,12 @@ export function PageSurface({
                   ) : (
                     <MarkdownWysiwygEditor
                       key={editorKey}
+                      activeSearchMatch={activePageSearchMatch}
                       ariaLabel="Markdown"
                       disabled={isSaving || readOnly}
+                      searchIndex={pageSearchIndex}
+                      searchMatches={pageSearchMatches}
+                      searchQuery={pageSearchQuery}
                       value={markdownBodyFromMarkdown(draft)}
                       onChange={(value) =>
                         onDraftChange(updateMarkdownBodyPreservingFrontmatter(draft, value))
@@ -378,6 +433,145 @@ export function PageSurface({
         )}
       </Box>
     </Box>
+  );
+}
+
+function PageSearchBar({
+  currentIndex,
+  matchCount,
+  query,
+  onClose,
+  onNext,
+  onPrevious,
+  onQueryChange,
+}: {
+  currentIndex: number;
+  matchCount: number;
+  query: string;
+  onClose: () => void;
+  onNext: () => void;
+  onPrevious: () => void;
+  onQueryChange: (query: string) => void;
+}) {
+  const hasQuery = query.trim().length > 0;
+  const hasMatches = matchCount > 0;
+  const countLabel = hasQuery && hasMatches ? `${currentIndex + 1}/${matchCount}` : "0/0";
+
+  return (
+    <Paper
+      elevation={8}
+      role="search"
+      aria-label="ページ内検索"
+      sx={{
+        alignItems: "center",
+        bgcolor: "#ffffff",
+        border: "1px solid",
+        borderColor: "divider",
+        borderRadius: 1.5,
+        boxShadow: "0 8px 24px rgba(31, 35, 40, 0.16)",
+        display: "flex",
+        gap: 0.75,
+        maxWidth: "calc(100% - 32px)",
+        position: "absolute",
+        px: 1,
+        py: 0.75,
+        right: 16,
+        top: 48,
+        width: { xs: "calc(100% - 32px)", sm: 286 },
+        zIndex: (theme) => theme.zIndex.appBar,
+      }}
+    >
+      <TextField
+        autoComplete="off"
+        autoFocus
+        size="small"
+        value={query}
+        placeholder="ページ内検索"
+        onChange={(event) => onQueryChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            onClose();
+          }
+          if (event.key === "Enter") {
+            event.preventDefault();
+            if (event.shiftKey) {
+              onPrevious();
+              return;
+            }
+            onNext();
+          }
+        }}
+        slotProps={{
+          htmlInput: {
+            "aria-label": "ページ内検索キーワード",
+          },
+          input: {
+            endAdornment: (
+              <InputAdornment position="end">
+                <Typography
+                  aria-label="ページ内検索の一致数"
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontSize: 11, minWidth: 32, textAlign: "right" }}
+                >
+                  {countLabel}
+                </Typography>
+              </InputAdornment>
+            ),
+          },
+        }}
+        sx={{
+          flex: "1 1 auto",
+          minWidth: 0,
+          "& .MuiInputBase-root": {
+            minHeight: 32,
+            pr: 0.75,
+          },
+          "& .MuiInputBase-input": {
+            fontSize: 13,
+            py: 0.75,
+          },
+        }}
+      />
+      <Stack direction="row" spacing={0} sx={{ flex: "0 0 auto", ml: 0.25 }}>
+        <Tooltip title="前へ">
+          <span>
+            <IconButton
+              aria-label="前の一致"
+              disabled={!hasMatches}
+              size="small"
+              sx={{ height: 28, p: 0.25, width: 28 }}
+              onClick={onPrevious}
+            >
+              <KeyboardArrowUpRounded fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title="次へ">
+          <span>
+            <IconButton
+              aria-label="次の一致"
+              disabled={!hasMatches}
+              size="small"
+              sx={{ height: 28, p: 0.25, width: 28 }}
+              onClick={onNext}
+            >
+              <KeyboardArrowDownRounded fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title="閉じる">
+          <IconButton
+            aria-label="ページ内検索を閉じる"
+            size="small"
+            sx={{ height: 28, p: 0.25, width: 28 }}
+            onClick={onClose}
+          >
+            <CloseRounded fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+    </Paper>
   );
 }
 

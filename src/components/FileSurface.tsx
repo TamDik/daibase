@@ -3,20 +3,27 @@ import {
   Box,
   Button,
   CircularProgress,
-  IconButton,
   Link,
   List,
   ListItemButton,
   ListItemText,
   Stack,
-  Tab,
-  Tabs,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from "@mui/material";
-import { CloudUploadOutlined, SaveOutlined, Star, StarBorder } from "@mui/icons-material";
+import {
+  CloudUploadOutlined,
+  HistoryRounded,
+  InsertDriveFileOutlined,
+  SaveOutlined,
+} from "@mui/icons-material";
 
 import type { BacklinkSummary, FileHistoryEntry, ManagedFileContent } from "../api/tauriCommands";
+import { FavoriteToggleButton } from "./FavoriteToggleButton";
+import { MainContentTop } from "./MainContentTop";
 
 export type FileMode = "detail" | "history";
 
@@ -30,6 +37,10 @@ export function FileSurface({
   mode,
   noteDraft,
   readOnly = false,
+  canGoBack,
+  canGoForward,
+  onGoBack,
+  onGoForward,
   onModeChange,
   onNoteChange,
   onOpenLocation,
@@ -48,6 +59,10 @@ export function FileSurface({
   mode: FileMode;
   noteDraft: string;
   readOnly?: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  onGoBack: () => void;
+  onGoForward: () => void;
   onModeChange: (mode: FileMode) => void;
   onNoteChange: (value: string) => void;
   onOpenLocation: (location: string) => void;
@@ -73,38 +88,55 @@ export function FileSurface({
         overflow: "hidden",
       }}
     >
-      <Box sx={{ alignItems: "center", display: "flex", flex: "0 0 auto", px: 1.5, pt: 0.5 }}>
-        <Box sx={{ borderBottom: 1, borderColor: "divider", flex: 1 }}>
-          <Tabs
-            value={mode}
-            onChange={(_, value: FileMode) => onModeChange(value)}
-            sx={{ minHeight: 36 }}
-          >
-            <Tab label="ファイル" value="detail" sx={{ minHeight: 36, px: 1.5, py: 0 }} />
-            <Tab
-              label="履歴"
-              value="history"
-              disabled={isVirtual}
-              sx={{ minHeight: 36, px: 1.5, py: 0 }}
-            />
-          </Tabs>
-        </Box>
-        {!readOnly && (
-          <IconButton
-            aria-label={file.is_favorite ? "お気に入り解除" : "お気に入り"}
-            disabled={isVirtual || isUploading}
-            size="small"
-            onClick={onToggleFavorite}
-            sx={{ ml: 0.5 }}
-          >
-            {file.is_favorite ? (
-              <Star sx={{ color: "#bf8700" }} fontSize="small" />
-            ) : (
-              <StarBorder fontSize="small" />
+      <MainContentTop
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        onGoBack={onGoBack}
+        onGoForward={onGoForward}
+        rightSlot={
+          <>
+            <Box sx={{ flex: 1, minWidth: 0 }} />
+            {!readOnly && (
+              <FavoriteToggleButton
+                disabled={isVirtual || isUploading}
+                isFavorite={file.is_favorite ?? false}
+                onToggleFavorite={onToggleFavorite}
+              />
             )}
-          </IconButton>
-        )}
-      </Box>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={mode}
+              sx={{ flex: "0 0 auto" }}
+              onChange={(_, value: FileMode | null) => {
+                if (value) {
+                  onModeChange(value);
+                }
+              }}
+            >
+              <Tooltip title="ファイル">
+                <ToggleButton
+                  aria-label="ファイル"
+                  value="detail"
+                  sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+                >
+                  <InsertDriveFileOutlined fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+              <Tooltip title="履歴">
+                <ToggleButton
+                  aria-label="履歴"
+                  value="history"
+                  disabled={isVirtual}
+                  sx={{ minHeight: 32, minWidth: 36, px: 1 }}
+                >
+                  <HistoryRounded fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+            </ToggleButtonGroup>
+          </>
+        }
+      />
 
       <Box sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}>
         {mode === "history" ? (
@@ -143,9 +175,7 @@ export function FileSurface({
               </Box>
               {!readOnly && (
                 <Button
-                  startIcon={
-                    isUploading ? <CircularProgress size={16} /> : <CloudUploadOutlined />
-                  }
+                  startIcon={isUploading ? <CircularProgress size={16} /> : <CloudUploadOutlined />}
                   variant="contained"
                   disabled={isUploading}
                   onClick={onUpload}

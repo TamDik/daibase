@@ -19,6 +19,7 @@ import type {
   ManagedFileContent,
   NamespaceSummary,
   PageContent,
+  SearchContentResult,
 } from "../api/tauriCommands";
 import { HomePage } from "./HomePage";
 
@@ -52,6 +53,7 @@ vi.mock("../api/tauriCommands", () => ({
   resolveMarkdownLinkStatus: vi.fn(),
   restoreDeletedContent: vi.fn(),
   savePage: vi.fn(),
+  searchContent: vi.fn(),
   setFavoriteContent: vi.fn(),
   setPluginEnabled: vi.fn(),
   uploadFile: vi.fn(),
@@ -106,6 +108,14 @@ const contentTree: ContentTree = {
       display_path: ["images", "logo.png"],
       is_favorite: false,
     },
+    {
+      file_id: "file-readme",
+      path: "notes/readme.txt",
+      title: "readme.txt",
+      location: "Work:notes/readme.txt",
+      display_path: ["notes", "readme.txt"],
+      is_favorite: false,
+    },
   ],
 };
 
@@ -141,6 +151,7 @@ describe("HomePage", () => {
     vi.mocked(api.resolveMarkdownLinkStatus).mockReset();
     vi.mocked(api.restoreDeletedContent).mockReset();
     vi.mocked(api.savePage).mockReset();
+    vi.mocked(api.searchContent).mockReset();
     vi.mocked(api.setFavoriteContent).mockReset();
     vi.mocked(api.setPluginEnabled).mockReset();
     vi.mocked(api.uploadFile).mockReset();
@@ -194,6 +205,7 @@ describe("HomePage", () => {
         saved_at: "2026-01-01T00:00:00Z",
       },
     }));
+    vi.mocked(api.searchContent).mockResolvedValue(searchResults());
     vi.mocked(api.setFavoriteContent).mockImplementation(
       async (_namespaceId, path, isFavorite) => ({
         namespace: workNamespace,
@@ -466,27 +478,93 @@ describe("HomePage", () => {
     );
   });
 
-  it("初期表示では Main ページを namespace 付きロケーションで表示する", async () => {
+  it("初期表示では Main ページを表示し、ヘッダーにはロケーション入力欄を表示しない", async () => {
     renderHomePage();
 
-    expect(await screen.findByDisplayValue("Work:Main.md")).toBeInTheDocument();
+    await screen.findByRole("treeitem", { name: "Main" });
+    expect(screen.queryByRole("textbox", { name: "現在のロケーション" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "開く" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "戻る" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "進む" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue(
       "# Main\n\n[Draft](Draft.md)\n\n[Intro](Guide/Intro.md)",
     );
-    expect(screen.getByRole("tab", { name: "閲覧" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "WYSIWYG" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Markdownソース" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Milkdown" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Markdown" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "履歴" })).toBeInTheDocument();
     expect(screen.queryByLabelText("未保存")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Markdown" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "編集" })).not.toBeInTheDocument();
+  });
+
+  it("全体検索ボタンで入力欄を表示して検索結果からページを開く", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await screen.findByRole("treeitem", { name: "Main" });
+    await user.click(screen.getByRole("button", { name: "全体検索" }));
+    expect(screen.getByRole("dialog", { name: "検索パネル" })).toBeInTheDocument();
+    const input = screen.getByRole("textbox", { name: "検索またはコマンド" });
+    expect(input).toHaveFocus();
+
+    await user.type(input, "intro");
+
+    await waitFor(() => expect(api.searchContent).toHaveBeenCalledWith(workNamespace.id, "intro"));
+    const results = await screen.findByRole("list", { name: "検索結果" });
+    const resultButton = within(results).getByRole("button", { name: /Intro/ });
+    expect(resultButton).toHaveTextContent("Guide/Intro.md");
+    expect(resultButton).toHaveTextContent("本文の Intro");
+    expect(within(results).getAllByText("Intro", { selector: "mark" })).toHaveLength(3);
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "検索パネル" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "全体検索" }));
+    const reopenedInput = screen.getByRole("textbox", { name: "検索またはコマンド" });
+    expect(reopenedInput).toHaveValue("");
+    await user.type(reopenedInput, "intro");
+
+    const reopenedResults = await screen.findByRole("list", { name: "検索結果" });
+    await user.click(within(reopenedResults).getByRole("button", { name: /Intro/ }));
+
+    expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue("# Intro");
+  });
+
+  it("ページ内検索バーで現在のページ本文を検索できる", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await screen.findByRole("treeitem", { name: "Main" });
+    await user.click(screen.getByRole("button", { name: "ページ内検索" }));
+
+    const searchRegion = screen.getByRole("search", { name: "ページ内検索" });
+    expect(searchRegion).toHaveStyle({ position: "absolute", right: "16px", top: "48px" });
+    const input = within(searchRegion).getByRole("textbox", { name: "ページ内検索キーワード" });
+    expect(input).toHaveFocus();
+
+    await user.type(input, "main");
+
+    expect(within(searchRegion).getByLabelText("ページ内検索の一致数")).toHaveTextContent("1/1");
+    expect(within(searchRegion).getByRole("button", { name: "前の一致" })).toBeEnabled();
+    expect(within(searchRegion).getByRole("button", { name: "次の一致" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Markdown" }));
+    const lineNumbers = screen.getByTestId("markdown-editor-line-numbers");
+    expect(lineNumbers).toHaveTextContent("1");
+    expect(lineNumbers).toHaveTextContent("5");
+    const highlights = screen.getByTestId("markdown-editor-highlights");
+    expect(highlights.querySelectorAll("mark")).toHaveLength(1);
+    expect(highlights.querySelector("mark")).toHaveAttribute("data-active-search-match", "true");
+
+    await user.click(within(searchRegion).getByRole("button", { name: "ページ内検索を閉じる" }));
+    expect(screen.queryByRole("search", { name: "ページ内検索" })).not.toBeInTheDocument();
   });
 
   it("Markdown ソース表示で本文を編集できる", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    await screen.findByDisplayValue("Work:Main.md");
-    await user.click(screen.getByRole("button", { name: "Markdownソース" }));
+    await screen.findByRole("treeitem", { name: "Main" });
+    await user.click(screen.getByRole("button", { name: "Markdown" }));
     const rawEditor = screen.getByRole("textbox", { name: "Markdownソース" });
     expect(rawEditor).toHaveValue("# Main\n\n[Draft](Draft.md)\n\n[Intro](Guide/Intro.md)");
 
@@ -495,7 +573,7 @@ describe("HomePage", () => {
 
     expect(screen.getByLabelText("未保存")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "WYSIWYG" }));
+    await user.click(screen.getByRole("button", { name: "Milkdown" }));
 
     expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue("# Raw");
   });
@@ -522,19 +600,6 @@ describe("HomePage", () => {
     expect(screen.queryByRole("textbox", { name: "Markdown" })).not.toBeInTheDocument();
   });
 
-  it("ロケーションバーで namespace を省略しても遷移後は完全ロケーションを表示する", async () => {
-    const user = userEvent.setup();
-    renderHomePage();
-
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Draft.md");
-    await user.click(screen.getByRole("button", { name: "開く" }));
-
-    await waitFor(() => expect(locationInput).toHaveValue("Work:Draft.md"));
-    expect(screen.getByText("このページはまだ作成されていません。")).toBeInTheDocument();
-  });
-
   it("ページ下部にこのページへリンクしているページを表示して開ける", async () => {
     const user = userEvent.setup();
     renderHomePage();
@@ -542,11 +607,13 @@ describe("HomePage", () => {
     const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
     await user.click(within(pageList).getByText("Intro"));
 
-    expect(await screen.findByDisplayValue("Work:Guide/Intro.md")).toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue("# Intro");
     expect(screen.getByRole("heading", { name: "このページへのリンク" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Main/ }));
 
-    expect(await screen.findByDisplayValue("Work:Main.md")).toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue(
+      "# Main\n\n[Draft](Draft.md)\n\n[Intro](Guide/Intro.md)",
+    );
   });
 
   it("サイドバーにページを階層構造で表示してクリックで遷移する", async () => {
@@ -569,27 +636,33 @@ describe("HomePage", () => {
 
     await user.click(within(pageList).getByText("Intro"));
 
-    expect(await screen.findByDisplayValue("Work:Guide/Intro.md")).toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue("# Intro");
 
     await user.click(within(pageList).getByText("logo.png"));
 
-    expect(await screen.findByDisplayValue("Work:images/logo.png")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "logo.png" })).toBeInTheDocument();
   });
 
   it("File ロケーションでファイル詳細を表示して説明を保存する", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "images/logo.png");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    await user.click(within(pageList).getByText("logo.png"));
 
-    expect(await screen.findByDisplayValue("Work:images/logo.png")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "logo.png" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "logo.png" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "ファイル" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "履歴" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "ファイル" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "履歴" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "履歴" }));
+    expect(await screen.findByRole("heading", { name: "ファイル履歴" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "ファイル" }));
+    expect(await screen.findByRole("heading", { name: "logo.png" })).toBeInTheDocument();
+
     const note = screen.getByRole("textbox", { name: "ファイル説明" });
     expect(note).toHaveValue("説明");
-
     await user.clear(note);
     await user.type(note, "新しい説明");
     await user.click(screen.getByRole("button", { name: "説明を保存" }));
@@ -610,11 +683,13 @@ describe("HomePage", () => {
     const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
     await user.click(within(pageList).getByText("logo.png"));
 
-    expect(await screen.findByDisplayValue("Work:images/logo.png")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "logo.png" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "このファイルへのリンク" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Main" }));
 
-    expect(await screen.findByDisplayValue("Work:Main.md")).toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue(
+      "# Main\n\n[Draft](Draft.md)\n\n[Intro](Guide/Intro.md)",
+    );
   });
 
   it("File ページからアップロードする", async () => {
@@ -623,10 +698,8 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "images/logo.png");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    await user.click(within(pageList).getByText("logo.png"));
     await user.click(await screen.findByRole("button", { name: "置き換え" }));
 
     await waitFor(() =>
@@ -663,10 +736,8 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "notes/readme.txt");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    await user.click(within(pageList).getByText("readme.txt"));
 
     expect(await screen.findByRole("heading", { name: "readme.txt" })).toBeInTheDocument();
     expect(screen.getByText("内容")).toBeInTheDocument();
@@ -745,7 +816,6 @@ describe("HomePage", () => {
     await user.click(screen.getByRole("button", { name: "作成" }));
 
     expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Draft.md", "");
-    expect(await screen.findByDisplayValue("Work:Draft.md")).toBeInTheDocument();
     await waitForElementToBeRemoved(() => screen.queryByRole("dialog", { name: "ページ作成" }));
     expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue("");
   });
@@ -763,7 +833,7 @@ describe("HomePage", () => {
     await user.click(screen.getByRole("button", { name: "作成" }));
 
     expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Guide/Draft.md", "");
-    expect(await screen.findByDisplayValue("Work:Guide/Draft.md")).toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue("");
   });
 
   it("選択中フォルダーの中にフォルダーを作成して一覧に表示する", async () => {
@@ -780,7 +850,6 @@ describe("HomePage", () => {
 
     expect(api.createFolder).toHaveBeenCalledWith(workNamespace.id, "Guide/Daily");
     expect(within(pageList).getByText("Daily")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Work:Main.md")).toBeInTheDocument();
   });
 
   it("サイドバーのソート順を切り替える", async () => {
@@ -805,18 +874,23 @@ describe("HomePage", () => {
 
     await user.click(within(guideItem).getByText("Guide"));
 
-    expect(screen.getByDisplayValue("Work:Main.md")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue(
+      "# Main\n\n[Draft](Draft.md)\n\n[Intro](Guide/Intro.md)",
+    );
     expect(screen.queryByText("このページはまだ作成されていません。")).not.toBeInTheDocument();
     expect(pageList).toHaveTextContent("Intro");
   });
 
-  it("お気に入りがあるとサイドバーにお気に入りセクションを表示する", async () => {
+  it("サイドバーから Special:Favorites を開く", async () => {
+    const user = userEvent.setup();
     renderHomePage();
 
     await screen.findByRole("tree", { name: "ページ一覧" });
+    expect(screen.queryByText("お気に入り")).not.toBeInTheDocument();
 
-    expect(screen.getByText("お気に入り")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Intro" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Favorites" }));
+
+    expect(await screen.findByRole("heading", { name: "Favorites" })).toBeInTheDocument();
   });
 
   it("サイドバーの星ボタンでページをお気に入りに追加する", async () => {
@@ -851,13 +925,13 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Special:Pages");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    await openSpecialPage(user, "Pages");
 
-    expect(await screen.findByDisplayValue("Work:Special:Pages")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Pages" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Pages" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "戻る" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "進む" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "ターミナル" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全体検索" })).toBeInTheDocument();
     expect(screen.getByText("Work:Guide/Intro.md")).toBeInTheDocument();
   });
 
@@ -865,12 +939,9 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Special:Pages");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    await openSpecialPage(user, "Pages");
 
-    await screen.findByDisplayValue("Work:Special:Pages");
+    await screen.findByRole("heading", { name: "Pages" });
     expect(screen.getByTestId("special-page-scroll")).toHaveStyle({
       minHeight: "0px",
       overflow: "auto",
@@ -881,13 +952,9 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Special:SpecialPages");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    await openSpecialPage(user, "Special Pages");
 
-    expect(await screen.findByDisplayValue("Work:Special:SpecialPages")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Special Pages" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Special Pages" })).toBeInTheDocument();
     expect(screen.getByText(/全ての Special ページを表示します。/)).toBeInTheDocument();
     expect(screen.getByText(/登録済み namespace の確認と新規作成を行います。/)).toBeInTheDocument();
     expect(screen.getAllByText("Pages").length).toBeGreaterThan(0);
@@ -898,9 +965,7 @@ describe("HomePage", () => {
     expect(screen.getByText("Categories")).toBeInTheDocument();
     expect(screen.getByText("カテゴリ別にページを表示します。")).toBeInTheDocument();
     expect(screen.getByText("Plugins")).toBeInTheDocument();
-    expect(
-      screen.getByText("登録済みプラグインの確認と有効化を行います。"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("登録済みプラグインの確認と有効化を行います。")).toBeInTheDocument();
     expect(screen.queryByText(/Work namespace/)).not.toBeInTheDocument();
   });
 
@@ -908,13 +973,9 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Special:Plugins");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    await openSpecialPage(user, "Plugins");
 
-    expect(await screen.findByDisplayValue("Work:Special:Plugins")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Plugins" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Plugins" })).toBeInTheDocument();
     expect(screen.getByText("Calendar")).toBeInTheDocument();
     expect(screen.getByText("page-read")).toBeInTheDocument();
     expect(screen.getByText("location-open")).toBeInTheDocument();
@@ -927,6 +988,21 @@ describe("HomePage", () => {
       })[0],
     ]);
     vi.mocked(api.openLocation).mockImplementation(async (location) => {
+      if (location === "Special:SpecialPages" || location === "Work:Special:SpecialPages") {
+        return {
+          kind: "specialPages",
+          namespace: workNamespace,
+          location: "Work:Special:SpecialPages",
+          content: contentTree,
+          pages: [
+            {
+              title: "Plugins",
+              description: "登録済みプラグインの確認と有効化を行います。",
+              location: "Work:Special:Plugins",
+            },
+          ],
+        };
+      }
       if (location === "Special:Plugins" || location === "Work:Special:Plugins") {
         return {
           kind: "specialPlugins",
@@ -950,12 +1026,9 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Special:Plugins");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    await openSpecialPage(user, "Plugins");
 
-    expect(await screen.findByDisplayValue("Work:Special:Plugins")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Plugins" })).toBeInTheDocument();
     expect(screen.getByText("Calendar")).toBeInTheDocument();
     expect(screen.getByText("読み込みエラー")).toBeInTheDocument();
     expect(screen.getByText("manifest.json が見つからないか読み込めません。")).toBeInTheDocument();
@@ -965,10 +1038,7 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Special:Plugins");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    await openSpecialPage(user, "Plugins");
 
     await user.click(await screen.findByRole("button", { name: "Calendar のドキュメントを表示" }));
 
@@ -986,10 +1056,7 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Special:Plugins");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    await openSpecialPage(user, "Plugins");
 
     await user.click(await screen.findByRole("button", { name: "Calendar を削除" }));
     expect(await screen.findByRole("dialog", { name: "プラグインを削除" })).toBeInTheDocument();
@@ -1004,13 +1071,9 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Special:Categories");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    await openSpecialPage(user, "Categories");
 
-    expect(await screen.findByDisplayValue("Work:Special:Categories")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Categories" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Categories" })).toBeInTheDocument();
     expect(screen.getByText("Work")).toBeInTheDocument();
     expect(screen.getByText("未分類")).toBeInTheDocument();
     expect(screen.getByText("Work:Guide/Intro.md")).toBeInTheDocument();
@@ -1020,33 +1083,24 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Special:Favorites");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    await openSpecialPage(user, "Favorites");
 
-    expect(await screen.findByDisplayValue("Work:Special:Favorites")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Favorites" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Favorites" })).toBeInTheDocument();
     expect(screen.getAllByText("Intro").length).toBeGreaterThan(0);
     expect(screen.getByText(/Page \/ Guide\/Intro.md/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Intro.*Page/ }));
 
-    expect(await screen.findByDisplayValue("Work:Guide/Intro.md")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue("# Intro");
+    expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue("# Intro");
   });
 
   it("Special:DeletedPages で削除済みページとファイルを表示する", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Special:DeletedPages");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    await openSpecialPage(user, "Deleted Pages");
 
-    expect(await screen.findByDisplayValue("Work:Special:DeletedPages")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Deleted Pages" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Deleted Pages" })).toBeInTheDocument();
     expect(screen.getByText("Old")).toBeInTheDocument();
     expect(screen.getByText(/Page \/ Old.md/)).toBeInTheDocument();
     expect(screen.getByText("old-logo.png")).toBeInTheDocument();
@@ -1057,14 +1111,10 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Special:DeletedPages");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    await openSpecialPage(user, "Deleted Pages");
     await user.click(await screen.findByRole("button", { name: /Old.*Page/ }));
 
     expect(api.readDeletedPage).toHaveBeenCalledWith(workNamespace.id, "file-old-page");
-    expect(await screen.findByDisplayValue("Work:Old.md")).toBeInTheDocument();
     expect(screen.getByText("削除済みページの内容を表示しています。")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Markdown" })).toHaveValue("# Old\n\n削除済み本文");
   });
@@ -1073,10 +1123,7 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const locationInput = await screen.findByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Special:DeletedPages");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    await openSpecialPage(user, "Deleted Pages");
     await user.click(await screen.findByRole("button", { name: "Old を復活" }));
 
     await waitFor(() =>
@@ -1089,17 +1136,12 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    const pageList = await screen.findByRole("tree", { name: "ページ一覧" });
+    await screen.findByRole("tree", { name: "ページ一覧" });
     const specialPagesLink = screen.getByRole("button", { name: "Special Pages" });
-
-    expect(
-      pageList.compareDocumentPosition(specialPagesLink) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
 
     await user.click(specialPagesLink);
 
-    expect(await screen.findByDisplayValue("Work:Special:SpecialPages")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Special Pages" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Special Pages" })).toBeInTheDocument();
   });
 
   it("編集停止後に自動保存する", async () => {
@@ -1123,8 +1165,8 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    await screen.findByDisplayValue("Work:Main.md");
-    await user.click(screen.getByRole("button", { name: "Markdownソース" }));
+    await screen.findByRole("treeitem", { name: "Main" });
+    await user.click(screen.getByRole("button", { name: "Markdown" }));
     const editor = screen.getByRole("textbox", { name: "Markdownソース" });
     vi.useFakeTimers();
     fireEvent.change(editor, { target: { value: "# Raw Updated" } });
@@ -1163,8 +1205,8 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    await screen.findByDisplayValue("Work:Main.md");
-    await user.click(screen.getByRole("button", { name: "Markdownソース" }));
+    await screen.findByRole("treeitem", { name: "Main" });
+    await user.click(screen.getByRole("button", { name: "Markdown" }));
     const editor = screen.getByRole("textbox", { name: "Markdownソース" });
 
     fireEvent.change(editor, {
@@ -1184,22 +1226,19 @@ describe("HomePage", () => {
     const editor = await screen.findByRole("textbox", { name: "Markdown" });
     await user.clear(editor);
     await user.type(editor, "# Moving");
-    const locationInput = screen.getByDisplayValue("Work:Main.md");
-    await user.clear(locationInput);
-    await user.type(locationInput, "Special:Pages");
-    await user.click(screen.getByRole("button", { name: "開く" }));
+    await openSpecialPage(user, "Pages");
 
     await waitFor(() =>
       expect(api.savePage).toHaveBeenCalledWith(workNamespace.id, "Main.md", "# Moving"),
     );
-    expect(await screen.findByDisplayValue("Work:Special:Pages")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Pages" })).toBeInTheDocument();
   });
 
   it("ページの編集履歴を表示する", async () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    await user.click(await screen.findByRole("tab", { name: "履歴" }));
+    await user.click(await screen.findByRole("button", { name: "履歴" }));
 
     expect(api.listPageHistory).toHaveBeenCalledWith(workNamespace.id, "Main.md");
     expect(await screen.findByRole("heading", { name: "編集履歴" })).toBeInTheDocument();
@@ -1213,7 +1252,7 @@ describe("HomePage", () => {
     const user = userEvent.setup();
     renderHomePage();
 
-    await user.click(await screen.findByRole("tab", { name: "履歴" }));
+    await user.click(await screen.findByRole("button", { name: "履歴" }));
     await user.click(await screen.findByRole("button", { name: /2026\/01\/02.*modified/ }));
 
     await waitFor(() =>
@@ -1232,6 +1271,22 @@ function renderHomePage() {
       <CurrentRoute />
     </MemoryRouter>,
   );
+}
+
+async function openSpecialPage(user: ReturnType<typeof userEvent.setup>, title: string) {
+  await user.click(await screen.findByRole("button", { name: "Special Pages" }));
+  if (title !== "Special Pages") {
+    const specialPagesList = await screen.findByRole("list", { name: "Special ページ一覧" });
+    await user.click(
+      within(specialPagesList).getByRole("button", {
+        name: new RegExp(`^${escapeRegExp(title)}\\b`),
+      }),
+    );
+  }
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function CurrentRoute() {
@@ -1369,6 +1424,18 @@ function favoriteContentItems() {
       title: "Intro",
       location: "Work:Guide/Intro.md",
       content_kind: "page",
+    },
+  ];
+}
+
+function searchResults(): SearchContentResult[] {
+  return [
+    {
+      content_kind: "page",
+      path: "Guide/Intro.md",
+      title: "Intro",
+      location: "Work:Guide/Intro.md",
+      snippet: "本文の Intro に一致しました。",
     },
   ];
 }

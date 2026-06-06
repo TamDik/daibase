@@ -159,6 +159,15 @@ pub struct FileSummary {
 }
 
 #[derive(Debug, Serialize)]
+pub struct SearchContentResult {
+    pub content_kind: String,
+    pub path: String,
+    pub title: String,
+    pub location: String,
+    pub snippet: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct SpecialPageSummary {
     pub title: String,
     pub description: String,

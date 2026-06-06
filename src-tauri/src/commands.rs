@@ -4,7 +4,7 @@ use crate::models::{
     InstalledPluginSummary, MarkdownImageResolution, MarkdownLinkStatus, McpServerStatus,
     NamespaceDetail, NamespaceSummary, OpenLocationResult, PageContent, PageHistorySnapshot,
     PluginDocumentation, PluginMainResolution, SaveFileResult, SavePageResult, SaveResult,
-    SpecialPageSummary,
+    SearchContentResult,
 };
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
@@ -230,6 +230,15 @@ pub fn write_file_note(
 #[tauri::command]
 pub fn list_content(app: AppHandle, namespace_id: String) -> Result<ContentTree, String> {
     crate::namespace::list_content(&app, namespace_id)
+}
+
+#[tauri::command]
+pub fn search_content(
+    app: AppHandle,
+    namespace_id: String,
+    query: String,
+) -> Result<Vec<SearchContentResult>, String> {
+    crate::namespace::search_content(&app, namespace_id, query)
 }
 
 #[tauri::command]
@@ -526,7 +535,7 @@ pub fn open_location(
         } => Ok(OpenLocationResult::SpecialPages {
             location,
             content: crate::namespace::open_namespace(&app, namespace.id.clone())?.content,
-            pages: special_pages_for_namespace(&namespace),
+            pages: crate::namespace::special_pages_for_namespace(&namespace),
             namespace,
         }),
         ResolvedLocation::SpecialPagesList {
@@ -625,44 +634,4 @@ fn read_page_or_virtual(
         }),
         Err(error) => Err(error),
     }
-}
-
-fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialPageSummary> {
-    vec![
-        SpecialPageSummary {
-            title: "Special Pages".to_string(),
-            description: "全ての Special ページを表示します。".to_string(),
-            location: format!("{}:Special:SpecialPages", namespace.name),
-        },
-        SpecialPageSummary {
-            title: "Namespaces".to_string(),
-            description: "登録済み namespace の確認と新規作成を行います。".to_string(),
-            location: "Special:Namespaces".to_string(),
-        },
-        SpecialPageSummary {
-            title: "Pages".to_string(),
-            description: "namespace 内の全ページを表示します。".to_string(),
-            location: format!("{}:Special:Pages", namespace.name),
-        },
-        SpecialPageSummary {
-            title: "Deleted Pages".to_string(),
-            description: "削除済みのページとファイルを表示します。".to_string(),
-            location: format!("{}:Special:DeletedPages", namespace.name),
-        },
-        SpecialPageSummary {
-            title: "Favorites".to_string(),
-            description: "お気に入りのページとファイルを表示します。".to_string(),
-            location: format!("{}:Special:Favorites", namespace.name),
-        },
-        SpecialPageSummary {
-            title: "Categories".to_string(),
-            description: "カテゴリ別にページを表示します。".to_string(),
-            location: format!("{}:Special:Categories", namespace.name),
-        },
-        SpecialPageSummary {
-            title: "Plugins".to_string(),
-            description: "登録済みプラグインの確認と有効化を行います。".to_string(),
-            location: format!("{}:Special:Plugins", namespace.name),
-        },
-    ]
 }

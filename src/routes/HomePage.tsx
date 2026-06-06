@@ -55,8 +55,8 @@ import {
   uploadFile,
   writeFileNote,
 } from "../api/tauriCommands";
-import { AppHeader } from "../components/AppHeader";
 import { FileSurface, type FileMode } from "../components/FileSurface";
+import { MainContentTop } from "../components/MainContentTop";
 import { PageSidebar } from "../components/PageSidebar";
 import { PageSurface, type PageMode } from "../components/PageSurface";
 import {
@@ -150,7 +150,7 @@ export function HomePage() {
     location: namespacesLocation,
   });
   const [draft, setDraft] = useState("");
-  const [locationInput, setLocationInput] = useState(namespacesLocation);
+  const [currentLocation, setCurrentLocation] = useState(namespacesLocation);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [namespaceName, setNamespaceName] = useState("");
@@ -207,7 +207,7 @@ export function HomePage() {
       setFileView(null);
       setSpecialView({ kind: "namespaces", location: opened.location });
       setDraft("");
-      setLocationInput(opened.location);
+      setCurrentLocation(opened.location);
       setPageMode("view");
       return nextLocation;
     }
@@ -224,7 +224,7 @@ export function HomePage() {
         pages: opened.pages,
       });
       setDraft("");
-      setLocationInput(opened.location);
+      setCurrentLocation(opened.location);
       setPageMode("view");
       return nextLocation;
     }
@@ -241,7 +241,7 @@ export function HomePage() {
         content: opened.content,
       });
       setDraft("");
-      setLocationInput(opened.location);
+      setCurrentLocation(opened.location);
       setPageMode("view");
       return nextLocation;
     }
@@ -259,7 +259,7 @@ export function HomePage() {
         items: opened.items,
       });
       setDraft("");
-      setLocationInput(opened.location);
+      setCurrentLocation(opened.location);
       setPageMode("view");
       return nextLocation;
     }
@@ -277,7 +277,7 @@ export function HomePage() {
         items: opened.items,
       });
       setDraft("");
-      setLocationInput(opened.location);
+      setCurrentLocation(opened.location);
       setPageMode("view");
       return nextLocation;
     }
@@ -296,7 +296,7 @@ export function HomePage() {
         uncategorizedPages: opened.uncategorized_pages,
       });
       setDraft("");
-      setLocationInput(opened.location);
+      setCurrentLocation(opened.location);
       setPageMode("view");
       return nextLocation;
     }
@@ -315,7 +315,7 @@ export function HomePage() {
         plugins: opened.plugins,
       });
       setDraft("");
-      setLocationInput(opened.location);
+      setCurrentLocation(opened.location);
       setPageMode("view");
       return nextLocation;
     }
@@ -332,7 +332,7 @@ export function HomePage() {
       setSpecialView(null);
       setDraft("");
       setFileNoteDraft(opened.file.note);
-      setLocationInput(nextLocation);
+      setCurrentLocation(nextLocation);
       setFileMode("detail");
       setHistoryEntries([]);
       setHistoryError(null);
@@ -353,7 +353,7 @@ export function HomePage() {
     setFileView(null);
     setSpecialView(null);
     setDraft(opened.page.content);
-    setLocationInput(nextLocation);
+    setCurrentLocation(nextLocation);
     setPageMode("view");
     setHistoryEntries([]);
     setHistoryError(null);
@@ -408,7 +408,7 @@ export function HomePage() {
         setSidebarContent(saved.content);
         setDraft(saved.page.content);
         draftRef.current = saved.page.content;
-        setLocationInput(saved.location);
+        setCurrentLocation(saved.location);
         if (showMessage) {
           setSavedMessage("保存しました");
         }
@@ -557,7 +557,7 @@ export function HomePage() {
           setFileNoteDraft(file.note);
           setFileMode("detail");
         }
-        setLocationInput(item.location);
+        setCurrentLocation(item.location);
         setHistoryEntries([]);
         setHistoryError(null);
         setSelectedHistoryRevisionId(null);
@@ -595,7 +595,7 @@ export function HomePage() {
         pageViewRef.current = null;
         setDraft("");
         draftRef.current = "";
-        setLocationInput(`${detail.namespace.name}:Special:DeletedPages`);
+        setCurrentLocation(`${detail.namespace.name}:Special:DeletedPages`);
         setSavedMessage("復活しました");
       } catch (caught) {
         setError(errorMessage(caught));
@@ -814,14 +814,6 @@ export function HomePage() {
     }
   }, []);
 
-  const handleLocationSubmit = async () => {
-    try {
-      await navigate(locationInput);
-    } catch (caught) {
-      setError(errorMessage(caught));
-    }
-  };
-
   const handleOpenCreateDialog = (kind: CreateDialogState["kind"], parentDirectory: string) => {
     if (!activeNamespace) {
       return;
@@ -1002,7 +994,7 @@ export function HomePage() {
       setActiveNamespace(saved.namespace);
       setSidebarContent(saved.content);
       setFileNoteDraft(saved.file.note);
-      setLocationInput(saved.location);
+      setCurrentLocation(saved.location);
       setSavedMessage("保存しました");
       if (fileMode === "history") {
         const entries = await listFileHistory(saved.namespace.id, saved.file.path);
@@ -1134,17 +1126,6 @@ export function HomePage() {
         color: "#1f2328",
       }}
     >
-      <AppHeader
-        canGoBack={canGoBack}
-        canGoForward={canGoForward}
-        locationInput={locationInput}
-        onGoBack={() => void handleGoBack()}
-        onGoForward={() => void handleGoForward()}
-        onLocationChange={setLocationInput}
-        onLocationSubmit={() => void handleLocationSubmit()}
-        onToggleTerminal={() => setIsTerminalOpen((current) => !current)}
-      />
-
       <Box
         sx={{
           display: "flex",
@@ -1167,12 +1148,13 @@ export function HomePage() {
         >
           <PageSidebar
             content={sidebarContent}
-            currentLocation={locationInput}
+            currentLocation={currentLocation}
             namespace={activeNamespace}
             onCreateFolder={(parentDirectory) => handleOpenCreateDialog("folder", parentDirectory)}
             onCreatePage={(parentDirectory) => handleOpenCreateDialog("page", parentDirectory)}
             onDeleteContent={(path, kind) => void handleDeleteContent(path, kind)}
             onOpenLocation={(location) => void navigate(location)}
+            onToggleTerminal={() => setIsTerminalOpen((current) => !current)}
             onToggleFavorite={(path, isFavorite) =>
               void handleToggleFavoriteContent(path, isFavorite)
             }
@@ -1194,73 +1176,92 @@ export function HomePage() {
 
               {specialView && (
                 <Box
-                  data-testid="special-page-scroll"
-                  sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}
+                  sx={{
+                    bgcolor: "#ffffff",
+                    display: "flex",
+                    flex: "1 1 auto",
+                    flexDirection: "column",
+                    minHeight: 0,
+                    overflow: "hidden",
+                  }}
                 >
-                  {specialView.kind === "namespaces" && (
-                    <NamespacesSpecialPage
-                      namespaceName={namespaceName}
-                      namespaces={namespaces}
-                      rootPath={rootPath}
-                      onCreateNamespace={handleCreateNamespace}
-                      onNamespaceNameChange={setNamespaceName}
-                      onOpenLocation={(location) => void navigate(location)}
-                      onRootPathSelect={() => void handleSelectRootPath()}
-                    />
-                  )}
+                  <MainContentTop
+                    canGoBack={canGoBack}
+                    canGoForward={canGoForward}
+                    onGoBack={() => void handleGoBack()}
+                    onGoForward={() => void handleGoForward()}
+                  />
+                  <Box
+                    data-testid="special-page-scroll"
+                    sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}
+                  >
+                    {specialView.kind === "namespaces" && (
+                      <NamespacesSpecialPage
+                        namespaceName={namespaceName}
+                        namespaces={namespaces}
+                        rootPath={rootPath}
+                        onCreateNamespace={handleCreateNamespace}
+                        onNamespaceNameChange={setNamespaceName}
+                        onOpenLocation={(location) => void navigate(location)}
+                        onRootPathSelect={() => void handleSelectRootPath()}
+                      />
+                    )}
 
-                  {specialView.kind === "specialPages" && (
-                    <SpecialPagesIndex
-                      location={specialView.location}
-                      pages={specialView.pages}
-                      onOpenLocation={(location) => void navigate(location)}
-                    />
-                  )}
+                    {specialView.kind === "specialPages" && (
+                      <SpecialPagesIndex
+                        location={specialView.location}
+                        pages={specialView.pages}
+                        onOpenLocation={(location) => void navigate(location)}
+                      />
+                    )}
 
-                  {specialView.kind === "pages" && (
-                    <PagesSpecialPage
-                      content={specialView.content}
-                      namespace={specialView.namespace}
-                      onOpenLocation={(location) => void navigate(location)}
-                    />
-                  )}
+                    {specialView.kind === "pages" && (
+                      <PagesSpecialPage
+                        content={specialView.content}
+                        namespace={specialView.namespace}
+                        onOpenLocation={(location) => void navigate(location)}
+                      />
+                    )}
 
-                  {specialView.kind === "deletedPages" && (
-                    <DeletedPagesSpecialPage
-                      items={specialView.items}
-                      namespace={specialView.namespace}
-                      onOpenDeletedContent={(item) => void handleOpenDeletedContent(item)}
-                      onRestoreDeletedContent={(item) => void handleRestoreDeletedContent(item)}
-                    />
-                  )}
+                    {specialView.kind === "deletedPages" && (
+                      <DeletedPagesSpecialPage
+                        items={specialView.items}
+                        namespace={specialView.namespace}
+                        onOpenDeletedContent={(item) => void handleOpenDeletedContent(item)}
+                        onRestoreDeletedContent={(item) => void handleRestoreDeletedContent(item)}
+                      />
+                    )}
 
-                  {specialView.kind === "favorites" && (
-                    <FavoritesSpecialPage
-                      items={specialView.items}
-                      namespace={specialView.namespace}
-                      onOpenLocation={(location) => void navigate(location)}
-                    />
-                  )}
+                    {specialView.kind === "favorites" && (
+                      <FavoritesSpecialPage
+                        items={specialView.items}
+                        namespace={specialView.namespace}
+                        onOpenLocation={(location) => void navigate(location)}
+                      />
+                    )}
 
-                  {specialView.kind === "categories" && (
-                    <CategoriesSpecialPage
-                      categories={specialView.categories}
-                      namespace={specialView.namespace}
-                      uncategorizedPages={specialView.uncategorizedPages}
-                      onOpenLocation={(location) => void navigate(location)}
-                    />
-                  )}
+                    {specialView.kind === "categories" && (
+                      <CategoriesSpecialPage
+                        categories={specialView.categories}
+                        namespace={specialView.namespace}
+                        uncategorizedPages={specialView.uncategorizedPages}
+                        onOpenLocation={(location) => void navigate(location)}
+                      />
+                    )}
 
-                  {specialView.kind === "plugins" && (
-                    <PluginsSpecialPage
-                      namespace={specialView.namespace}
-                      plugins={specialView.plugins}
-                      onInstallFromFolder={() => void handleInstallPluginFromFolder()}
-                      onReadPluginDocumentation={(plugin) => readPluginDocumentation(plugin.id)}
-                      onRemovePlugin={(plugin) => void handleRemovePlugin(plugin)}
-                      onTogglePlugin={(plugin, enabled) => void handleTogglePlugin(plugin, enabled)}
-                    />
-                  )}
+                    {specialView.kind === "plugins" && (
+                      <PluginsSpecialPage
+                        namespace={specialView.namespace}
+                        plugins={specialView.plugins}
+                        onInstallFromFolder={() => void handleInstallPluginFromFolder()}
+                        onReadPluginDocumentation={(plugin) => readPluginDocumentation(plugin.id)}
+                        onRemovePlugin={(plugin) => void handleRemovePlugin(plugin)}
+                        onTogglePlugin={(plugin, enabled) =>
+                          void handleTogglePlugin(plugin, enabled)
+                        }
+                      />
+                    )}
+                  </Box>
                 </Box>
               )}
 
@@ -1277,6 +1278,8 @@ export function HomePage() {
                   isVirtual={pageView.page.is_virtual ?? false}
                   isFavorite={pageView.page.is_favorite ?? false}
                   mode={pageMode}
+                  canGoBack={canGoBack}
+                  canGoForward={canGoForward}
                   pageContext={{
                     namespaceId: pageView.namespace.id,
                     namespaceName: pageView.namespace.name,
@@ -1290,6 +1293,8 @@ export function HomePage() {
                   onCategoriesChange={(categories) =>
                     setDraft(updateMarkdownCategories(draftRef.current, categories))
                   }
+                  onGoBack={() => void handleGoBack()}
+                  onGoForward={() => void handleGoForward()}
                   onModeChange={(mode) => void handleModeChange(mode)}
                   onToggleFavorite={() =>
                     void handleToggleFavoriteContent(
@@ -1321,6 +1326,10 @@ export function HomePage() {
                   mode={fileMode}
                   noteDraft={fileNoteDraft}
                   readOnly={fileView.isReadOnly ?? false}
+                  canGoBack={canGoBack}
+                  canGoForward={canGoForward}
+                  onGoBack={() => void handleGoBack()}
+                  onGoForward={() => void handleGoForward()}
                   onModeChange={(mode) => void handleFileModeChange(mode)}
                   onNoteChange={setFileNoteDraft}
                   onOpenLocation={(location) => void navigate(location)}

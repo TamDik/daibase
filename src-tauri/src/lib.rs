@@ -40,6 +40,7 @@ pub fn run() {
             commands::restore_deleted_content,
             commands::write_file_note,
             commands::list_content,
+            commands::search_content,
             commands::list_page_history,
             commands::list_file_history,
             commands::list_deleted_content,

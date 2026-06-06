@@ -50,8 +50,8 @@ export function SpecialPagesIndex({
   onOpenLocation: (location: string) => void;
 }) {
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Special Pages
         </Typography>
@@ -60,7 +60,7 @@ export function SpecialPagesIndex({
         </Typography>
       </Box>
       <Box sx={{ p: 3 }}>
-        <List dense disablePadding>
+        <List dense disablePadding aria-label="Special ページ一覧">
           {pages.map((page) => (
             <ListItemButton
               key={page.location}
@@ -94,8 +94,8 @@ export function NamespacesSpecialPage({
   onRootPathSelect: () => void;
 }) {
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Namespaces
         </Typography>
@@ -176,8 +176,8 @@ export function PagesSpecialPage({
   onOpenLocation: (location: string) => void;
 }) {
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Pages
         </Typography>
@@ -220,8 +220,8 @@ export function DeletedPagesSpecialPage({
   onRestoreDeletedContent: (item: DeletedContentSummary) => void;
 }) {
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Deleted Pages
         </Typography>
@@ -287,8 +287,8 @@ export function FavoritesSpecialPage({
   onOpenLocation: (location: string) => void;
 }) {
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Favorites
         </Typography>
@@ -336,8 +336,8 @@ export function CategoriesSpecialPage({
   const hasPages = categories.length > 0 || uncategorizedPages.length > 0;
 
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Categories
         </Typography>
@@ -417,8 +417,8 @@ export function PluginsSpecialPage({
   const [pluginToRemove, setPluginToRemove] = useState<InstalledPluginSummary | null>(null);
 
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1, bgcolor: "#ffffff" }}>
-      <Box sx={{ borderBottom: "1px solid #d0d7de", px: 2, py: 1.5 }}>
+    <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
+      <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h5" component="h2">
           Plugins
         </Typography>
