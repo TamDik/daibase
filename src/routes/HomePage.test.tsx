@@ -537,7 +537,7 @@ describe("HomePage", () => {
     await user.click(screen.getByRole("button", { name: "ページ内検索" }));
 
     const searchRegion = screen.getByRole("search", { name: "ページ内検索" });
-    expect(searchRegion).toHaveStyle({ position: "absolute", right: "16px", top: "16px" });
+    expect(searchRegion).toHaveStyle({ position: "absolute", right: "16px", top: "48px" });
     const input = within(searchRegion).getByRole("textbox", { name: "ページ内検索キーワード" });
     expect(input).toHaveFocus();
 

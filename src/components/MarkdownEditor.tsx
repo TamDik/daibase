@@ -1,7 +1,8 @@
 import { Box } from "@mui/material";
-import { useRef, type UIEvent } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 
 import type { PageSearchMatch } from "../lib/pageSearch";
+import { getScrollIntoViewPosition } from "../lib/scrollIntoView";
 
 export function MarkdownEditor({
   activeSearchMatch,
@@ -18,31 +19,49 @@ export function MarkdownEditor({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const highlightRef = useRef<HTMLDivElement | null>(null);
-  const lineNumberRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const activeMarkRef = useRef<HTMLElement | null>(null);
+  const scrollBoxRef = useRef<HTMLDivElement | null>(null);
   const lineCount = Math.max(1, value.split("\n").length);
   const lineHeightPx = 22;
+  const editorWidth = useMemo(() => {
+    const longestLineLength = value
+      .split("\n")
+      .reduce((maxLength, line) => Math.max(maxLength, Array.from(line).length), 1);
+    return `max(100%, ${longestLineLength + 4}ch)`;
+  }, [value]);
 
-  const syncScroll = (event: UIEvent<HTMLDivElement>) => {
-    const scrollTop = event.currentTarget.scrollTop;
-    const scrollLeft = event.currentTarget.scrollLeft;
-    const highlight = highlightRef.current;
-    if (highlight) {
-      highlight.scrollTop = scrollTop;
-      highlight.scrollLeft = scrollLeft;
+  useEffect(() => {
+    const scrollBox = scrollBoxRef.current;
+    const activeMark = activeMarkRef.current;
+    if (!scrollBox || !activeSearchMatch || !activeMark) {
+      return;
     }
 
-    const lineNumber = lineNumberRef.current;
-    if (lineNumber) {
-      lineNumber.scrollTop = scrollTop;
-    }
+    const frameId = window.requestAnimationFrame(() => {
+      activeMark.scrollIntoView?.({
+        block: "nearest",
+        inline: "nearest",
+      });
 
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.scrollLeft = scrollLeft;
-    }
-  };
+      const nextPosition = getScrollIntoViewPosition({
+        containerRect: scrollBox.getBoundingClientRect(),
+        scrollLeft: scrollBox.scrollLeft,
+        scrollTop: scrollBox.scrollTop,
+        targetRect: activeMark.getBoundingClientRect(),
+      });
+
+      if (nextPosition.top === scrollBox.scrollTop && nextPosition.left === scrollBox.scrollLeft) {
+        return;
+      }
+
+      scrollBox.scrollTo(nextPosition);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [activeSearchMatch]);
+
   const textLayerSx = {
     boxSizing: "border-box",
     fontFamily:
@@ -68,7 +87,7 @@ export function MarkdownEditor({
       }}
     >
       <Box
-        onScroll={syncScroll}
+        ref={scrollBoxRef}
         sx={{
           display: "flex",
           minHeight: 480,
@@ -78,10 +97,10 @@ export function MarkdownEditor({
         }}
       >
         <Box
-          ref={lineNumberRef}
           aria-hidden
           data-testid="markdown-editor-line-numbers"
           sx={{
+            bgcolor: "#ffffff",
             color: "text.secondary",
             flex: "0 0 54px",
             fontFamily:
@@ -89,9 +108,12 @@ export function MarkdownEditor({
             fontSize: 13,
             lineHeight: `${lineHeightPx}px`,
             overflow: "hidden",
+            position: "sticky",
+            left: 0,
             py: 1.25,
             textAlign: "right",
             userSelect: "none",
+            zIndex: 2,
           }}
         >
           {Array.from({ length: lineCount }, (_, index) => (
@@ -100,33 +122,33 @@ export function MarkdownEditor({
             </Box>
           ))}
         </Box>
-        <Box sx={{ flex: "1 1 auto", minWidth: 0, position: "relative" }}>
+        <Box
+          sx={{
+            display: "grid",
+            flex: "1 1 auto",
+            minWidth: editorWidth,
+            position: "relative",
+          }}
+        >
           <Box
-            ref={highlightRef}
             aria-hidden
             data-testid="markdown-editor-highlights"
             sx={{
               ...textLayerSx,
-              bottom: 0,
               color: "transparent",
-              left: 0,
+              gridArea: "1 / 1",
               minHeight: 480,
-              minWidth: "max-content",
               overflow: "hidden",
               pointerEvents: "none",
-              position: "absolute",
-              right: 0,
-              top: 0,
               "& mark": {
                 color: "transparent",
               },
             }}
           >
-            {highlightMarkdownSearchMatches(value, searchMatches, activeSearchMatch)}
+            {highlightMarkdownSearchMatches(value, searchMatches, activeSearchMatch, activeMarkRef)}
           </Box>
           <Box
             component="textarea"
-            ref={textareaRef}
             aria-label={ariaLabel}
             disabled={disabled}
             rows={lineCount}
@@ -139,10 +161,10 @@ export function MarkdownEditor({
               border: 0,
               color: "text.primary",
               display: "block",
+              gridArea: "1 / 1",
               height: "auto",
               m: 0,
               minHeight: 480,
-              minWidth: "max-content",
               outline: 0,
               overflow: "hidden",
               position: "relative",
@@ -167,6 +189,7 @@ function highlightMarkdownSearchMatches(
   value: string,
   searchMatches: PageSearchMatch[],
   activeSearchMatch: PageSearchMatch | null,
+  activeMarkRef: RefObject<HTMLElement | null>,
 ) {
   if (searchMatches.length === 0) {
     return value;
@@ -187,11 +210,14 @@ function highlightMarkdownSearchMatches(
         key={`${match.start}-${match.end}`}
         component="mark"
         data-active-search-match={isActive ? "true" : undefined}
+        ref={isActive ? activeMarkRef : undefined}
         sx={{
           bgcolor: isActive ? "#ffd33d" : "#fff0a6",
           borderRadius: 0.5,
           color: "inherit",
           outline: isActive ? "1px solid #d29922" : "none",
+          scrollMarginBlock: "72px 24px",
+          scrollMarginInline: "24px",
         }}
       >
         {value.slice(match.start, match.end)}

@@ -5,6 +5,7 @@ import {
   Button,
   Chip,
   CircularProgress,
+  InputAdornment,
   IconButton,
   Link,
   List,
@@ -321,6 +322,17 @@ export function PageSurface({
           </>
         }
       />
+      {pageSearchOpen && (
+        <PageSearchBar
+          currentIndex={pageSearchIndex}
+          matchCount={pageSearchMatches.length}
+          query={pageSearchQuery}
+          onClose={closePageSearch}
+          onNext={goToNextPageSearchMatch}
+          onPrevious={goToPreviousPageSearchMatch}
+          onQueryChange={setPageSearchQuery}
+        />
+      )}
       <Box sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}>
         {mode === "history" ? (
           <HistoryPanel
@@ -336,17 +348,6 @@ export function PageSurface({
           />
         ) : (
           <Box sx={{ position: "relative" }}>
-            {pageSearchOpen && (
-              <PageSearchBar
-                currentIndex={pageSearchIndex}
-                matchCount={pageSearchMatches.length}
-                query={pageSearchQuery}
-                onClose={closePageSearch}
-                onNext={goToNextPageSearchMatch}
-                onPrevious={goToPreviousPageSearchMatch}
-                onQueryChange={setPageSearchQuery}
-              />
-            )}
             {isVirtual && (
               <Alert severity="info" sx={{ m: 2 }}>
                 {readOnly
@@ -471,8 +472,8 @@ function PageSearchBar({
         px: 1,
         py: 0.75,
         right: 16,
-        top: 16,
-        width: { xs: "calc(100% - 32px)", sm: 430 },
+        top: 48,
+        width: { xs: "calc(100% - 32px)", sm: 286 },
         zIndex: (theme) => theme.zIndex.appBar,
       }}
     >
@@ -500,41 +501,72 @@ function PageSearchBar({
           htmlInput: {
             "aria-label": "ページ内検索キーワード",
           },
+          input: {
+            endAdornment: (
+              <InputAdornment position="end">
+                <Typography
+                  aria-label="ページ内検索の一致数"
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontSize: 11, minWidth: 32, textAlign: "right" }}
+                >
+                  {countLabel}
+                </Typography>
+              </InputAdornment>
+            ),
+          },
         }}
-        sx={{ flex: "1 1 auto", minWidth: 0 }}
+        sx={{
+          flex: "1 1 auto",
+          minWidth: 0,
+          "& .MuiInputBase-root": {
+            minHeight: 32,
+            pr: 0.75,
+          },
+          "& .MuiInputBase-input": {
+            fontSize: 13,
+            py: 0.75,
+          },
+        }}
       />
-      <Typography
-        aria-label="ページ内検索の一致数"
-        variant="body2"
-        color="text.secondary"
-        sx={{ flex: "0 0 auto", minWidth: 44, textAlign: "right" }}
-      >
-        {countLabel}
-      </Typography>
-      <Tooltip title="前へ">
-        <span>
+      <Stack direction="row" spacing={0} sx={{ flex: "0 0 auto", ml: 0.25 }}>
+        <Tooltip title="前へ">
+          <span>
+            <IconButton
+              aria-label="前の一致"
+              disabled={!hasMatches}
+              size="small"
+              sx={{ height: 28, p: 0.25, width: 28 }}
+              onClick={onPrevious}
+            >
+              <KeyboardArrowUpRounded fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title="次へ">
+          <span>
+            <IconButton
+              aria-label="次の一致"
+              disabled={!hasMatches}
+              size="small"
+              sx={{ height: 28, p: 0.25, width: 28 }}
+              onClick={onNext}
+            >
+              <KeyboardArrowDownRounded fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title="閉じる">
           <IconButton
-            aria-label="前の一致"
-            disabled={!hasMatches}
+            aria-label="ページ内検索を閉じる"
             size="small"
-            onClick={onPrevious}
+            sx={{ height: 28, p: 0.25, width: 28 }}
+            onClick={onClose}
           >
-            <KeyboardArrowUpRounded fontSize="small" />
+            <CloseRounded fontSize="small" />
           </IconButton>
-        </span>
-      </Tooltip>
-      <Tooltip title="次へ">
-        <span>
-          <IconButton aria-label="次の一致" disabled={!hasMatches} size="small" onClick={onNext}>
-            <KeyboardArrowDownRounded fontSize="small" />
-          </IconButton>
-        </span>
-      </Tooltip>
-      <Tooltip title="閉じる">
-        <IconButton aria-label="ページ内検索を閉じる" size="small" onClick={onClose}>
-          <CloseRounded fontSize="small" />
-        </IconButton>
-      </Tooltip>
+        </Tooltip>
+      </Stack>
     </Paper>
   );
 }
