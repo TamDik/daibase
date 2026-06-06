@@ -49,7 +49,7 @@ export function MarkdownEditor({
         data-testid="markdown-editor-highlights"
         sx={{
           bottom: 0,
-          color: "text.primary",
+          color: "transparent",
           fontFamily:
             'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
           fontSize: 16,
@@ -63,6 +63,9 @@ export function MarkdownEditor({
           top: 0,
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
+          "& mark": {
+            color: "transparent",
+          },
         }}
       >
         {highlightMarkdownSearchMatches(value, searchMatches, activeSearchMatch)}
@@ -78,8 +81,7 @@ export function MarkdownEditor({
           bgcolor: "transparent",
           border: 0,
           boxSizing: "border-box",
-          caretColor: "text.primary",
-          color: "transparent",
+          color: "text.primary",
           display: "block",
           fontFamily:
             'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
@@ -95,7 +97,7 @@ export function MarkdownEditor({
           width: "100%",
           wordBreak: "break-word",
           "&::selection": {
-            bgcolor: "rgba(9, 105, 218, 0.28)",
+            backgroundColor: "rgba(9, 105, 218, 0.28)",
           },
           "&:disabled": {
             cursor: "not-allowed",
