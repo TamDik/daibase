@@ -10,6 +10,7 @@ import {
   List,
   ListItemButton,
   ListItemText,
+  Paper,
   Stack,
   TextField,
   ToggleButton,
@@ -45,6 +46,7 @@ import { findPageSearchMatches } from "../lib/pageSearch";
 import { findPageViewPlugin, markdownContext } from "../lib/pluginHost";
 import { FavoriteToggleButton } from "./FavoriteToggleButton";
 import { MainContentTop } from "./MainContentTop";
+import { MarkdownEditor } from "./MarkdownEditor";
 import { MarkdownWysiwygEditor } from "./MarkdownWysiwygEditor";
 import { SideBySideDiffView } from "./SideBySideDiffView";
 
@@ -142,7 +144,6 @@ export function PageSurface({
   const [pageSearchOpen, setPageSearchOpen] = useState(false);
   const [pageSearchQuery, setPageSearchQuery] = useState("");
   const [pageSearchIndex, setPageSearchIndex] = useState(0);
-  const sourceTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const pluginViewMatch = editorView === "wysiwyg" ? findPageViewPlugin(draft, plugins) : null;
   const activeTool = mode === "history" ? "history" : editorView;
   const pageSearchMatches = useMemo(
@@ -175,20 +176,6 @@ export function PageSurface({
       setPageSearchIndex(Math.max(0, pageSearchMatches.length - 1));
     }
   }, [pageSearchIndex, pageSearchMatches.length]);
-
-  useEffect(() => {
-    if (!pageSearchOpen || editorView !== "source" || !activePageSearchMatch) {
-      return;
-    }
-
-    const textarea = sourceTextareaRef.current;
-    if (!textarea) {
-      return;
-    }
-
-    textarea.focus();
-    textarea.setSelectionRange(activePageSearchMatch.start, activePageSearchMatch.end);
-  }, [activePageSearchMatch, editorView, pageSearchOpen]);
 
   const openPageSearch = () => {
     setPageSearchOpen(true);
@@ -334,17 +321,6 @@ export function PageSurface({
           </>
         }
       />
-      {pageSearchOpen && (
-        <PageSearchBar
-          currentIndex={pageSearchIndex}
-          matchCount={pageSearchMatches.length}
-          query={pageSearchQuery}
-          onClose={closePageSearch}
-          onNext={goToNextPageSearchMatch}
-          onPrevious={goToPreviousPageSearchMatch}
-          onQueryChange={setPageSearchQuery}
-        />
-      )}
       <Box sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}>
         {mode === "history" ? (
           <HistoryPanel
@@ -360,6 +336,17 @@ export function PageSurface({
           />
         ) : (
           <Box sx={{ position: "relative" }}>
+            {pageSearchOpen && (
+              <PageSearchBar
+                currentIndex={pageSearchIndex}
+                matchCount={pageSearchMatches.length}
+                query={pageSearchQuery}
+                onClose={closePageSearch}
+                onNext={goToNextPageSearchMatch}
+                onPrevious={goToPreviousPageSearchMatch}
+                onQueryChange={setPageSearchQuery}
+              />
+            )}
             {isVirtual && (
               <Alert severity="info" sx={{ m: 2 }}>
                 {readOnly
@@ -370,22 +357,13 @@ export function PageSurface({
             <>
               {editorView === "source" ? (
                 <Box sx={{ mx: 2, mt: 4 }}>
-                  <TextField
-                    inputRef={sourceTextareaRef}
-                    label="Markdownソース"
-                    value={draft}
-                    onChange={(event) => onDraftChange(event.target.value)}
+                  <MarkdownEditor
+                    activeSearchMatch={activePageSearchMatch}
+                    ariaLabel="Markdownソース"
                     disabled={isSaving || readOnly}
-                    multiline
-                    minRows={24}
-                    fullWidth
-                    sx={{
-                      "& textarea": {
-                        fontFamily:
-                          'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-                        lineHeight: 1.6,
-                      },
-                    }}
+                    searchMatches={pageSearchMatches}
+                    value={draft}
+                    onChange={onDraftChange}
                   />
                 </Box>
               ) : (
@@ -475,19 +453,27 @@ function PageSearchBar({
   const countLabel = hasQuery && hasMatches ? `${currentIndex + 1}/${matchCount}` : "0/0";
 
   return (
-    <Box
+    <Paper
+      elevation={8}
       role="search"
       aria-label="ページ内検索"
       sx={{
         alignItems: "center",
-        borderTop: "1px solid",
-        borderBottom: "1px solid",
+        bgcolor: "#ffffff",
+        border: "1px solid",
         borderColor: "divider",
+        borderRadius: 1.5,
+        boxShadow: "0 8px 24px rgba(31, 35, 40, 0.16)",
         display: "flex",
-        flex: "0 0 auto",
         gap: 0.75,
-        px: 1.5,
+        maxWidth: "calc(100% - 32px)",
+        position: "absolute",
+        px: 1,
         py: 0.75,
+        right: 16,
+        top: 16,
+        width: { xs: "calc(100% - 32px)", sm: 430 },
+        zIndex: (theme) => theme.zIndex.appBar,
       }}
     >
       <TextField
@@ -515,7 +501,7 @@ function PageSearchBar({
             "aria-label": "ページ内検索キーワード",
           },
         }}
-        sx={{ maxWidth: 320, minWidth: 160, width: "min(320px, 45vw)" }}
+        sx={{ flex: "1 1 auto", minWidth: 0 }}
       />
       <Typography
         aria-label="ページ内検索の一致数"
@@ -544,13 +530,12 @@ function PageSearchBar({
           </IconButton>
         </span>
       </Tooltip>
-      <Box sx={{ flex: 1, minWidth: 0 }} />
       <Tooltip title="閉じる">
         <IconButton aria-label="ページ内検索を閉じる" size="small" onClick={onClose}>
           <CloseRounded fontSize="small" />
         </IconButton>
       </Tooltip>
-    </Box>
+    </Paper>
   );
 }
 

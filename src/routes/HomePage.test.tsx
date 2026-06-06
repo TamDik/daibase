@@ -537,6 +537,7 @@ describe("HomePage", () => {
     await user.click(screen.getByRole("button", { name: "ページ内検索" }));
 
     const searchRegion = screen.getByRole("search", { name: "ページ内検索" });
+    expect(searchRegion).toHaveStyle({ position: "absolute", right: "16px", top: "16px" });
     const input = within(searchRegion).getByRole("textbox", { name: "ページ内検索キーワード" });
     expect(input).toHaveFocus();
 
@@ -545,6 +546,11 @@ describe("HomePage", () => {
     expect(within(searchRegion).getByLabelText("ページ内検索の一致数")).toHaveTextContent("1/1");
     expect(within(searchRegion).getByRole("button", { name: "前の一致" })).toBeEnabled();
     expect(within(searchRegion).getByRole("button", { name: "次の一致" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Markdown" }));
+    const highlights = screen.getByTestId("markdown-editor-highlights");
+    expect(highlights.querySelectorAll("mark")).toHaveLength(1);
+    expect(highlights.querySelector("mark")).toHaveAttribute("data-active-search-match", "true");
 
     await user.click(within(searchRegion).getByRole("button", { name: "ページ内検索を閉じる" }));
     expect(screen.queryByRole("search", { name: "ページ内検索" })).not.toBeInTheDocument();
