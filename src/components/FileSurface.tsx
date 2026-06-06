@@ -96,6 +96,13 @@ export function FileSurface({
         rightSlot={
           <>
             <Box sx={{ flex: 1, minWidth: 0 }} />
+            {!readOnly && (
+              <FavoriteToggleButton
+                disabled={isVirtual || isUploading}
+                isFavorite={file.is_favorite ?? false}
+                onToggleFavorite={onToggleFavorite}
+              />
+            )}
             <ToggleButtonGroup
               exclusive
               size="small"
@@ -127,13 +134,6 @@ export function FileSurface({
                 </ToggleButton>
               </Tooltip>
             </ToggleButtonGroup>
-            {!readOnly && (
-              <FavoriteToggleButton
-                disabled={isVirtual || isUploading}
-                isFavorite={file.is_favorite ?? false}
-                onToggleFavorite={onToggleFavorite}
-              />
-            )}
           </>
         }
       />

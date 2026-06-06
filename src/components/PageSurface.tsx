@@ -237,16 +237,6 @@ export function PageSurface({
         rightSlot={
           <>
             <Box sx={{ flex: 1, minWidth: 0 }} />
-            <Tooltip title="ページ内検索">
-              <IconButton
-                aria-label="ページ内検索"
-                aria-pressed={pageSearchOpen}
-                size="small"
-                onClick={pageSearchOpen ? closePageSearch : openPageSearch}
-              >
-                <FindInPageRounded fontSize="small" />
-              </IconButton>
-            </Tooltip>
             {isDirty && (
               <Chip
                 aria-label="未保存"
@@ -261,6 +251,23 @@ export function PageSurface({
                   mr: 1,
                   minWidth: 72,
                 }}
+              />
+            )}
+            <Tooltip title="ページ内検索">
+              <IconButton
+                aria-label="ページ内検索"
+                aria-pressed={pageSearchOpen}
+                size="small"
+                onClick={pageSearchOpen ? closePageSearch : openPageSearch}
+              >
+                <FindInPageRounded fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            {!readOnly && (
+              <FavoriteToggleButton
+                disabled={isVirtual || isSaving}
+                isFavorite={isFavorite}
+                onToggleFavorite={onToggleFavorite}
               />
             )}
             <ToggleButtonGroup
@@ -311,13 +318,6 @@ export function PageSurface({
                 </ToggleButton>
               </Tooltip>
             </ToggleButtonGroup>
-            {!readOnly && (
-              <FavoriteToggleButton
-                disabled={isVirtual || isSaving}
-                isFavorite={isFavorite}
-                onToggleFavorite={onToggleFavorite}
-              />
-            )}
           </>
         }
       />
