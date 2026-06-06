@@ -65,9 +65,6 @@ export function MarkdownEditor({
         bgcolor: "#ffffff",
         color: "text.primary",
         overflow: "hidden",
-        "&:focus-within": {
-          boxShadow: (theme) => `inset 0 0 0 1px ${theme.palette.primary.main}`,
-        },
       }}
     >
       <Box
@@ -85,9 +82,6 @@ export function MarkdownEditor({
           aria-hidden
           data-testid="markdown-editor-line-numbers"
           sx={{
-            bgcolor: "#f6f8fa",
-            borderRight: "1px solid",
-            borderColor: "divider",
             color: "text.secondary",
             flex: "0 0 54px",
             fontFamily:
