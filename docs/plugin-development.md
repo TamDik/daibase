@@ -233,7 +233,19 @@ window.addEventListener("message", (event: MessageEvent<DaibaseRenderMessage>) =
 
 ## Plugin API
 
-Daibase は plugin iframe に `window.daibase` を注入します。プラグインから現在表示しているページの Markdown を更新する場合は、この API を使います。
+Daibase は plugin iframe に `window.daibase` を注入します。`daibase:render` message で受け取った page context は、Plugin API からも取得できます。
+
+現在表示しているページの Markdown を読む場合:
+
+```ts
+const page = await window.daibase.readCurrentPage();
+
+console.log(page.content);
+console.log(page.body);
+console.log(page.frontmatter);
+```
+
+現在表示しているページの Markdown を更新する場合:
 
 ```ts
 await window.daibase.writeCurrentPage(nextMarkdown);
@@ -241,7 +253,7 @@ await window.daibase.writeCurrentPage(nextMarkdown);
 
 `writeCurrentPage` には、更新後の Markdown 全体を渡してください。Daibase は現在の page context を対象として保存します。プラグイン側で namespace、保存先パス、正規ロケーションを組み立てる必要はありません。
 
-この API を使うプラグインは、`manifest.json` の `permissions` に `page-write` を追加してください。
+これらの API を使うプラグインは、`manifest.json` の `permissions` に必要な permission を追加してください。
 
 ```json
 {
@@ -249,12 +261,25 @@ await window.daibase.writeCurrentPage(nextMarkdown);
 }
 ```
 
+`readCurrentPage` には `page-read`、`writeCurrentPage` には `page-write` が必要です。
+
 TypeScript で型を付ける場合の最小例:
 
 ```ts
 declare global {
   interface Window {
     daibase: {
+      readCurrentPage(): Promise<{
+        namespaceId: string;
+        path: string;
+        location: string;
+        title: string;
+        content: string;
+        frontmatter: Record<string, unknown>;
+        body: string;
+        isDirty: boolean;
+        isReadOnly: boolean;
+      }>;
       writeCurrentPage(content: string): Promise<void>;
     };
   }
@@ -271,6 +296,8 @@ try {
 }
 ```
 
+`writeCurrentPage` が成功すると、Daibase は保存後の内容で `daibase:render` message を再送します。プラグインは保存後の正規化された Markdown を、次の `daibase:render` または `readCurrentPage` で確認できます。
+
 ## main HTML の制約
 
 `main` で指定する HTML は次の条件を満たしてください。
@@ -279,6 +306,7 @@ try {
 - CDN や外部ネットワークに依存しない。
 - `script src="..."` や `link rel="stylesheet"` で別ファイルを参照しない。
 - `daibase:render` message を受け取って再描画できる。
+- Markdown を読む場合は `daibase:render` message または `window.daibase.readCurrentPage` を使う。
 - Markdown を書き込む場合は `window.daibase.writeCurrentPage` を使う。
 - message が来ない状態でも確認できる fallback 表示を持つことを推奨します。
 
@@ -446,7 +474,8 @@ Daibase は登録したローカルフォルダを直接参照します。app da
 
 - プラグインは Plugin Host 管理の sandbox iframe 内で実行されます。
 - Daibase 本体 DOM、React component、Tauri command を直接触らせません。
-- 現在公開している Plugin API は `window.daibase.writeCurrentPage` です。
+- 現在公開している Plugin API は `window.daibase.readCurrentPage` と `window.daibase.writeCurrentPage` です。
+- `readCurrentPage` には `page-read` permission が必要です。
 - `writeCurrentPage` には `page-write` permission が必要です。
 - プラグイン管理操作は MCP には公開していません。
 

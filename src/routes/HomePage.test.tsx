@@ -629,6 +629,7 @@ describe("HomePage", () => {
 
     renderHomePage();
     const frame = (await screen.findByTitle("Calendar")) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
 
     await waitFor(() => {
       dispatchPluginApiRequest(frame, {
@@ -645,7 +646,74 @@ describe("HomePage", () => {
         "---\ndaibase.view: calendar\n---\n# Updated",
       );
     });
+    await waitFor(() =>
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: expect.objectContaining({
+            page: expect.objectContaining({
+              content: "---\ndaibase.view: calendar\n---\n# Updated",
+            }),
+          }),
+          type: "daibase:render",
+        }),
+        "*",
+      ),
+    );
     expect(screen.queryByLabelText("未保存")).not.toBeInTheDocument();
+  });
+
+  it("page-read 権限を持つプラグインは現在のページを API から読める", async () => {
+    vi.mocked(api.listPlugins).mockResolvedValue([pluginItems({ enabled: true })[0]]);
+    vi.mocked(api.openInitialLocation).mockResolvedValue({
+      kind: "page",
+      namespace: workNamespace,
+      location: "Work:Calendar.md",
+      content: contentTree,
+      page: page(
+        "Calendar.md",
+        "---\ndaibase.view: calendar\ncalendar:\n  month: 2026-06\n---\n# Calendar",
+      ),
+    });
+    vi.mocked(api.resolvePluginMain).mockResolvedValue({
+      path: "/tmp/calendar-plugin/dist/index.html",
+      html: "<!doctype html><html><body>Calendar</body></html>",
+    });
+
+    renderHomePage();
+    const frame = (await screen.findByTitle("Calendar")) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await waitFor(() => {
+      dispatchPluginApiRequest(frame, {
+        type: "daibase:api-request",
+        requestId: "plugin-read-1",
+        method: "readCurrentPage",
+      });
+      expect(postMessage).toHaveBeenCalledWith(
+        {
+          type: "daibase:api-response",
+          requestId: "plugin-read-1",
+          ok: true,
+          result: {
+            namespaceId: "ns-work",
+            path: "Calendar.md",
+            location: "Work:Calendar.md",
+            title: "Calendar",
+            content: "---\ndaibase.view: calendar\ncalendar:\n  month: 2026-06\n---\n# Calendar",
+            frontmatter: {
+              "daibase.view": "calendar",
+              calendar: {
+                month: "2026-06",
+              },
+            },
+            body: "# Calendar",
+            isDirty: false,
+            isReadOnly: false,
+          },
+        },
+        "*",
+      );
+    });
   });
 
   it("page-write 権限のないプラグインからの書き込みを拒否する", async () => {

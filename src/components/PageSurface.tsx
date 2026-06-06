@@ -659,8 +659,12 @@ function PluginHostView({
       }
 
       void handlePluginApiRequest({
+        contributionId: contribution.id,
+        content,
         message,
         onWriteCurrentPage,
+        pageContext,
+        parsedMarkdown,
         plugin,
         readOnly,
         respond: (response) => {
@@ -671,7 +675,16 @@ function PluginHostView({
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [onWriteCurrentPage, plugin, pluginHtml, readOnly]);
+  }, [
+    content,
+    contribution.id,
+    onWriteCurrentPage,
+    pageContext,
+    parsedMarkdown,
+    plugin,
+    pluginHtml,
+    readOnly,
+  ]);
 
   if (error) {
     return (
@@ -736,36 +749,66 @@ type PluginApiResponseMessage = {
 } & ({ ok: true; result?: unknown } | { ok: false; error: string });
 
 async function handlePluginApiRequest({
+  contributionId,
+  content,
   message,
   onWriteCurrentPage,
+  pageContext,
+  parsedMarkdown,
   plugin,
   readOnly,
   respond,
 }: {
+  contributionId: string;
+  content: string;
   message: PluginApiRequestMessage;
   onWriteCurrentPage: (content: string) => Promise<void>;
+  pageContext: PagePluginContext;
+  parsedMarkdown: ReturnType<typeof markdownContext>;
   plugin: InstalledPluginSummary;
   readOnly: boolean;
   respond: (response: PluginApiResponseMessage) => void;
 }) {
   try {
-    if (message.method !== "writeCurrentPage") {
-      throw new Error(`未対応の Plugin API です: ${message.method}`);
-    }
-    if (!plugin.manifest.permissions.includes("page-write")) {
-      throw new Error("page-write permission が必要です。");
-    }
-    if (readOnly) {
-      throw new Error("読み取り専用ページは書き込めません。");
+    if (message.method === "readCurrentPage") {
+      if (!plugin.manifest.permissions.includes("page-read")) {
+        throw new Error("page-read permission が必要です。");
+      }
+      respond({
+        type: "daibase:api-response",
+        requestId: message.requestId,
+        ok: true,
+        result: pluginRenderContext({
+          contributionId,
+          content,
+          isReadOnly: readOnly,
+          pageContext,
+          parsedMarkdown,
+          pluginId: plugin.id,
+        }).page,
+      });
+      return;
     }
 
-    const params = message.params;
-    if (!isRecord(params) || typeof params.content !== "string") {
-      throw new Error("writeCurrentPage には Markdown 文字列を指定してください。");
+    if (message.method === "writeCurrentPage") {
+      if (!plugin.manifest.permissions.includes("page-write")) {
+        throw new Error("page-write permission が必要です。");
+      }
+      if (readOnly) {
+        throw new Error("読み取り専用ページは書き込めません。");
+      }
+
+      const params = message.params;
+      if (!isRecord(params) || typeof params.content !== "string") {
+        throw new Error("writeCurrentPage には Markdown 文字列を指定してください。");
+      }
+
+      await onWriteCurrentPage(params.content);
+      respond({ type: "daibase:api-response", requestId: message.requestId, ok: true });
+      return;
     }
 
-    await onWriteCurrentPage(params.content);
-    respond({ type: "daibase:api-response", requestId: message.requestId, ok: true });
+    throw new Error(`未対応の Plugin API です: ${message.method}`);
   } catch (caught) {
     respond({
       type: "daibase:api-response",
@@ -828,6 +871,9 @@ function daibasePluginApiBootstrap() {
     configurable: false,
     enumerable: true,
     value: Object.freeze({
+      readCurrentPage() {
+        return request("readCurrentPage");
+      },
       writeCurrentPage(content) {
         return request("writeCurrentPage", { content: String(content) });
       },
@@ -895,30 +941,41 @@ function postRenderMessage(
     {
       type: "daibase:render",
       requestId: requestId(),
-      context: {
-        namespace: {
-          id: payload.pageContext.namespaceId,
-          name: payload.pageContext.namespaceName,
-        },
-        page: {
-          namespaceId: payload.pageContext.namespaceId,
-          path: payload.pageContext.path,
-          location: payload.pageContext.location,
-          title: payload.pageContext.title,
-          content: payload.content,
-          frontmatter: payload.parsedMarkdown.frontmatter,
-          body: payload.parsedMarkdown.body,
-          isDirty: false,
-          isReadOnly: payload.isReadOnly,
-        },
-        view: {
-          contributionId: payload.contributionId,
-          pluginId: payload.pluginId,
-        },
-      },
+      context: pluginRenderContext(payload),
     },
     "*",
   );
+}
+
+function pluginRenderContext(payload: {
+  contributionId: string;
+  content: string;
+  isReadOnly: boolean;
+  pageContext: PagePluginContext;
+  parsedMarkdown: ReturnType<typeof markdownContext>;
+  pluginId: string;
+}) {
+  return {
+    namespace: {
+      id: payload.pageContext.namespaceId,
+      name: payload.pageContext.namespaceName,
+    },
+    page: {
+      namespaceId: payload.pageContext.namespaceId,
+      path: payload.pageContext.path,
+      location: payload.pageContext.location,
+      title: payload.pageContext.title,
+      content: payload.content,
+      frontmatter: payload.parsedMarkdown.frontmatter,
+      body: payload.parsedMarkdown.body,
+      isDirty: false,
+      isReadOnly: payload.isReadOnly,
+    },
+    view: {
+      contributionId: payload.contributionId,
+      pluginId: payload.pluginId,
+    },
+  };
 }
 
 function requestId() {

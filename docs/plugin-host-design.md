@@ -119,10 +119,11 @@ Structured View の利点:
 
 ## Host API
 
-プラグインに Daibase 操作 API を渡す場合は capability 制にします。現行実装では `window.daibase.writeCurrentPage` を公開しています。
+プラグインに Daibase 操作 API を渡す場合は capability 制にします。現行実装では `window.daibase.readCurrentPage` と `window.daibase.writeCurrentPage` を公開しています。
 
 ```ts
 type PluginHostApi = {
+  readCurrentPage(): Promise<PageSnapshot>;
   writeCurrentPage(content: string): Promise<void>;
 };
 ```
@@ -131,6 +132,7 @@ API 呼び出しは manifest の permission と現在の context で検査しま
 
 現行 API:
 
+- `readCurrentPage` には `page-read` が必要。
 - `writeCurrentPage` には `page-write` が必要。
 
 将来候補:
