@@ -380,8 +380,12 @@ export function PageSurface({
                   ) : (
                     <MarkdownWysiwygEditor
                       key={editorKey}
+                      activeSearchMatch={activePageSearchMatch}
                       ariaLabel="Markdown"
                       disabled={isSaving || readOnly}
+                      searchIndex={pageSearchIndex}
+                      searchMatches={pageSearchMatches}
+                      searchQuery={pageSearchQuery}
                       value={markdownBodyFromMarkdown(draft)}
                       onChange={(value) =>
                         onDraftChange(updateMarkdownBodyPreservingFrontmatter(draft, value))

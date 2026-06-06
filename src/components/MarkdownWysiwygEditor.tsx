@@ -1,7 +1,12 @@
 import { Box, TextField } from "@mui/material";
 import { Crepe } from "@milkdown/crepe";
+import { $prose } from "@milkdown/kit/utils";
+import { Plugin } from "@milkdown/kit/prose/state";
+import { Decoration, DecorationSet, type EditorView } from "@milkdown/kit/prose/view";
 import "@milkdown/crepe/theme/common/style.css";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, type RefObject } from "react";
+
+import type { PageSearchMatch } from "../lib/pageSearch";
 
 type MarkdownLinkStatus = {
   exists: boolean;
@@ -19,24 +24,33 @@ type MarkdownImageResolution = {
 };
 
 export function MarkdownWysiwygEditor({
+  activeSearchMatch,
   ariaLabel,
   disabled,
   onOpenMarkdownLink,
   onResolveMarkdownImage,
   onResolveMarkdownLinkStatus,
+  searchMatches,
+  searchQuery,
+  searchIndex,
   value,
   onChange,
 }: {
+  activeSearchMatch: PageSearchMatch | null;
   ariaLabel: string;
   disabled: boolean;
   onOpenMarkdownLink: (target: string) => void;
   onResolveMarkdownImage: (target: string) => Promise<MarkdownImageResolution>;
   onResolveMarkdownLinkStatus: (target: string) => Promise<MarkdownLinkStatus>;
+  searchMatches: PageSearchMatch[];
+  searchQuery: string;
+  searchIndex: number;
   value: string;
   onChange: (value: string) => void;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const crepeRef = useRef<Crepe | null>(null);
+  const milkdownViewRef = useRef<EditorView | null>(null);
   const initialValueRef = useRef(value);
   const disabledRef = useRef(disabled);
   const onChangeRef = useRef(onChange);
@@ -47,7 +61,49 @@ export function MarkdownWysiwygEditor({
   const linkStatusRunIdRef = useRef(0);
   const imageResolutionCacheRef = useRef(new Map<string, MarkdownImageResolution>());
   const linkStatusCacheRef = useRef(new Map<string, MarkdownLinkStatus>());
+  const searchStateRef = useRef({
+    activeSearchMatch,
+    searchIndex,
+    searchMatches,
+    searchQuery,
+  });
+  const searchScrollFrameRef = useRef<number | null>(null);
   const isTest = import.meta.env.MODE === "test";
+
+  const scrollActiveSearchMatchIntoView = useCallback(() => {
+    if (searchScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(searchScrollFrameRef.current);
+    }
+
+    searchScrollFrameRef.current = window.requestAnimationFrame(() => {
+      searchScrollFrameRef.current = null;
+      const root = rootRef.current;
+      const activeMatch = root?.querySelector<HTMLElement>(".daibase-search-match-active");
+      if (!activeMatch) {
+        return;
+      }
+
+      activeMatch.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    searchStateRef.current = {
+      activeSearchMatch,
+      searchIndex,
+      searchMatches,
+      searchQuery,
+    };
+
+    const view = milkdownViewRef.current;
+    if (view) {
+      view.dispatch(view.state.tr.setMeta(milkdownSearchHighlightMetaKey, true));
+      scrollActiveSearchMatchIntoView();
+    }
+  }, [activeSearchMatch, scrollActiveSearchMatchIntoView, searchIndex, searchMatches, searchQuery]);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -287,6 +343,19 @@ export function MarkdownWysiwygEditor({
         },
       },
     });
+    crepe.editor.use(
+      createMilkdownSearchHighlightPlugin(
+        searchStateRef,
+        (view) => {
+          milkdownViewRef.current = view;
+        },
+        (view) => {
+          if (milkdownViewRef.current === view) {
+            milkdownViewRef.current = null;
+          }
+        },
+      ),
+    );
 
     crepe.on((listener) => {
       listener.markdownUpdated((_ctx, markdown) => {
@@ -335,6 +404,11 @@ export function MarkdownWysiwygEditor({
         window.cancelAnimationFrame(linkStatusFrameRef.current);
         linkStatusFrameRef.current = null;
       }
+      if (searchScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(searchScrollFrameRef.current);
+        searchScrollFrameRef.current = null;
+      }
+      milkdownViewRef.current = null;
       crepeRef.current = null;
       void crepe.destroy();
     };
@@ -411,6 +485,14 @@ export function MarkdownWysiwygEditor({
           textDecorationStyle: "solid",
           textUnderlineOffset: "0.18em",
         },
+        "& .ProseMirror .daibase-search-match": {
+          backgroundColor: "#fff0a6",
+          borderRadius: 0.5,
+        },
+        "& .ProseMirror .daibase-search-match-active": {
+          backgroundColor: "#ffd33d",
+          outline: "1px solid #d29922",
+        },
       }}
     />
   );
@@ -418,4 +500,88 @@ export function MarkdownWysiwygEditor({
 
 function markdownImageTarget(image: HTMLImageElement) {
   return image.dataset.markdownImageTarget ?? image.getAttribute("src") ?? "";
+}
+
+const milkdownSearchHighlightMetaKey = "daibase-search-highlight";
+
+function createMilkdownSearchHighlightPlugin(
+  searchStateRef: RefObject<{
+    activeSearchMatch: PageSearchMatch | null;
+    searchIndex: number;
+    searchMatches: PageSearchMatch[];
+    searchQuery: string;
+  }>,
+  onViewCreate: (view: EditorView) => void,
+  onViewDestroy: (view: EditorView) => void,
+) {
+  return $prose(
+    () =>
+      new Plugin({
+        props: {
+          decorations(state) {
+            const { searchMatches, searchQuery } = searchStateRef.current;
+            const normalizedQuery = searchQuery.trim().toLowerCase();
+            if (!normalizedQuery || searchMatches.length === 0) {
+              return DecorationSet.empty;
+            }
+
+            const decorations: Decoration[] = [];
+            let visibleMatchIndex = 0;
+            state.doc.descendants((node, position) => {
+              if (!node.isText || !node.text) {
+                return;
+              }
+
+              const normalizedText = node.text.toLowerCase();
+              let cursor = 0;
+              while (cursor <= normalizedText.length) {
+                const start = normalizedText.indexOf(normalizedQuery, cursor);
+                if (start < 0) {
+                  break;
+                }
+
+                const end = start + normalizedQuery.length;
+                const isActive = visibleMatchIndex === searchStateRef.current.searchIndex;
+                const className = isActive
+                  ? "daibase-search-match daibase-search-match-active"
+                  : "daibase-search-match";
+                decorations.push(
+                  Decoration.inline(position + start, position + end, {
+                    class: className,
+                    ...(isActive ? { "data-active-search-match": "true" } : {}),
+                  }),
+                );
+                visibleMatchIndex += 1;
+                cursor = end;
+              }
+            });
+
+            return DecorationSet.create(state.doc, decorations);
+          },
+        },
+        view(view) {
+          onViewCreate(view);
+          return {
+            update(currentView) {
+              window.requestAnimationFrame(() => {
+                const activeMatch = currentView.dom.querySelector<HTMLElement>(
+                  ".daibase-search-match-active",
+                );
+                if (!activeMatch) {
+                  return;
+                }
+
+                activeMatch.scrollIntoView({
+                  block: "nearest",
+                  inline: "nearest",
+                });
+              });
+            },
+            destroy() {
+              onViewDestroy(view);
+            },
+          };
+        },
+      }),
+  );
 }
