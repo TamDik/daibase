@@ -41,6 +41,7 @@ import {
   listNamespaces,
   openInitialLocation,
   openLocation,
+  readPage,
   readPluginDocumentation,
   readDeletedFile,
   readDeletedPage,
@@ -58,7 +59,12 @@ import {
 import { FileSurface, type FileMode } from "../components/FileSurface";
 import { MainContentTop } from "../components/MainContentTop";
 import { PageSidebar } from "../components/PageSidebar";
-import { PageSurface, type PageMode } from "../components/PageSurface";
+import {
+  PageSurface,
+  type PageMode,
+  type PluginPageRef,
+  type PluginPageSnapshot,
+} from "../components/PageSurface";
 import {
   CategoriesSpecialPage,
   DeletedPagesSpecialPage,
@@ -71,6 +77,7 @@ import {
 import { TerminalPanel } from "../components/TerminalPanel";
 import { defaultPageLocation, namespacesLocation } from "../lib/location";
 import { updateMarkdownCategories } from "../lib/pageCategories";
+import { markdownContext } from "../lib/pluginHost";
 
 type PageView = {
   kind: "page";
@@ -490,6 +497,82 @@ export function HomePage() {
       }
     },
     [pageMode],
+  );
+
+  const readPluginPage = useCallback(
+    async (ref: PluginPageRef): Promise<PluginPageSnapshot> => {
+      if ("location" in ref) {
+        const opened = await openLocation(ref.location, activeNamespace?.id ?? null);
+        if (opened.kind !== "page") {
+          throw new Error("指定した location はページではありません。");
+        }
+        return pluginPageSnapshot(opened.page);
+      }
+
+      return pluginPageSnapshot(await readPage(ref.namespaceId, ref.path));
+    },
+    [activeNamespace],
+  );
+
+  const writePluginPage = useCallback(
+    async (ref: PluginPageRef, nextContent: string): Promise<PluginPageSnapshot> => {
+      const target = await resolvePluginPageTarget(ref, activeNamespace?.id ?? null);
+      if (target.isVirtual) {
+        throw new Error("指定したページはまだ存在しません。page.create を使ってください。");
+      }
+      if (isCurrentPluginPageTarget(target, pageViewRef.current)) {
+        await handlePluginWriteCurrentPage(nextContent);
+        const currentPage = pageViewRef.current?.page;
+        if (!currentPage) {
+          throw new Error("保存後のページを読み込めません。");
+        }
+        return pluginPageSnapshot(currentPage);
+      }
+
+      const saved = await savePage(target.namespaceId, target.path, nextContent);
+      if (activeNamespace?.id === saved.namespace.id) {
+        setActiveNamespace(saved.namespace);
+        setSidebarContent(saved.content);
+      }
+      return pluginPageSnapshot(saved.page);
+    },
+    [activeNamespace, handlePluginWriteCurrentPage],
+  );
+
+  const createPluginPage = useCallback(
+    async (ref: PluginPageRef, content: string): Promise<PluginPageSnapshot> => {
+      const target = await resolvePluginPageTarget(ref, activeNamespace?.id ?? null);
+      if (!target.isVirtual) {
+        throw new Error("指定したページは既に存在します。");
+      }
+
+      const saved = await savePage(target.namespaceId, target.path, content);
+      if (activeNamespace?.id === saved.namespace.id) {
+        setActiveNamespace(saved.namespace);
+        setSidebarContent(saved.content);
+      }
+      return pluginPageSnapshot(saved.page);
+    },
+    [activeNamespace],
+  );
+
+  const deletePluginPage = useCallback(
+    async (ref: PluginPageRef) => {
+      const target = await resolvePluginPageTarget(ref, activeNamespace?.id ?? null);
+      const detail = await deletePage(target.namespaceId, target.path);
+      if (activeNamespace?.id === detail.namespace.id) {
+        setActiveNamespace(detail.namespace);
+        setSidebarContent(detail.content);
+      }
+      if (isCurrentPluginPageTarget(target, pageViewRef.current)) {
+        setPageView(null);
+        pageViewRef.current = null;
+        setDraft("");
+        draftRef.current = "";
+        setCurrentLocation(detail.namespace.default_location);
+      }
+    },
+    [activeNamespace],
   );
 
   const navigate = useCallback(
@@ -1364,7 +1447,14 @@ export function HomePage() {
                   }
                   onOpenLocation={(location) => void navigate(location)}
                   onOpenMarkdownLink={(target) => void handleOpenPageMarkdownLink(target)}
+                  onPluginCreatePage={createPluginPage}
+                  onPluginDeletePage={deletePluginPage}
+                  onPluginOpenLocation={async (location) => {
+                    await navigate(location);
+                  }}
+                  onPluginReadPage={readPluginPage}
                   onPluginWriteCurrentPage={handlePluginWriteCurrentPage}
+                  onPluginWritePage={writePluginPage}
                   onResolveMarkdownImage={handleResolvePageMarkdownImage}
                   onResolveMarkdownLinkStatus={handleResolvePageMarkdownLinkStatus}
                   onSelectHistoryEntry={handleSelectHistoryEntry}
@@ -1474,6 +1564,59 @@ export function HomePage() {
       </Dialog>
     </Box>
   );
+}
+
+type PluginPageTarget = {
+  namespaceId: string;
+  path: string;
+  isVirtual: boolean;
+};
+
+async function resolvePluginPageTarget(
+  ref: PluginPageRef,
+  sourceNamespaceId: string | null,
+): Promise<PluginPageTarget> {
+  if ("location" in ref) {
+    const opened = await openLocation(ref.location, sourceNamespaceId);
+    if (opened.kind !== "page") {
+      throw new Error("指定した location はページではありません。");
+    }
+    return {
+      namespaceId: opened.namespace.id,
+      path: opened.page.path,
+      isVirtual: opened.page.is_virtual === true,
+    };
+  }
+
+  const page = await readPage(ref.namespaceId, ref.path);
+  return {
+    namespaceId: page.namespace_id,
+    path: page.path,
+    isVirtual: page.is_virtual === true,
+  };
+}
+
+function isCurrentPluginPageTarget(target: PluginPageTarget, current: PageView | null) {
+  return (
+    current?.namespace.id === target.namespaceId &&
+    current.page.path === target.path &&
+    current.isReadOnly !== true
+  );
+}
+
+function pluginPageSnapshot(page: PageContent): PluginPageSnapshot {
+  const parsedMarkdown = markdownContext(page.content);
+  return {
+    namespaceId: page.namespace_id,
+    path: page.path,
+    location: page.location,
+    title: page.title,
+    content: page.content,
+    frontmatter: parsedMarkdown.frontmatter,
+    body: parsedMarkdown.body,
+    isDirty: false,
+    isReadOnly: false,
+  };
 }
 
 function errorMessage(error: unknown) {

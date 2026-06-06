@@ -237,7 +237,9 @@ export type PluginActivation = {
 
 export type PluginPermission =
   | "page-read"
+  | "page-create"
   | "page-write"
+  | "page-delete"
   | "file-read"
   | "file-write"
   | "namespace-read"

@@ -119,24 +119,48 @@ Structured View の利点:
 
 ## Host API
 
-プラグインに Daibase 操作 API を渡す場合は capability 制にします。現行実装では `window.daibase.readCurrentPage` と `window.daibase.writeCurrentPage` を公開しています。
+プラグインに Daibase 操作 API を渡す場合は capability 制にします。現行実装ではページ CRUD と location open を Plugin Host API として公開しています。`readCurrentPage` / `writeCurrentPage` は後方互換のため残し、新しい API は `window.daibase.page.*` と `window.daibase.location.*` に整理します。
 
 ```ts
 type PluginHostApi = {
+  page: {
+    readCurrent(): Promise<PageSnapshot>;
+    writeCurrent(content: string): Promise<void>;
+    read(ref: PageRef): Promise<PageSnapshot>;
+    create(ref: PageRef, content: string): Promise<PageSnapshot>;
+    write(ref: PageRef, content: string): Promise<PageSnapshot>;
+    delete(ref: PageRef): Promise<void>;
+  };
+  location: {
+    open(location: string): Promise<void>;
+  };
   readCurrentPage(): Promise<PageSnapshot>;
   writeCurrentPage(content: string): Promise<void>;
 };
+
+type PageRef = { location: string } | { namespaceId: string; path: string };
 ```
 
 API 呼び出しは manifest の permission と現在の context で検査します。
 
 現行 API:
 
-- `readCurrentPage` には `page-read` が必要。
-- `writeCurrentPage` には `page-write` が必要。
+- `page.readCurrent`, `page.read`, `readCurrentPage` には `page-read` が必要。
+- `page.create` には `page-create` が必要。
+- `page.writeCurrent`, `page.write`, `writeCurrentPage` には `page-write` が必要。
+- `page.delete` には `page-delete` が必要。
+- `location.open` には `location-open` が必要。
+
+current 専用 permission は作りません。現在ページだけを扱う API も、任意ページ API と同じ `page-read` / `page-write` を使います。
+
+`page.read` / `page.write` は UI 遷移しません。ページ内容が必要な plugin は API で明示的に読み、表示 location を変える必要がある場合だけ `location.open` を呼びます。
+
+`page.create` は未作成ページだけを作成し、既存ページを指定した場合は reject します。`page.write` は既存ページの更新用で、未作成ページを暗黙に作りません。
+
+イベント通知は今後の追加候補です。方針は、Host からの event は invalidation と最小 metadata に留め、plugin が最新本文を必要とする場合は `page.read` / `page.readCurrent` で取り直す形にします。これにより初期 render message の取りこぼしや stale content を避けます。
 
 将来候補:
 
-- `openLocation(location)` には `location-open` が必要。
 - `notify(message)` には `ui-notify` が必要。
-- `readPage(location)` には `page-read` が必要。
+- `events.subscribe("page.changed", handler)` は `page-read` が必要。
+- `events.subscribe("location.changed", handler)` は追加 permission なし、または `location-open` とは別の read 系 permission にする。

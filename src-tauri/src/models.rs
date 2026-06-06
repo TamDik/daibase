@@ -327,7 +327,9 @@ pub struct PluginActivation {
 #[serde(rename_all = "kebab-case")]
 pub enum PluginPermission {
     PageRead,
+    PageCreate,
     PageWrite,
+    PageDelete,
     FileRead,
     FileWrite,
     NamespaceRead,

@@ -124,7 +124,7 @@ my-plugin/
 : 必須。1 つ以上の contribution を指定します。現在は `pageView` のみ対応しています。
 
 `permissions`
-: 任意。Host API の capability 確認用です。現在指定できる値は `page-read`, `page-write`, `file-read`, `file-write`, `namespace-read`, `history-read`, `location-open`, `ui-notify` です。
+: 任意。Host API の capability 確認用です。現在指定できる値は `page-read`, `page-create`, `page-write`, `page-delete`, `file-read`, `file-write`, `namespace-read`, `history-read`, `location-open`, `ui-notify` です。
 
 ## pageView
 
@@ -233,12 +233,12 @@ window.addEventListener("message", (event: MessageEvent<DaibaseRenderMessage>) =
 
 ## Plugin API
 
-Daibase は plugin iframe に `window.daibase` を注入します。`daibase:render` message で受け取った page context は、Plugin API からも取得できます。
+Daibase は plugin iframe に `window.daibase` を注入します。`daibase:render` message で受け取った page context は、Plugin API からも取得できます。Plugin API は manifest の `permissions` で許可された操作だけを実行できます。
 
 現在表示しているページの Markdown を読む場合:
 
 ```ts
-const page = await window.daibase.readCurrentPage();
+const page = await window.daibase.page.readCurrent();
 
 console.log(page.content);
 console.log(page.body);
@@ -248,20 +248,58 @@ console.log(page.frontmatter);
 現在表示しているページの Markdown を更新する場合:
 
 ```ts
-await window.daibase.writeCurrentPage(nextMarkdown);
+await window.daibase.page.writeCurrent(nextMarkdown);
 ```
 
-`writeCurrentPage` には、更新後の Markdown 全体を渡してください。Daibase は現在の page context を対象として保存します。プラグイン側で namespace、保存先パス、正規ロケーションを組み立てる必要はありません。
+`writeCurrent` には、更新後の Markdown 全体を渡してください。Daibase は現在の page context を対象として保存します。プラグイン側で namespace、保存先パス、正規ロケーションを組み立てる必要はありません。
+
+別ページを操作する場合は page ref を明示します。`location` は Daibase が Rust 側で解決します。namespace と path が既に分かっている場合は `{ namespaceId, path }` も使えます。
+
+```ts
+const intro = await window.daibase.page.read({
+  location: "Work:Guide/Intro.md",
+});
+
+await window.daibase.page.write(
+  { namespaceId: intro.namespaceId, path: intro.path },
+  `${intro.content}\n\nUpdated from plugin`,
+);
+```
+
+ページ作成と削除:
+
+```ts
+await window.daibase.page.create({ location: "Work:Daily/2026-06-06.md" }, "# 2026-06-06\n");
+
+await window.daibase.page.delete({
+  namespaceId: "ns-work",
+  path: "Old.md",
+});
+```
+
+Daibase の表示 location を開く場合:
+
+```ts
+await window.daibase.location.open("Work:Guide/Intro.md");
+```
 
 これらの API を使うプラグインは、`manifest.json` の `permissions` に必要な permission を追加してください。
 
 ```json
 {
-  "permissions": ["page-read", "page-write"]
+  "permissions": ["page-read", "page-create", "page-write", "page-delete", "location-open"]
 }
 ```
 
-`readCurrentPage` には `page-read`、`writeCurrentPage` には `page-write` が必要です。
+必要な permission:
+
+- `page-read`: `page.readCurrent`, `page.read`, `readCurrentPage`
+- `page-create`: `page.create`
+- `page-write`: `page.writeCurrent`, `page.write`, `writeCurrentPage`
+- `page-delete`: `page.delete`
+- `location-open`: `location.open`
+
+`readCurrentPage` と `writeCurrentPage` は後方互換のため残している旧ショートカットです。新しいプラグインでは `daibase.page.readCurrent()` と `daibase.page.writeCurrent()` を使ってください。
 
 TypeScript で型を付ける場合の最小例:
 
@@ -269,34 +307,51 @@ TypeScript で型を付ける場合の最小例:
 declare global {
   interface Window {
     daibase: {
-      readCurrentPage(): Promise<{
-        namespaceId: string;
-        path: string;
-        location: string;
-        title: string;
-        content: string;
-        frontmatter: Record<string, unknown>;
-        body: string;
-        isDirty: boolean;
-        isReadOnly: boolean;
-      }>;
+      page: {
+        readCurrent(): Promise<PageSnapshot>;
+        writeCurrent(content: string): Promise<void>;
+        read(ref: PageRef): Promise<PageSnapshot>;
+        create(ref: PageRef, content: string): Promise<PageSnapshot>;
+        write(ref: PageRef, content: string): Promise<PageSnapshot>;
+        delete(ref: PageRef): Promise<void>;
+      };
+      location: {
+        open(location: string): Promise<void>;
+      };
+      readCurrentPage(): Promise<PageSnapshot>;
       writeCurrentPage(content: string): Promise<void>;
     };
   }
 }
+
+type PageRef = { location: string } | { namespaceId: string; path: string };
+
+type PageSnapshot = {
+  namespaceId: string;
+  path: string;
+  location: string;
+  title: string;
+  content: string;
+  frontmatter: Record<string, unknown>;
+  body: string;
+  isDirty: boolean;
+  isReadOnly: boolean;
+};
 ```
 
-書き込みに失敗した場合、`writeCurrentPage` は reject します。プラグイン側では必要に応じて `try` / `catch` で扱ってください。
+書き込みに失敗した場合、`page.writeCurrent` や `page.write` は reject します。プラグイン側では必要に応じて `try` / `catch` で扱ってください。
 
 ```ts
 try {
-  await window.daibase.writeCurrentPage(nextMarkdown);
+  await window.daibase.page.writeCurrent(nextMarkdown);
 } catch (error) {
   console.error(error);
 }
 ```
 
-`writeCurrentPage` が成功すると、Daibase は保存後の内容で `daibase:render` message を再送します。プラグインは保存後の正規化された Markdown を、次の `daibase:render` または `readCurrentPage` で確認できます。
+`page.writeCurrent` が成功すると、Daibase は保存後の内容で `daibase:render` message を再送します。プラグインは保存後の正規化された Markdown を、次の `daibase:render` または `page.readCurrent` で確認できます。別ページの `page.write` は表示中ページを自動遷移しません。必要であれば `location.open` を呼び出してください。
+
+`page.create` は未作成ページだけを作成します。既存ページを指定すると reject します。`page.write` は既存ページの更新用で、未作成ページを暗黙に作成しません。
 
 ## main HTML の制約
 
@@ -306,8 +361,8 @@ try {
 - CDN や外部ネットワークに依存しない。
 - `script src="..."` や `link rel="stylesheet"` で別ファイルを参照しない。
 - `daibase:render` message を受け取って再描画できる。
-- Markdown を読む場合は `daibase:render` message または `window.daibase.readCurrentPage` を使う。
-- Markdown を書き込む場合は `window.daibase.writeCurrentPage` を使う。
+- Markdown を読む場合は `daibase:render` message または `window.daibase.page.readCurrent` を使う。
+- Markdown を書き込む場合は `window.daibase.page.writeCurrent` または `window.daibase.page.write` を使う。
 - message が来ない状態でも確認できる fallback 表示を持つことを推奨します。
 
 Vite で React / TypeScript を使う場合は、ビルド後に JS/CSS を `dist/index.html` へ inline してください。
@@ -474,9 +529,12 @@ Daibase は登録したローカルフォルダを直接参照します。app da
 
 - プラグインは Plugin Host 管理の sandbox iframe 内で実行されます。
 - Daibase 本体 DOM、React component、Tauri command を直接触らせません。
-- 現在公開している Plugin API は `window.daibase.readCurrentPage` と `window.daibase.writeCurrentPage` です。
-- `readCurrentPage` には `page-read` permission が必要です。
-- `writeCurrentPage` には `page-write` permission が必要です。
+- 現在公開している Plugin API は `window.daibase.page.*`, `window.daibase.location.open`, 後方互換の `window.daibase.readCurrentPage` / `window.daibase.writeCurrentPage` です。
+- ページ読み取りには `page-read` permission が必要です。
+- ページ作成には `page-create` permission が必要です。
+- ページ書き込みには `page-write` permission が必要です。
+- ページ削除には `page-delete` permission が必要です。
+- Daibase の表示 location を開くには `location-open` permission が必要です。
 - プラグイン管理操作は MCP には公開していません。
 
 ## 最小サンプル

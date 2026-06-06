@@ -61,6 +61,20 @@ export type PagePluginContext = {
   title: string;
 };
 
+export type PluginPageRef = { location: string } | { namespaceId: string; path: string };
+
+export type PluginPageSnapshot = {
+  namespaceId: string;
+  path: string;
+  location: string;
+  title: string;
+  content: string;
+  frontmatter: Record<string, unknown>;
+  body: string;
+  isDirty: boolean;
+  isReadOnly: boolean;
+};
+
 export function PageSurface({
   backlinks,
   draft,
@@ -86,7 +100,12 @@ export function PageSurface({
   onToggleFavorite,
   onOpenLocation,
   onOpenMarkdownLink,
+  onPluginCreatePage,
+  onPluginDeletePage,
+  onPluginOpenLocation,
+  onPluginReadPage,
   onPluginWriteCurrentPage,
+  onPluginWritePage,
   onResolveMarkdownImage,
   onResolveMarkdownLinkStatus,
   onSelectHistoryEntry,
@@ -120,7 +139,12 @@ export function PageSurface({
   onToggleFavorite: () => void;
   onOpenLocation: (location: string) => void;
   onOpenMarkdownLink: (target: string) => void;
+  onPluginCreatePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
+  onPluginDeletePage: (ref: PluginPageRef) => Promise<void>;
+  onPluginOpenLocation: (location: string) => Promise<void>;
+  onPluginReadPage: (ref: PluginPageRef) => Promise<PluginPageSnapshot>;
   onPluginWriteCurrentPage: (content: string) => Promise<void>;
+  onPluginWritePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
   onResolveMarkdownImage: (target: string) => Promise<{
     content_type: string | null;
     data_url: string | null;
@@ -378,7 +402,12 @@ export function PageSurface({
                       pageContext={pageContext}
                       plugin={pluginViewMatch.plugin}
                       readOnly={readOnly}
+                      onCreatePage={onPluginCreatePage}
+                      onDeletePage={onPluginDeletePage}
+                      onOpenLocation={onPluginOpenLocation}
+                      onReadPage={onPluginReadPage}
                       onWriteCurrentPage={onPluginWriteCurrentPage}
+                      onWritePage={onPluginWritePage}
                     />
                   ) : (
                     <MarkdownWysiwygEditor
@@ -581,14 +610,24 @@ function PageSearchBar({
 function PluginHostView({
   content,
   contribution,
+  onCreatePage,
+  onDeletePage,
+  onOpenLocation,
+  onReadPage,
   onWriteCurrentPage,
+  onWritePage,
   pageContext,
   plugin,
   readOnly,
 }: {
   content: string;
   contribution: InstalledPluginSummary["manifest"]["contributions"][number];
+  onCreatePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
+  onDeletePage: (ref: PluginPageRef) => Promise<void>;
+  onOpenLocation: (location: string) => Promise<void>;
+  onReadPage: (ref: PluginPageRef) => Promise<PluginPageSnapshot>;
   onWriteCurrentPage: (content: string) => Promise<void>;
+  onWritePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
   pageContext: PagePluginContext;
   plugin: InstalledPluginSummary;
   readOnly: boolean;
@@ -662,7 +701,12 @@ function PluginHostView({
         contributionId: contribution.id,
         content,
         message,
+        onCreatePage,
+        onDeletePage,
+        onOpenLocation,
+        onReadPage,
         onWriteCurrentPage,
+        onWritePage,
         pageContext,
         parsedMarkdown,
         plugin,
@@ -678,7 +722,12 @@ function PluginHostView({
   }, [
     content,
     contribution.id,
+    onCreatePage,
+    onDeletePage,
+    onOpenLocation,
+    onReadPage,
     onWriteCurrentPage,
+    onWritePage,
     pageContext,
     parsedMarkdown,
     plugin,
@@ -752,7 +801,12 @@ async function handlePluginApiRequest({
   contributionId,
   content,
   message,
+  onCreatePage,
+  onDeletePage,
+  onOpenLocation,
+  onReadPage,
   onWriteCurrentPage,
+  onWritePage,
   pageContext,
   parsedMarkdown,
   plugin,
@@ -762,7 +816,12 @@ async function handlePluginApiRequest({
   contributionId: string;
   content: string;
   message: PluginApiRequestMessage;
+  onCreatePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
+  onDeletePage: (ref: PluginPageRef) => Promise<void>;
+  onOpenLocation: (location: string) => Promise<void>;
+  onReadPage: (ref: PluginPageRef) => Promise<PluginPageSnapshot>;
   onWriteCurrentPage: (content: string) => Promise<void>;
+  onWritePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
   pageContext: PagePluginContext;
   parsedMarkdown: ReturnType<typeof markdownContext>;
   plugin: InstalledPluginSummary;
@@ -787,6 +846,73 @@ async function handlePluginApiRequest({
           pluginId: plugin.id,
         }).page,
       });
+      return;
+    }
+
+    if (message.method === "page.read") {
+      requirePluginPermission(plugin, "page-read");
+      const params = message.params;
+      if (!isRecord(params) || !isPluginPageRef(params.ref)) {
+        throw new Error("page.read には page ref を指定してください。");
+      }
+      respond({
+        type: "daibase:api-response",
+        requestId: message.requestId,
+        ok: true,
+        result: await onReadPage(params.ref),
+      });
+      return;
+    }
+
+    if (message.method === "page.create") {
+      requirePluginPermission(plugin, "page-create");
+      const params = message.params;
+      if (!isRecord(params) || !isPluginPageRef(params.ref) || typeof params.content !== "string") {
+        throw new Error("page.create には page ref と Markdown 文字列を指定してください。");
+      }
+      respond({
+        type: "daibase:api-response",
+        requestId: message.requestId,
+        ok: true,
+        result: await onCreatePage(params.ref, params.content),
+      });
+      return;
+    }
+
+    if (message.method === "page.write") {
+      requirePluginPermission(plugin, "page-write");
+      const params = message.params;
+      if (!isRecord(params) || !isPluginPageRef(params.ref) || typeof params.content !== "string") {
+        throw new Error("page.write には page ref と Markdown 文字列を指定してください。");
+      }
+      respond({
+        type: "daibase:api-response",
+        requestId: message.requestId,
+        ok: true,
+        result: await onWritePage(params.ref, params.content),
+      });
+      return;
+    }
+
+    if (message.method === "page.delete") {
+      requirePluginPermission(plugin, "page-delete");
+      const params = message.params;
+      if (!isRecord(params) || !isPluginPageRef(params.ref)) {
+        throw new Error("page.delete には page ref を指定してください。");
+      }
+      await onDeletePage(params.ref);
+      respond({ type: "daibase:api-response", requestId: message.requestId, ok: true });
+      return;
+    }
+
+    if (message.method === "location.open") {
+      requirePluginPermission(plugin, "location-open");
+      const params = message.params;
+      if (!isRecord(params) || typeof params.location !== "string") {
+        throw new Error("location.open には location 文字列を指定してください。");
+      }
+      await onOpenLocation(params.location);
+      respond({ type: "daibase:api-response", requestId: message.requestId, ok: true });
       return;
     }
 
@@ -871,6 +997,31 @@ function daibasePluginApiBootstrap() {
     configurable: false,
     enumerable: true,
     value: Object.freeze({
+      page: Object.freeze({
+        read(ref) {
+          return request("page.read", { ref });
+        },
+        create(ref, content) {
+          return request("page.create", { ref, content: String(content) });
+        },
+        write(ref, content) {
+          return request("page.write", { ref, content: String(content) });
+        },
+        delete(ref) {
+          return request("page.delete", { ref });
+        },
+        readCurrent() {
+          return request("readCurrentPage");
+        },
+        writeCurrent(content) {
+          return request("writeCurrentPage", { content: String(content) });
+        },
+      }),
+      location: Object.freeze({
+        open(location) {
+          return request("location.open", { location: String(location) });
+        },
+      }),
       readCurrentPage() {
         return request("readCurrentPage");
       },
@@ -988,6 +1139,25 @@ function errorMessage(error: unknown) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPluginPageRef(value: unknown): value is PluginPageRef {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (typeof value.location === "string") {
+    return true;
+  }
+  return typeof value.namespaceId === "string" && typeof value.path === "string";
+}
+
+function requirePluginPermission(
+  plugin: InstalledPluginSummary,
+  permission: InstalledPluginSummary["manifest"]["permissions"][number],
+) {
+  if (!plugin.manifest.permissions.includes(permission)) {
+    throw new Error(`${permission} permission が必要です。`);
+  }
 }
 
 function splitCategoryInput(value: string) {
