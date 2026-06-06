@@ -309,7 +309,9 @@ fn validate_page_view_kind(kind: &PluginViewKind) -> Result<(), String> {
 fn validate_permission(permission: &PluginPermission) -> Result<(), String> {
     match permission {
         PluginPermission::PageRead
+        | PluginPermission::PageCreate
         | PluginPermission::PageWrite
+        | PluginPermission::PageDelete
         | PluginPermission::FileRead
         | PluginPermission::FileWrite
         | PluginPermission::NamespaceRead

@@ -1,8 +1,14 @@
 # Plugin Development
 
-このドキュメントは、Daibase に導入できるローカルプラグインの実装仕様です。設計背景は `docs/plugin-host-design.md` にまとめています。
+このドキュメントは、Daibase に導入できるプラグインの実装仕様です。プラグイン仕様の正はこのドキュメントに置きます。`docs/plugin-host-design.md` は設計判断の履歴だけを扱います。
 
 Daibase は Plugin Host 方式を採用します。プラグインは Daibase 本体の DOM、React component、Tauri command を直接触りません。ユーザーが登録、有効化、無効化、削除できる未知の拡張として扱い、Daibase は manifest と Plugin Host protocol だけを知ります。
+
+## ドキュメントの位置付け
+
+- 現行の manifest、配布物、登録方法、Runtime Message はこのドキュメントに集約します。
+- `docs/plugin-host-design.md` は、Plugin Host を採用する理由と将来拡張の方向性を残す設計メモです。現行実装の詳細は重複して書きません。
+- `docs/content-app-design.md` はアプリ全体設計の文脈だけを扱い、プラグインの詳細仕様はこのドキュメントを参照します。
 
 ## 対応している機能
 
@@ -33,6 +39,12 @@ my-plugin/
 React / TypeScript などで実装する場合も、Daibase が読み込むのは `manifest.json` の `main` で指定された静的 HTML です。
 
 `README.md` はアプリ内ドキュメントとして扱います。`Special:Plugins` のプラグイン一覧から README を開き、使い方、frontmatter の例、権限、注意点を確認できます。
+
+Daibase が実行時に必要とする最小配布物は次の 3 つです。
+
+- `manifest.json`
+- `README.md`
+- `main` が指すビルド済み HTML
 
 推奨する開発用構成は次の通りです。
 
@@ -112,7 +124,7 @@ my-plugin/
 : 必須。1 つ以上の contribution を指定します。現在は `pageView` のみ対応しています。
 
 `permissions`
-: 任意。Host API の capability 確認用です。現在指定できる値は `page-read`, `page-write`, `file-read`, `file-write`, `namespace-read`, `history-read`, `location-open`, `ui-notify` です。
+: 任意。Host API の capability 確認用です。現在指定できる値は `page-read`, `page-create`, `page-write`, `page-delete`, `file-read`, `file-write`, `namespace-read`, `history-read`, `location-open`, `ui-notify` です。
 
 ## pageView
 
@@ -219,6 +231,128 @@ window.addEventListener("message", (event: MessageEvent<DaibaseRenderMessage>) =
 });
 ```
 
+## Plugin API
+
+Daibase は plugin iframe に `window.daibase` を注入します。`daibase:render` message で受け取った page context は、Plugin API からも取得できます。Plugin API は manifest の `permissions` で許可された操作だけを実行できます。
+
+現在表示しているページの Markdown を読む場合:
+
+```ts
+const page = await window.daibase.page.readCurrent();
+
+console.log(page.content);
+console.log(page.body);
+console.log(page.frontmatter);
+```
+
+現在表示しているページの Markdown を更新する場合:
+
+```ts
+await window.daibase.page.writeCurrent(nextMarkdown);
+```
+
+`writeCurrent` には、更新後の Markdown 全体を渡してください。Daibase は現在の page context を対象として保存します。プラグイン側で namespace、保存先パス、正規ロケーションを組み立てる必要はありません。
+
+別ページを操作する場合は page ref を明示します。`location` は Daibase が Rust 側で解決します。namespace と path が既に分かっている場合は `{ namespaceId, path }` も使えます。
+
+```ts
+const intro = await window.daibase.page.read({
+  location: "Work:Guide/Intro.md",
+});
+
+await window.daibase.page.write(
+  { namespaceId: intro.namespaceId, path: intro.path },
+  `${intro.content}\n\nUpdated from plugin`,
+);
+```
+
+ページ作成と削除:
+
+```ts
+await window.daibase.page.create({ location: "Work:Daily/2026-06-06.md" }, "# 2026-06-06\n");
+
+await window.daibase.page.delete({
+  namespaceId: "ns-work",
+  path: "Old.md",
+});
+```
+
+Daibase の表示 location を開く場合:
+
+```ts
+await window.daibase.location.open("Work:Guide/Intro.md");
+```
+
+これらの API を使うプラグインは、`manifest.json` の `permissions` に必要な permission を追加してください。
+
+```json
+{
+  "permissions": ["page-read", "page-create", "page-write", "page-delete", "location-open"]
+}
+```
+
+必要な permission:
+
+- `page-read`: `page.readCurrent`, `page.read`, `readCurrentPage`
+- `page-create`: `page.create`
+- `page-write`: `page.writeCurrent`, `page.write`, `writeCurrentPage`
+- `page-delete`: `page.delete`
+- `location-open`: `location.open`
+
+`readCurrentPage` と `writeCurrentPage` は後方互換のため残している旧ショートカットです。新しいプラグインでは `daibase.page.readCurrent()` と `daibase.page.writeCurrent()` を使ってください。
+
+TypeScript で型を付ける場合の最小例:
+
+```ts
+declare global {
+  interface Window {
+    daibase: {
+      page: {
+        readCurrent(): Promise<PageSnapshot>;
+        writeCurrent(content: string): Promise<void>;
+        read(ref: PageRef): Promise<PageSnapshot>;
+        create(ref: PageRef, content: string): Promise<PageSnapshot>;
+        write(ref: PageRef, content: string): Promise<PageSnapshot>;
+        delete(ref: PageRef): Promise<void>;
+      };
+      location: {
+        open(location: string): Promise<void>;
+      };
+      readCurrentPage(): Promise<PageSnapshot>;
+      writeCurrentPage(content: string): Promise<void>;
+    };
+  }
+}
+
+type PageRef = { location: string } | { namespaceId: string; path: string };
+
+type PageSnapshot = {
+  namespaceId: string;
+  path: string;
+  location: string;
+  title: string;
+  content: string;
+  frontmatter: Record<string, unknown>;
+  body: string;
+  isDirty: boolean;
+  isReadOnly: boolean;
+};
+```
+
+書き込みに失敗した場合、`page.writeCurrent` や `page.write` は reject します。プラグイン側では必要に応じて `try` / `catch` で扱ってください。
+
+```ts
+try {
+  await window.daibase.page.writeCurrent(nextMarkdown);
+} catch (error) {
+  console.error(error);
+}
+```
+
+`page.writeCurrent` が成功すると、Daibase は保存後の内容で `daibase:render` message を再送します。プラグインは保存後の正規化された Markdown を、次の `daibase:render` または `page.readCurrent` で確認できます。別ページの `page.write` は表示中ページを自動遷移しません。必要であれば `location.open` を呼び出してください。
+
+`page.create` は未作成ページだけを作成します。既存ページを指定すると reject します。`page.write` は既存ページの更新用で、未作成ページを暗黙に作成しません。
+
 ## main HTML の制約
 
 `main` で指定する HTML は次の条件を満たしてください。
@@ -227,9 +361,104 @@ window.addEventListener("message", (event: MessageEvent<DaibaseRenderMessage>) =
 - CDN や外部ネットワークに依存しない。
 - `script src="..."` や `link rel="stylesheet"` で別ファイルを参照しない。
 - `daibase:render` message を受け取って再描画できる。
+- Markdown を読む場合は `daibase:render` message または `window.daibase.page.readCurrent` を使う。
+- Markdown を書き込む場合は `window.daibase.page.writeCurrent` または `window.daibase.page.write` を使う。
 - message が来ない状態でも確認できる fallback 表示を持つことを推奨します。
 
 Vite で React / TypeScript を使う場合は、ビルド後に JS/CSS を `dist/index.html` へ inline してください。
+
+## GitHub 管理プラグインの配布方針
+
+GitHub で管理されるプラグインも、Daibase から見ると「ビルド済み配布物を含むプラグインフォルダ」として扱います。
+
+プラグイン開発者は、好きな framework、bundler、言語で開発して構いません。ただし通常配布では、Daibase が読み込む成果物をリポジトリに commit してください。Daibase 本体は通常インストール時に `pnpm build`、`npm install`、`cargo build` などを実行しません。
+
+理由は次の通りです。
+
+- Daibase が plugin ごとの build tool、package manager、Node / Rust / Python などの実行環境を解釈せずに済む。
+- 開発者は framework を自由に選べる。
+- ユーザーのインストール時に任意の build script を実行しないため、更新とセキュリティ確認を単純に保てる。
+- Daibase は manifest、README、ビルド済み `main` の検証と読み込みに責務を絞れる。
+
+推奨する GitHub リポジトリ構成:
+
+```text
+my-plugin/
+  manifest.json
+  README.md
+  package.json
+  src/
+  dist/
+    index.html
+```
+
+通常配布で commit するもの:
+
+- `manifest.json`
+- `README.md`
+- `dist/index.html` など `main` が指す成果物
+- 開発に必要なソースコードと lockfile
+
+通常配布で Daibase がしないこと:
+
+- 依存関係の install
+- build script の実行
+- framework や bundler の自動判定
+- `main` に含まれない asset graph の解決
+
+将来的に GitHub からの install / update に対応する場合も、基本は repo、tag、branch、または release asset からプラグインフォルダを取得し、`manifest.json` と `main` を検証して登録します。配布単位は release tag を推奨します。
+
+manifest に配布元を記録する場合の例:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "com.example.calendar",
+  "name": "Calendar",
+  "version": "0.1.0",
+  "description": "Markdown ページをカレンダーとして表示します。",
+  "main": "dist/index.html",
+  "source": {
+    "kind": "github",
+    "repo": "owner/calendar-plugin",
+    "ref": "v0.1.0"
+  },
+  "contributions": [
+    {
+      "kind": "pageView",
+      "id": "calendar",
+      "name": "Calendar",
+      "slot": "main",
+      "match": {
+        "frontmatter": {
+          "daibase.view": "calendar"
+        }
+      },
+      "view": {
+        "kind": "custom"
+      },
+      "activation": {
+        "autoOpen": true
+      }
+    }
+  ],
+  "permissions": ["page-read", "location-open"]
+}
+```
+
+`source` は将来拡張の候補です。現行 schema では未実装のため、Daibase 側で保存、検証、更新処理を追加するまでは必須にしません。
+
+## 開発用 build の扱い
+
+Daibase 内で build する方式は、通常配布ではなく developer mode の機能として扱います。
+
+developer mode で検討できること:
+
+- ローカル登録済みプラグインに対して、manifest や設定で宣言された build command を手動実行する。
+- build command 実行前にユーザーへ明示的に確認する。
+- build 後に `main` の存在と読み込みを再検証する。
+
+通常ユーザー向けの install / update では、Daibase は build command を自動実行しません。
 
 ## React / TypeScript テンプレート方針
 
@@ -283,6 +512,8 @@ fs.rmSync(path.join(distDir, "assets"), { force: true, recursive: true });
 
 ## 登録と更新
 
+現行実装では、ローカルフォルダ登録のみ対応しています。
+
 1. `pnpm build` などで `dist/index.html` を作成します。
 2. Daibase の `Special:Plugins` を開きます。
 3. ローカルフォルダからプラグインフォルダを選択して登録します。
@@ -298,8 +529,12 @@ Daibase は登録したローカルフォルダを直接参照します。app da
 
 - プラグインは Plugin Host 管理の sandbox iframe 内で実行されます。
 - Daibase 本体 DOM、React component、Tauri command を直接触らせません。
-- 任意の Daibase 操作 API はまだ公開していません。
-- `permissions` は manifest に保存されますが、現在の Host API proxy は未実装です。
+- 現在公開している Plugin API は `window.daibase.page.*`, `window.daibase.location.open`, 後方互換の `window.daibase.readCurrentPage` / `window.daibase.writeCurrentPage` です。
+- ページ読み取りには `page-read` permission が必要です。
+- ページ作成には `page-create` permission が必要です。
+- ページ書き込みには `page-write` permission が必要です。
+- ページ削除には `page-delete` permission が必要です。
+- Daibase の表示 location を開くには `location-open` permission が必要です。
 - プラグイン管理操作は MCP には公開していません。
 
 ## 最小サンプル

@@ -61,6 +61,20 @@ export type PagePluginContext = {
   title: string;
 };
 
+export type PluginPageRef = { location: string } | { namespaceId: string; path: string };
+
+export type PluginPageSnapshot = {
+  namespaceId: string;
+  path: string;
+  location: string;
+  title: string;
+  content: string;
+  frontmatter: Record<string, unknown>;
+  body: string;
+  isDirty: boolean;
+  isReadOnly: boolean;
+};
+
 export function PageSurface({
   backlinks,
   draft,
@@ -86,6 +100,12 @@ export function PageSurface({
   onToggleFavorite,
   onOpenLocation,
   onOpenMarkdownLink,
+  onPluginCreatePage,
+  onPluginDeletePage,
+  onPluginOpenLocation,
+  onPluginReadPage,
+  onPluginWriteCurrentPage,
+  onPluginWritePage,
   onResolveMarkdownImage,
   onResolveMarkdownLinkStatus,
   onSelectHistoryEntry,
@@ -119,6 +139,12 @@ export function PageSurface({
   onToggleFavorite: () => void;
   onOpenLocation: (location: string) => void;
   onOpenMarkdownLink: (target: string) => void;
+  onPluginCreatePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
+  onPluginDeletePage: (ref: PluginPageRef) => Promise<void>;
+  onPluginOpenLocation: (location: string) => Promise<void>;
+  onPluginReadPage: (ref: PluginPageRef) => Promise<PluginPageSnapshot>;
+  onPluginWriteCurrentPage: (content: string) => Promise<void>;
+  onPluginWritePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
   onResolveMarkdownImage: (target: string) => Promise<{
     content_type: string | null;
     data_url: string | null;
@@ -376,6 +402,12 @@ export function PageSurface({
                       pageContext={pageContext}
                       plugin={pluginViewMatch.plugin}
                       readOnly={readOnly}
+                      onCreatePage={onPluginCreatePage}
+                      onDeletePage={onPluginDeletePage}
+                      onOpenLocation={onPluginOpenLocation}
+                      onReadPage={onPluginReadPage}
+                      onWriteCurrentPage={onPluginWriteCurrentPage}
+                      onWritePage={onPluginWritePage}
                     />
                   ) : (
                     <MarkdownWysiwygEditor
@@ -578,12 +610,24 @@ function PageSearchBar({
 function PluginHostView({
   content,
   contribution,
+  onCreatePage,
+  onDeletePage,
+  onOpenLocation,
+  onReadPage,
+  onWriteCurrentPage,
+  onWritePage,
   pageContext,
   plugin,
   readOnly,
 }: {
   content: string;
   contribution: InstalledPluginSummary["manifest"]["contributions"][number];
+  onCreatePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
+  onDeletePage: (ref: PluginPageRef) => Promise<void>;
+  onOpenLocation: (location: string) => Promise<void>;
+  onReadPage: (ref: PluginPageRef) => Promise<PluginPageSnapshot>;
+  onWriteCurrentPage: (content: string) => Promise<void>;
+  onWritePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
   pageContext: PagePluginContext;
   plugin: InstalledPluginSummary;
   readOnly: boolean;
@@ -594,6 +638,7 @@ function PluginHostView({
   const [iframeHeight, setIframeHeight] = useState(420);
   const [error, setError] = useState<string | null>(null);
   const parsedMarkdown = useMemo(() => markdownContext(content), [content]);
+  const frameHtml = useMemo(() => injectDaibasePluginApi(pluginHtml), [pluginHtml]);
 
   useEffect(() => {
     let isMounted = true;
@@ -637,6 +682,59 @@ function PluginHostView({
     window.setTimeout(() => updateIframeHeight(iframeRef.current, setIframeHeight), 50);
   }, [content, contribution.id, pageContext, parsedMarkdown, plugin.id, pluginHtml, readOnly]);
 
+  useEffect(() => {
+    if (!pluginHtml) {
+      return;
+    }
+
+    const handleMessage = (event: MessageEvent<PluginApiRequestMessage>) => {
+      if (event.source !== iframeRef.current?.contentWindow) {
+        return;
+      }
+
+      const message = event.data;
+      if (!message || message.type !== "daibase:api-request") {
+        return;
+      }
+
+      void handlePluginApiRequest({
+        contributionId: contribution.id,
+        content,
+        message,
+        onCreatePage,
+        onDeletePage,
+        onOpenLocation,
+        onReadPage,
+        onWriteCurrentPage,
+        onWritePage,
+        pageContext,
+        parsedMarkdown,
+        plugin,
+        readOnly,
+        respond: (response) => {
+          iframeRef.current?.contentWindow?.postMessage(response, "*");
+        },
+      });
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [
+    content,
+    contribution.id,
+    onCreatePage,
+    onDeletePage,
+    onOpenLocation,
+    onReadPage,
+    onWriteCurrentPage,
+    onWritePage,
+    pageContext,
+    parsedMarkdown,
+    plugin,
+    pluginHtml,
+    readOnly,
+  ]);
+
   if (error) {
     return (
       <Alert severity="error" sx={{ m: 2 }}>
@@ -661,7 +759,7 @@ function PluginHostView({
       component="iframe"
       ref={iframeRef}
       title={contribution.name}
-      srcDoc={pluginHtml}
+      srcDoc={frameHtml}
       scrolling="no"
       onLoad={() => {
         iframeResizeCleanupRef.current?.();
@@ -685,6 +783,256 @@ function PluginHostView({
       }}
     />
   );
+}
+
+type PluginApiRequestMessage = {
+  type: "daibase:api-request";
+  requestId: string;
+  method: string;
+  params?: unknown;
+};
+
+type PluginApiResponseMessage = {
+  type: "daibase:api-response";
+  requestId: string;
+} & ({ ok: true; result?: unknown } | { ok: false; error: string });
+
+async function handlePluginApiRequest({
+  contributionId,
+  content,
+  message,
+  onCreatePage,
+  onDeletePage,
+  onOpenLocation,
+  onReadPage,
+  onWriteCurrentPage,
+  onWritePage,
+  pageContext,
+  parsedMarkdown,
+  plugin,
+  readOnly,
+  respond,
+}: {
+  contributionId: string;
+  content: string;
+  message: PluginApiRequestMessage;
+  onCreatePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
+  onDeletePage: (ref: PluginPageRef) => Promise<void>;
+  onOpenLocation: (location: string) => Promise<void>;
+  onReadPage: (ref: PluginPageRef) => Promise<PluginPageSnapshot>;
+  onWriteCurrentPage: (content: string) => Promise<void>;
+  onWritePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
+  pageContext: PagePluginContext;
+  parsedMarkdown: ReturnType<typeof markdownContext>;
+  plugin: InstalledPluginSummary;
+  readOnly: boolean;
+  respond: (response: PluginApiResponseMessage) => void;
+}) {
+  try {
+    if (message.method === "readCurrentPage") {
+      if (!plugin.manifest.permissions.includes("page-read")) {
+        throw new Error("page-read permission が必要です。");
+      }
+      respond({
+        type: "daibase:api-response",
+        requestId: message.requestId,
+        ok: true,
+        result: pluginRenderContext({
+          contributionId,
+          content,
+          isReadOnly: readOnly,
+          pageContext,
+          parsedMarkdown,
+          pluginId: plugin.id,
+        }).page,
+      });
+      return;
+    }
+
+    if (message.method === "page.read") {
+      requirePluginPermission(plugin, "page-read");
+      const params = message.params;
+      if (!isRecord(params) || !isPluginPageRef(params.ref)) {
+        throw new Error("page.read には page ref を指定してください。");
+      }
+      respond({
+        type: "daibase:api-response",
+        requestId: message.requestId,
+        ok: true,
+        result: await onReadPage(params.ref),
+      });
+      return;
+    }
+
+    if (message.method === "page.create") {
+      requirePluginPermission(plugin, "page-create");
+      const params = message.params;
+      if (!isRecord(params) || !isPluginPageRef(params.ref) || typeof params.content !== "string") {
+        throw new Error("page.create には page ref と Markdown 文字列を指定してください。");
+      }
+      respond({
+        type: "daibase:api-response",
+        requestId: message.requestId,
+        ok: true,
+        result: await onCreatePage(params.ref, params.content),
+      });
+      return;
+    }
+
+    if (message.method === "page.write") {
+      requirePluginPermission(plugin, "page-write");
+      const params = message.params;
+      if (!isRecord(params) || !isPluginPageRef(params.ref) || typeof params.content !== "string") {
+        throw new Error("page.write には page ref と Markdown 文字列を指定してください。");
+      }
+      respond({
+        type: "daibase:api-response",
+        requestId: message.requestId,
+        ok: true,
+        result: await onWritePage(params.ref, params.content),
+      });
+      return;
+    }
+
+    if (message.method === "page.delete") {
+      requirePluginPermission(plugin, "page-delete");
+      const params = message.params;
+      if (!isRecord(params) || !isPluginPageRef(params.ref)) {
+        throw new Error("page.delete には page ref を指定してください。");
+      }
+      await onDeletePage(params.ref);
+      respond({ type: "daibase:api-response", requestId: message.requestId, ok: true });
+      return;
+    }
+
+    if (message.method === "location.open") {
+      requirePluginPermission(plugin, "location-open");
+      const params = message.params;
+      if (!isRecord(params) || typeof params.location !== "string") {
+        throw new Error("location.open には location 文字列を指定してください。");
+      }
+      await onOpenLocation(params.location);
+      respond({ type: "daibase:api-response", requestId: message.requestId, ok: true });
+      return;
+    }
+
+    if (message.method === "writeCurrentPage") {
+      if (!plugin.manifest.permissions.includes("page-write")) {
+        throw new Error("page-write permission が必要です。");
+      }
+      if (readOnly) {
+        throw new Error("読み取り専用ページは書き込めません。");
+      }
+
+      const params = message.params;
+      if (!isRecord(params) || typeof params.content !== "string") {
+        throw new Error("writeCurrentPage には Markdown 文字列を指定してください。");
+      }
+
+      await onWriteCurrentPage(params.content);
+      respond({ type: "daibase:api-response", requestId: message.requestId, ok: true });
+      return;
+    }
+
+    throw new Error(`未対応の Plugin API です: ${message.method}`);
+  } catch (caught) {
+    respond({
+      type: "daibase:api-response",
+      requestId: message.requestId,
+      ok: false,
+      error: errorMessage(caught),
+    });
+  }
+}
+
+function injectDaibasePluginApi(html: string | null) {
+  if (html === null) {
+    return "";
+  }
+
+  const bootstrap = `<script>${daibasePluginApiBootstrap()}<\/script>`;
+  if (/<head(\s[^>]*)?>/i.test(html)) {
+    return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${bootstrap}`);
+  }
+  if (/<html(\s[^>]*)?>/i.test(html)) {
+    return html.replace(/<html(\s[^>]*)?>/i, (match) => `${match}<head>${bootstrap}</head>`);
+  }
+  return `${bootstrap}${html}`;
+}
+
+function daibasePluginApiBootstrap() {
+  return `
+(() => {
+  const pending = new Map();
+  const request = (method, params) =>
+    new Promise((resolve, reject) => {
+      const requestId =
+        globalThis.crypto?.randomUUID?.() ??
+        \`plugin-request-\${Date.now()}-\${Math.random()}\`;
+      pending.set(requestId, { resolve, reject });
+      window.parent.postMessage(
+        { type: "daibase:api-request", requestId, method, params },
+        "*",
+      );
+    });
+
+  window.addEventListener("message", (event) => {
+    const message = event.data;
+    if (!message || message.type !== "daibase:api-response") {
+      return;
+    }
+    const callbacks = pending.get(message.requestId);
+    if (!callbacks) {
+      return;
+    }
+    pending.delete(message.requestId);
+    if (message.ok) {
+      callbacks.resolve(message.result);
+      return;
+    }
+    callbacks.reject(new Error(message.error || "Daibase API request failed."));
+  });
+
+  Object.defineProperty(window, "daibase", {
+    configurable: false,
+    enumerable: true,
+    value: Object.freeze({
+      page: Object.freeze({
+        read(ref) {
+          return request("page.read", { ref });
+        },
+        create(ref, content) {
+          return request("page.create", { ref, content: String(content) });
+        },
+        write(ref, content) {
+          return request("page.write", { ref, content: String(content) });
+        },
+        delete(ref) {
+          return request("page.delete", { ref });
+        },
+        readCurrent() {
+          return request("readCurrentPage");
+        },
+        writeCurrent(content) {
+          return request("writeCurrentPage", { content: String(content) });
+        },
+      }),
+      location: Object.freeze({
+        open(location) {
+          return request("location.open", { location: String(location) });
+        },
+      }),
+      readCurrentPage() {
+        return request("readCurrentPage");
+      },
+      writeCurrentPage(content) {
+        return request("writeCurrentPage", { content: String(content) });
+      },
+    }),
+    writable: false,
+  });
+})();
+`;
 }
 
 function observeIframeHeight(
@@ -744,30 +1092,41 @@ function postRenderMessage(
     {
       type: "daibase:render",
       requestId: requestId(),
-      context: {
-        namespace: {
-          id: payload.pageContext.namespaceId,
-          name: payload.pageContext.namespaceName,
-        },
-        page: {
-          namespaceId: payload.pageContext.namespaceId,
-          path: payload.pageContext.path,
-          location: payload.pageContext.location,
-          title: payload.pageContext.title,
-          content: payload.content,
-          frontmatter: payload.parsedMarkdown.frontmatter,
-          body: payload.parsedMarkdown.body,
-          isDirty: false,
-          isReadOnly: payload.isReadOnly,
-        },
-        view: {
-          contributionId: payload.contributionId,
-          pluginId: payload.pluginId,
-        },
-      },
+      context: pluginRenderContext(payload),
     },
     "*",
   );
+}
+
+function pluginRenderContext(payload: {
+  contributionId: string;
+  content: string;
+  isReadOnly: boolean;
+  pageContext: PagePluginContext;
+  parsedMarkdown: ReturnType<typeof markdownContext>;
+  pluginId: string;
+}) {
+  return {
+    namespace: {
+      id: payload.pageContext.namespaceId,
+      name: payload.pageContext.namespaceName,
+    },
+    page: {
+      namespaceId: payload.pageContext.namespaceId,
+      path: payload.pageContext.path,
+      location: payload.pageContext.location,
+      title: payload.pageContext.title,
+      content: payload.content,
+      frontmatter: payload.parsedMarkdown.frontmatter,
+      body: payload.parsedMarkdown.body,
+      isDirty: false,
+      isReadOnly: payload.isReadOnly,
+    },
+    view: {
+      contributionId: payload.contributionId,
+      pluginId: payload.pluginId,
+    },
+  };
 }
 
 function requestId() {
@@ -776,6 +1135,29 @@ function requestId() {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPluginPageRef(value: unknown): value is PluginPageRef {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (typeof value.location === "string") {
+    return true;
+  }
+  return typeof value.namespaceId === "string" && typeof value.path === "string";
+}
+
+function requirePluginPermission(
+  plugin: InstalledPluginSummary,
+  permission: InstalledPluginSummary["manifest"]["permissions"][number],
+) {
+  if (!plugin.manifest.permissions.includes(permission)) {
+    throw new Error(`${permission} permission が必要です。`);
+  }
 }
 
 function splitCategoryInput(value: string) {
