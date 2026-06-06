@@ -28,6 +28,20 @@ export function MarkdownEditor({
     highlight.scrollTop = event.currentTarget.scrollTop;
     highlight.scrollLeft = event.currentTarget.scrollLeft;
   };
+  const textLayerSx = {
+    boxSizing: "border-box",
+    fontFamily:
+      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+    fontSize: 16,
+    fontVariantLigatures: "none",
+    letterSpacing: 0,
+    lineHeight: 1.6,
+    overflowWrap: "break-word",
+    p: 1.5,
+    tabSize: 4,
+    whiteSpace: "pre-wrap",
+    wordBreak: "normal",
+  } as const;
 
   return (
     <Box
@@ -48,21 +62,20 @@ export function MarkdownEditor({
         aria-hidden
         data-testid="markdown-editor-highlights"
         sx={{
+          ...textLayerSx,
           bottom: 0,
           color: "transparent",
-          fontFamily:
-            'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-          fontSize: 16,
           left: 0,
-          lineHeight: 1.6,
-          overflow: "hidden",
-          p: 1.5,
+          overflow: "auto",
           pointerEvents: "none",
           position: "absolute",
           right: 0,
+          scrollbarColor: "transparent transparent",
+          scrollbarGutter: "stable",
           top: 0,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
+          "&::-webkit-scrollbar, &::-webkit-scrollbar-thumb, &::-webkit-scrollbar-track": {
+            backgroundColor: "transparent",
+          },
           "& mark": {
             color: "transparent",
           },
@@ -78,24 +91,20 @@ export function MarkdownEditor({
         onChange={(event) => onChange(event.target.value)}
         onScroll={syncScroll}
         sx={{
+          ...textLayerSx,
           bgcolor: "transparent",
           border: 0,
-          boxSizing: "border-box",
           color: "text.primary",
           display: "block",
-          fontFamily:
-            'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-          fontSize: 16,
           height: "100%",
-          lineHeight: 1.6,
+          m: 0,
           minHeight: 480,
           outline: 0,
           overflow: "auto",
-          p: 1.5,
           position: "relative",
           resize: "vertical",
+          scrollbarGutter: "stable",
           width: "100%",
-          wordBreak: "break-word",
           "&::selection": {
             backgroundColor: "rgba(9, 105, 218, 0.28)",
           },
