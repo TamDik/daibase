@@ -1,8 +1,14 @@
 # Plugin Development
 
-このドキュメントは、Daibase に導入できるローカルプラグインの実装仕様です。設計背景は `docs/plugin-host-design.md` にまとめています。
+このドキュメントは、Daibase に導入できるプラグインの実装仕様です。プラグイン仕様の正はこのドキュメントに置きます。`docs/plugin-host-design.md` は設計判断の履歴だけを扱います。
 
 Daibase は Plugin Host 方式を採用します。プラグインは Daibase 本体の DOM、React component、Tauri command を直接触りません。ユーザーが登録、有効化、無効化、削除できる未知の拡張として扱い、Daibase は manifest と Plugin Host protocol だけを知ります。
+
+## ドキュメントの位置付け
+
+- 現行の manifest、配布物、登録方法、Runtime Message はこのドキュメントに集約します。
+- `docs/plugin-host-design.md` は、Plugin Host を採用する理由と将来拡張の方向性を残す設計メモです。現行実装の詳細は重複して書きません。
+- `docs/content-app-design.md` はアプリ全体設計の文脈だけを扱い、プラグインの詳細仕様はこのドキュメントを参照します。
 
 ## 対応している機能
 
@@ -33,6 +39,12 @@ my-plugin/
 React / TypeScript などで実装する場合も、Daibase が読み込むのは `manifest.json` の `main` で指定された静的 HTML です。
 
 `README.md` はアプリ内ドキュメントとして扱います。`Special:Plugins` のプラグイン一覧から README を開き、使い方、frontmatter の例、権限、注意点を確認できます。
+
+Daibase が実行時に必要とする最小配布物は次の 3 つです。
+
+- `manifest.json`
+- `README.md`
+- `main` が指すビルド済み HTML
 
 推奨する開発用構成は次の通りです。
 
@@ -231,6 +243,99 @@ window.addEventListener("message", (event: MessageEvent<DaibaseRenderMessage>) =
 
 Vite で React / TypeScript を使う場合は、ビルド後に JS/CSS を `dist/index.html` へ inline してください。
 
+## GitHub 管理プラグインの配布方針
+
+GitHub で管理されるプラグインも、Daibase から見ると「ビルド済み配布物を含むプラグインフォルダ」として扱います。
+
+プラグイン開発者は、好きな framework、bundler、言語で開発して構いません。ただし通常配布では、Daibase が読み込む成果物をリポジトリに commit してください。Daibase 本体は通常インストール時に `pnpm build`、`npm install`、`cargo build` などを実行しません。
+
+理由は次の通りです。
+
+- Daibase が plugin ごとの build tool、package manager、Node / Rust / Python などの実行環境を解釈せずに済む。
+- 開発者は framework を自由に選べる。
+- ユーザーのインストール時に任意の build script を実行しないため、更新とセキュリティ確認を単純に保てる。
+- Daibase は manifest、README、ビルド済み `main` の検証と読み込みに責務を絞れる。
+
+推奨する GitHub リポジトリ構成:
+
+```text
+my-plugin/
+  manifest.json
+  README.md
+  package.json
+  src/
+  dist/
+    index.html
+```
+
+通常配布で commit するもの:
+
+- `manifest.json`
+- `README.md`
+- `dist/index.html` など `main` が指す成果物
+- 開発に必要なソースコードと lockfile
+
+通常配布で Daibase がしないこと:
+
+- 依存関係の install
+- build script の実行
+- framework や bundler の自動判定
+- `main` に含まれない asset graph の解決
+
+将来的に GitHub からの install / update に対応する場合も、基本は repo、tag、branch、または release asset からプラグインフォルダを取得し、`manifest.json` と `main` を検証して登録します。配布単位は release tag を推奨します。
+
+manifest に配布元を記録する場合の例:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "com.example.calendar",
+  "name": "Calendar",
+  "version": "0.1.0",
+  "description": "Markdown ページをカレンダーとして表示します。",
+  "main": "dist/index.html",
+  "source": {
+    "kind": "github",
+    "repo": "owner/calendar-plugin",
+    "ref": "v0.1.0"
+  },
+  "contributions": [
+    {
+      "kind": "pageView",
+      "id": "calendar",
+      "name": "Calendar",
+      "slot": "main",
+      "match": {
+        "frontmatter": {
+          "daibase.view": "calendar"
+        }
+      },
+      "view": {
+        "kind": "custom"
+      },
+      "activation": {
+        "autoOpen": true
+      }
+    }
+  ],
+  "permissions": ["page-read", "location-open"]
+}
+```
+
+`source` は将来拡張の候補です。現行 schema では未実装のため、Daibase 側で保存、検証、更新処理を追加するまでは必須にしません。
+
+## 開発用 build の扱い
+
+Daibase 内で build する方式は、通常配布ではなく developer mode の機能として扱います。
+
+developer mode で検討できること:
+
+- ローカル登録済みプラグインに対して、manifest や設定で宣言された build command を手動実行する。
+- build command 実行前にユーザーへ明示的に確認する。
+- build 後に `main` の存在と読み込みを再検証する。
+
+通常ユーザー向けの install / update では、Daibase は build command を自動実行しません。
+
 ## React / TypeScript テンプレート方針
 
 React / TypeScript で実装して構いません。ただし、Daibase に渡す成果物は静的な単一 HTML です。
@@ -282,6 +387,8 @@ fs.rmSync(path.join(distDir, "assets"), { force: true, recursive: true });
 ```
 
 ## 登録と更新
+
+現行実装では、ローカルフォルダ登録のみ対応しています。
 
 1. `pnpm build` などで `dist/index.html` を作成します。
 2. Daibase の `Special:Plugins` を開きます。

@@ -46,3 +46,9 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
 ```
+
+## ドキュメント
+
+- `docs/content-app-design.md`: アプリ全体の設計メモ
+- `docs/plugin-development.md`: プラグインの現行仕様、配布、登録方法
+- `docs/plugin-host-design.md`: Plugin Host 方式の設計判断
