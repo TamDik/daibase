@@ -19,14 +19,29 @@ export function MarkdownEditor({
   onChange: (value: string) => void;
 }) {
   const highlightRef = useRef<HTMLDivElement | null>(null);
+  const lineNumberRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const lineCount = Math.max(1, value.split("\n").length);
+  const lineHeightPx = 22;
 
-  const syncScroll = (event: UIEvent<HTMLTextAreaElement>) => {
+  const syncScroll = (event: UIEvent<HTMLDivElement>) => {
+    const scrollTop = event.currentTarget.scrollTop;
+    const scrollLeft = event.currentTarget.scrollLeft;
     const highlight = highlightRef.current;
-    if (!highlight) {
-      return;
+    if (highlight) {
+      highlight.scrollTop = scrollTop;
+      highlight.scrollLeft = scrollLeft;
     }
-    highlight.scrollTop = event.currentTarget.scrollTop;
-    highlight.scrollLeft = event.currentTarget.scrollLeft;
+
+    const lineNumber = lineNumberRef.current;
+    if (lineNumber) {
+      lineNumber.scrollTop = scrollTop;
+    }
+
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.scrollLeft = scrollLeft;
+    }
   };
   const textLayerSx = {
     boxSizing: "border-box",
@@ -35,85 +50,121 @@ export function MarkdownEditor({
     fontSize: 16,
     fontVariantLigatures: "none",
     letterSpacing: 0,
-    lineHeight: 1.6,
-    overflowWrap: "break-word",
-    p: 1.5,
+    lineHeight: `${lineHeightPx}px`,
+    overflowWrap: "normal",
+    px: 1.5,
+    py: 1.25,
     tabSize: 4,
-    whiteSpace: "pre-wrap",
+    whiteSpace: "pre",
     wordBreak: "normal",
   } as const;
 
   return (
     <Box
       sx={{
-        border: "1px solid",
-        borderColor: disabled ? "action.disabledBackground" : "divider",
-        borderRadius: 1,
-        minHeight: 480,
-        position: "relative",
+        bgcolor: "#ffffff",
+        color: "text.primary",
+        overflow: "hidden",
         "&:focus-within": {
-          borderColor: "primary.main",
-          boxShadow: (theme) => `0 0 0 1px ${theme.palette.primary.main}`,
+          boxShadow: (theme) => `inset 0 0 0 1px ${theme.palette.primary.main}`,
         },
       }}
     >
       <Box
-        ref={highlightRef}
-        aria-hidden
-        data-testid="markdown-editor-highlights"
-        sx={{
-          ...textLayerSx,
-          bottom: 0,
-          color: "transparent",
-          left: 0,
-          overflow: "auto",
-          pointerEvents: "none",
-          position: "absolute",
-          right: 0,
-          scrollbarColor: "transparent transparent",
-          scrollbarGutter: "stable",
-          top: 0,
-          "&::-webkit-scrollbar, &::-webkit-scrollbar-thumb, &::-webkit-scrollbar-track": {
-            backgroundColor: "transparent",
-          },
-          "& mark": {
-            color: "transparent",
-          },
-        }}
-      >
-        {highlightMarkdownSearchMatches(value, searchMatches, activeSearchMatch)}
-      </Box>
-      <Box
-        component="textarea"
-        aria-label={ariaLabel}
-        disabled={disabled}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
         onScroll={syncScroll}
         sx={{
-          ...textLayerSx,
-          bgcolor: "transparent",
-          border: 0,
-          color: "text.primary",
-          display: "block",
-          height: "100%",
-          m: 0,
+          display: "flex",
           minHeight: 480,
-          outline: 0,
           overflow: "auto",
-          position: "relative",
-          resize: "vertical",
+          scrollbarColor: "#d0d7de #ffffff",
           scrollbarGutter: "stable",
-          width: "100%",
-          "&::selection": {
-            backgroundColor: "rgba(9, 105, 218, 0.28)",
-          },
-          "&:disabled": {
-            cursor: "not-allowed",
-            opacity: 0.72,
-          },
         }}
-      />
+      >
+        <Box
+          ref={lineNumberRef}
+          aria-hidden
+          data-testid="markdown-editor-line-numbers"
+          sx={{
+            bgcolor: "#f6f8fa",
+            borderRight: "1px solid",
+            borderColor: "divider",
+            color: "text.secondary",
+            flex: "0 0 54px",
+            fontFamily:
+              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+            fontSize: 13,
+            lineHeight: `${lineHeightPx}px`,
+            overflow: "hidden",
+            py: 1.25,
+            textAlign: "right",
+            userSelect: "none",
+          }}
+        >
+          {Array.from({ length: lineCount }, (_, index) => (
+            <Box key={index + 1} sx={{ height: lineHeightPx, pr: 1.25 }}>
+              {index + 1}
+            </Box>
+          ))}
+        </Box>
+        <Box sx={{ flex: "1 1 auto", minWidth: 0, position: "relative" }}>
+          <Box
+            ref={highlightRef}
+            aria-hidden
+            data-testid="markdown-editor-highlights"
+            sx={{
+              ...textLayerSx,
+              bottom: 0,
+              color: "transparent",
+              left: 0,
+              minHeight: 480,
+              minWidth: "max-content",
+              overflow: "hidden",
+              pointerEvents: "none",
+              position: "absolute",
+              right: 0,
+              top: 0,
+              "& mark": {
+                color: "transparent",
+              },
+            }}
+          >
+            {highlightMarkdownSearchMatches(value, searchMatches, activeSearchMatch)}
+          </Box>
+          <Box
+            component="textarea"
+            ref={textareaRef}
+            aria-label={ariaLabel}
+            disabled={disabled}
+            rows={lineCount}
+            value={value}
+            wrap="off"
+            onChange={(event) => onChange(event.target.value)}
+            sx={{
+              ...textLayerSx,
+              bgcolor: "transparent",
+              border: 0,
+              color: "text.primary",
+              display: "block",
+              height: "auto",
+              m: 0,
+              minHeight: 480,
+              minWidth: "max-content",
+              outline: 0,
+              overflow: "hidden",
+              position: "relative",
+              resize: "none",
+              width: "100%",
+              "&::selection": {
+                backgroundColor: "rgba(9, 105, 218, 0.28)",
+              },
+              "&:disabled": {
+                cursor: "not-allowed",
+                opacity: 0.72,
+              },
+            }}
+          />
+        </Box>
+      </Box>
     </Box>
   );
 }

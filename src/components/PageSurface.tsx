@@ -356,7 +356,7 @@ export function PageSurface({
             )}
             <>
               {editorView === "source" ? (
-                <Box sx={{ mx: 2, mt: 4 }}>
+                <Box sx={{ p: 0 }}>
                   <MarkdownEditor
                     activeSearchMatch={activePageSearchMatch}
                     ariaLabel="Markdownソース"

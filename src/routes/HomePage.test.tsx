@@ -548,6 +548,9 @@ describe("HomePage", () => {
     expect(within(searchRegion).getByRole("button", { name: "次の一致" })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Markdown" }));
+    const lineNumbers = screen.getByTestId("markdown-editor-line-numbers");
+    expect(lineNumbers).toHaveTextContent("1");
+    expect(lineNumbers).toHaveTextContent("5");
     const highlights = screen.getByTestId("markdown-editor-highlights");
     expect(highlights.querySelectorAll("mark")).toHaveLength(1);
     expect(highlights.querySelector("mark")).toHaveAttribute("data-active-search-match", "true");
