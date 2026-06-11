@@ -28,6 +28,7 @@ import {
 } from "@mui/icons-material";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 
 import type {
@@ -76,7 +77,7 @@ export function HelpSpecialPage({
           gridTemplateColumns: "240px minmax(0, 1fr)",
           minHeight: 0,
           overflow: "hidden",
-          p: 3,
+          p: 0,
         }}
       >
         <List
@@ -107,6 +108,12 @@ export function HelpSpecialPage({
               "& a": { color: "primary.main" },
               "& blockquote": { borderLeft: "4px solid #d0d7de", color: "text.secondary", pl: 2 },
               "& code": { bgcolor: "#f6f8fa", borderRadius: 0.5, px: 0.5 },
+              "& code.hljs": { display: "block", overflowX: "auto", p: 0 },
+              "& .hljs-attr, & .hljs-number, & .hljs-string": { color: "#0550ae" },
+              "& .hljs-built_in, & .hljs-title, & .hljs-type": { color: "#953800" },
+              "& .hljs-comment, & .hljs-meta": { color: "#57606a" },
+              "& .hljs-keyword, & .hljs-literal, & .hljs-selector-tag": { color: "#cf222e" },
+              "& .hljs-name, & .hljs-property, & .hljs-variable": { color: "#8250df" },
               "& pre": { bgcolor: "#f6f8fa", borderRadius: 1, overflowX: "auto", p: 2 },
               "& pre code": { bgcolor: "transparent", p: 0 },
               "& table": { borderCollapse: "collapse", display: "block", overflowX: "auto" },
@@ -114,6 +121,7 @@ export function HelpSpecialPage({
             }}
           >
             <ReactMarkdown
+              rehypePlugins={[rehypeHighlight]}
               remarkPlugins={[remarkGfm]}
               components={{
                 a: ({ href, ...props }) => {

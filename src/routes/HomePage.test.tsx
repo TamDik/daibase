@@ -396,7 +396,8 @@ describe("HomePage", () => {
             path: "plugin-development.md",
             title: "Plugin Development",
             location,
-            markdown: "# Plugin Development\n\n[設計](content-app-design.md)\n\n- pageView\n",
+            markdown:
+              "# Plugin Development\n\n[設計](content-app-design.md)\n\n- pageView\n\n```ts\nconst enabled = true;\n```\n",
           },
         };
       }
@@ -1411,6 +1412,11 @@ describe("HomePage", () => {
     expect(
       getComputedStyle(screen.getByRole("article", { name: "ヘルプドキュメント本文" })).overflowY,
     ).toBe("auto");
+    expect(
+      screen
+        .getByRole("article", { name: "ヘルプドキュメント本文" })
+        .querySelector("code.hljs .hljs-keyword"),
+    ).toHaveTextContent("const");
     expect(api.openLocation).toHaveBeenCalledWith("Special:Help/plugin-development.md", "ns-work");
   });
 
