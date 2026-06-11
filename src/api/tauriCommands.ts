@@ -269,6 +269,16 @@ export type PluginDocumentation = {
   markdown: string;
 };
 
+export type HelpDocumentSummary = {
+  path: string;
+  title: string;
+  location: string;
+};
+
+export type HelpDocument = HelpDocumentSummary & {
+  markdown: string;
+};
+
 export type MarkdownLinkStatus = {
   location: string;
   exists: boolean;
@@ -299,6 +309,11 @@ export type ResolvedLocation =
     }
   | {
       kind: "specialNamespaces";
+      location: string;
+    }
+  | {
+      kind: "specialHelp";
+      documentPath: string | null;
       location: string;
     }
   | {
@@ -351,6 +366,12 @@ export type OpenLocationResult =
       kind: "specialNamespaces";
       location: string;
       namespaces: NamespaceSummary[];
+    }
+  | {
+      kind: "specialHelp";
+      location: string;
+      documents: HelpDocumentSummary[];
+      document: HelpDocument | null;
     }
   | {
       kind: "specialPages";

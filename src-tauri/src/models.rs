@@ -174,6 +174,21 @@ pub struct SpecialPageSummary {
     pub location: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct HelpDocumentSummary {
+    pub path: String,
+    pub title: String,
+    pub location: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct HelpDocument {
+    pub path: String,
+    pub title: String,
+    pub location: String,
+    pub markdown: String,
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct DeletedContentSummary {
     pub file_id: String,
@@ -373,6 +388,11 @@ pub enum OpenLocationResult {
     SpecialNamespaces {
         location: String,
         namespaces: Vec<NamespaceSummary>,
+    },
+    SpecialHelp {
+        location: String,
+        documents: Vec<HelpDocumentSummary>,
+        document: Option<HelpDocument>,
     },
     SpecialPages {
         location: String,

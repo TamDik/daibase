@@ -1286,6 +1286,11 @@ pub fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialP
             location: "Special:Namespaces".to_string(),
         },
         SpecialPageSummary {
+            title: "Help".to_string(),
+            description: "Daibase のドキュメントを表示します。".to_string(),
+            location: "Special:Help".to_string(),
+        },
+        SpecialPageSummary {
             title: "Pages".to_string(),
             description: "namespace 内の全ページを表示します。".to_string(),
             location: format!("{}:Special:Pages", namespace.name),

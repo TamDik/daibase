@@ -317,6 +317,11 @@ describe("HomePage", () => {
               location: "Special:Namespaces",
             },
             {
+              title: "Help",
+              description: "Daibase のドキュメントを表示します。",
+              location: "Special:Help",
+            },
+            {
               title: "Pages",
               description: "namespace 内の全ページを表示します。",
               location: "Work:Special:Pages",
@@ -350,6 +355,49 @@ describe("HomePage", () => {
           namespace,
           location: "Work:Special:Pages",
           content: contentTree,
+        };
+      }
+      if (location === "Special:Help") {
+        return {
+          kind: "specialHelp",
+          location: "Special:Help",
+          documents: [
+            {
+              path: "content-app-design.md",
+              title: "コンテンツ管理アプリ設計",
+              location: "Special:Help/content-app-design.md",
+            },
+            {
+              path: "plugin-development.md",
+              title: "Plugin Development",
+              location: "Special:Help/plugin-development.md",
+            },
+          ],
+          document: null,
+        };
+      }
+      if (location === "Special:Help/plugin-development.md") {
+        return {
+          kind: "specialHelp",
+          location,
+          documents: [
+            {
+              path: "content-app-design.md",
+              title: "コンテンツ管理アプリ設計",
+              location: "Special:Help/content-app-design.md",
+            },
+            {
+              path: "plugin-development.md",
+              title: "Plugin Development",
+              location,
+            },
+          ],
+          document: {
+            path: "plugin-development.md",
+            title: "Plugin Development",
+            location,
+            markdown: "# Plugin Development\n\n[設計](content-app-design.md)\n\n- pageView\n",
+          },
         };
       }
       if (location === "Special:DeletedPages" || location === "Work:Special:DeletedPages") {
@@ -1345,6 +1393,25 @@ describe("HomePage", () => {
     await user.click(screen.getByRole("button", { name: "Favorites" }));
 
     expect(await screen.findByRole("heading", { name: "Favorites" })).toBeInTheDocument();
+  });
+
+  it("サイドバーからヘルプを開き docs の Markdown を表示する", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await user.click(await screen.findByRole("button", { name: "ヘルプ" }));
+
+    expect(await screen.findByRole("heading", { name: "Help" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Plugin Development/ }));
+    expect(await screen.findByRole("heading", { name: "Plugin Development" })).toBeInTheDocument();
+    expect(screen.getByText("pageView")).toBeInTheDocument();
+    expect(
+      getComputedStyle(screen.getByRole("list", { name: "ヘルプドキュメント一覧" })).overflowY,
+    ).toBe("auto");
+    expect(
+      getComputedStyle(screen.getByRole("article", { name: "ヘルプドキュメント本文" })).overflowY,
+    ).toBe("auto");
+    expect(api.openLocation).toHaveBeenCalledWith("Special:Help/plugin-development.md", "ns-work");
   });
 
   it("サイドバーの星ボタンでページをお気に入りに追加する", async () => {
