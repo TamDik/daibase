@@ -439,7 +439,7 @@ export function HomePage() {
     [pageMode],
   );
 
-  const handlePluginWriteCurrentPage = useCallback(
+  const handlePluginWriteCurrent = useCallback(
     async (nextContent: string) => {
       const currentPageView = pageViewRef.current;
 
@@ -521,7 +521,7 @@ export function HomePage() {
         throw new Error("指定したページはまだ存在しません。page.create を使ってください。");
       }
       if (isCurrentPluginPageTarget(target, pageViewRef.current)) {
-        await handlePluginWriteCurrentPage(nextContent);
+        await handlePluginWriteCurrent(nextContent);
         const currentPage = pageViewRef.current?.page;
         if (!currentPage) {
           throw new Error("保存後のページを読み込めません。");
@@ -536,7 +536,7 @@ export function HomePage() {
       }
       return pluginPageSnapshot(saved.page);
     },
-    [activeNamespace, handlePluginWriteCurrentPage],
+    [activeNamespace, handlePluginWriteCurrent],
   );
 
   const createPluginPage = useCallback(
@@ -1453,7 +1453,7 @@ export function HomePage() {
                     await navigate(location);
                   }}
                   onPluginReadPage={readPluginPage}
-                  onPluginWriteCurrentPage={handlePluginWriteCurrentPage}
+                  onPluginWriteCurrent={handlePluginWriteCurrent}
                   onPluginWritePage={writePluginPage}
                   onResolveMarkdownImage={handleResolvePageMarkdownImage}
                   onResolveMarkdownLinkStatus={handleResolvePageMarkdownLinkStatus}

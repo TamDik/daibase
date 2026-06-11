@@ -596,6 +596,8 @@ describe("HomePage", () => {
 
     const frame = await screen.findByTitle("Calendar");
     expect(frame.getAttribute("srcdoc")).toContain('window, "daibase"');
+    expect(frame.getAttribute("srcdoc")).not.toContain("readCurrentPage");
+    expect(frame.getAttribute("srcdoc")).not.toContain("writeCurrentPage");
     expect(frame.getAttribute("srcdoc")).toContain("<body>Calendar</body>");
     expect(frame).toHaveAttribute("scrolling", "no");
     expect(api.resolvePluginMain).toHaveBeenCalledWith("com.example.calendar");
@@ -636,7 +638,7 @@ describe("HomePage", () => {
       dispatchPluginApiRequest(frame, {
         type: "daibase:api-request",
         requestId: "plugin-write-1",
-        method: "writeCurrentPage",
+        method: "page.writeCurrent",
         params: {
           content: "---\ndaibase.view: calendar\n---\n# Updated",
         },
@@ -688,7 +690,7 @@ describe("HomePage", () => {
       dispatchPluginApiRequest(frame, {
         type: "daibase:api-request",
         requestId: "plugin-read-1",
-        method: "readCurrentPage",
+        method: "page.readCurrent",
       });
       expect(postMessage).toHaveBeenCalledWith(
         {
@@ -1034,7 +1036,7 @@ describe("HomePage", () => {
       dispatchPluginApiRequest(frame, {
         type: "daibase:api-request",
         requestId: "plugin-write-2",
-        method: "writeCurrentPage",
+        method: "page.writeCurrent",
         params: {
           content: "# Rejected",
         },

@@ -104,7 +104,7 @@ export function PageSurface({
   onPluginDeletePage,
   onPluginOpenLocation,
   onPluginReadPage,
-  onPluginWriteCurrentPage,
+  onPluginWriteCurrent,
   onPluginWritePage,
   onResolveMarkdownImage,
   onResolveMarkdownLinkStatus,
@@ -143,7 +143,7 @@ export function PageSurface({
   onPluginDeletePage: (ref: PluginPageRef) => Promise<void>;
   onPluginOpenLocation: (location: string) => Promise<void>;
   onPluginReadPage: (ref: PluginPageRef) => Promise<PluginPageSnapshot>;
-  onPluginWriteCurrentPage: (content: string) => Promise<void>;
+  onPluginWriteCurrent: (content: string) => Promise<void>;
   onPluginWritePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
   onResolveMarkdownImage: (target: string) => Promise<{
     content_type: string | null;
@@ -406,7 +406,7 @@ export function PageSurface({
                       onDeletePage={onPluginDeletePage}
                       onOpenLocation={onPluginOpenLocation}
                       onReadPage={onPluginReadPage}
-                      onWriteCurrentPage={onPluginWriteCurrentPage}
+                      onWriteCurrent={onPluginWriteCurrent}
                       onWritePage={onPluginWritePage}
                     />
                   ) : (
@@ -614,7 +614,7 @@ function PluginHostView({
   onDeletePage,
   onOpenLocation,
   onReadPage,
-  onWriteCurrentPage,
+  onWriteCurrent,
   onWritePage,
   pageContext,
   plugin,
@@ -626,7 +626,7 @@ function PluginHostView({
   onDeletePage: (ref: PluginPageRef) => Promise<void>;
   onOpenLocation: (location: string) => Promise<void>;
   onReadPage: (ref: PluginPageRef) => Promise<PluginPageSnapshot>;
-  onWriteCurrentPage: (content: string) => Promise<void>;
+  onWriteCurrent: (content: string) => Promise<void>;
   onWritePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
   pageContext: PagePluginContext;
   plugin: InstalledPluginSummary;
@@ -705,7 +705,7 @@ function PluginHostView({
         onDeletePage,
         onOpenLocation,
         onReadPage,
-        onWriteCurrentPage,
+        onWriteCurrent,
         onWritePage,
         pageContext,
         parsedMarkdown,
@@ -726,7 +726,7 @@ function PluginHostView({
     onDeletePage,
     onOpenLocation,
     onReadPage,
-    onWriteCurrentPage,
+    onWriteCurrent,
     onWritePage,
     pageContext,
     parsedMarkdown,
@@ -805,7 +805,7 @@ async function handlePluginApiRequest({
   onDeletePage,
   onOpenLocation,
   onReadPage,
-  onWriteCurrentPage,
+  onWriteCurrent,
   onWritePage,
   pageContext,
   parsedMarkdown,
@@ -820,7 +820,7 @@ async function handlePluginApiRequest({
   onDeletePage: (ref: PluginPageRef) => Promise<void>;
   onOpenLocation: (location: string) => Promise<void>;
   onReadPage: (ref: PluginPageRef) => Promise<PluginPageSnapshot>;
-  onWriteCurrentPage: (content: string) => Promise<void>;
+  onWriteCurrent: (content: string) => Promise<void>;
   onWritePage: (ref: PluginPageRef, content: string) => Promise<PluginPageSnapshot>;
   pageContext: PagePluginContext;
   parsedMarkdown: ReturnType<typeof markdownContext>;
@@ -829,10 +829,8 @@ async function handlePluginApiRequest({
   respond: (response: PluginApiResponseMessage) => void;
 }) {
   try {
-    if (message.method === "readCurrentPage") {
-      if (!plugin.manifest.permissions.includes("page-read")) {
-        throw new Error("page-read permission が必要です。");
-      }
+    if (message.method === "page.readCurrent") {
+      requirePluginPermission(plugin, "page-read");
       respond({
         type: "daibase:api-response",
         requestId: message.requestId,
@@ -916,20 +914,18 @@ async function handlePluginApiRequest({
       return;
     }
 
-    if (message.method === "writeCurrentPage") {
-      if (!plugin.manifest.permissions.includes("page-write")) {
-        throw new Error("page-write permission が必要です。");
-      }
+    if (message.method === "page.writeCurrent") {
+      requirePluginPermission(plugin, "page-write");
       if (readOnly) {
         throw new Error("読み取り専用ページは書き込めません。");
       }
 
       const params = message.params;
       if (!isRecord(params) || typeof params.content !== "string") {
-        throw new Error("writeCurrentPage には Markdown 文字列を指定してください。");
+        throw new Error("page.writeCurrent には Markdown 文字列を指定してください。");
       }
 
-      await onWriteCurrentPage(params.content);
+      await onWriteCurrent(params.content);
       respond({ type: "daibase:api-response", requestId: message.requestId, ok: true });
       return;
     }
@@ -1011,10 +1007,10 @@ function daibasePluginApiBootstrap() {
           return request("page.delete", { ref });
         },
         readCurrent() {
-          return request("readCurrentPage");
+          return request("page.readCurrent");
         },
         writeCurrent(content) {
-          return request("writeCurrentPage", { content: String(content) });
+          return request("page.writeCurrent", { content: String(content) });
         },
       }),
       location: Object.freeze({
@@ -1022,12 +1018,6 @@ function daibasePluginApiBootstrap() {
           return request("location.open", { location: String(location) });
         },
       }),
-      readCurrentPage() {
-        return request("readCurrentPage");
-      },
-      writeCurrentPage(content) {
-        return request("writeCurrentPage", { content: String(content) });
-      },
     }),
     writable: false,
   });

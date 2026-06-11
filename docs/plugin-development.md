@@ -293,13 +293,11 @@ await window.daibase.location.open("Work:Guide/Intro.md");
 
 必要な permission:
 
-- `page-read`: `page.readCurrent`, `page.read`, `readCurrentPage`
+- `page-read`: `page.readCurrent`, `page.read`
 - `page-create`: `page.create`
-- `page-write`: `page.writeCurrent`, `page.write`, `writeCurrentPage`
+- `page-write`: `page.writeCurrent`, `page.write`
 - `page-delete`: `page.delete`
 - `location-open`: `location.open`
-
-`readCurrentPage` と `writeCurrentPage` は後方互換のため残している旧ショートカットです。新しいプラグインでは `daibase.page.readCurrent()` と `daibase.page.writeCurrent()` を使ってください。
 
 TypeScript で型を付ける場合の最小例:
 
@@ -318,8 +316,6 @@ declare global {
       location: {
         open(location: string): Promise<void>;
       };
-      readCurrentPage(): Promise<PageSnapshot>;
-      writeCurrentPage(content: string): Promise<void>;
     };
   }
 }
@@ -529,7 +525,7 @@ Daibase は登録したローカルフォルダを直接参照します。app da
 
 - プラグインは Plugin Host 管理の sandbox iframe 内で実行されます。
 - Daibase 本体 DOM、React component、Tauri command を直接触らせません。
-- 現在公開している Plugin API は `window.daibase.page.*`, `window.daibase.location.open`, 後方互換の `window.daibase.readCurrentPage` / `window.daibase.writeCurrentPage` です。
+- 現在公開している Plugin API は `window.daibase.page.*` と `window.daibase.location.open` です。
 - ページ読み取りには `page-read` permission が必要です。
 - ページ作成には `page-create` permission が必要です。
 - ページ書き込みには `page-write` permission が必要です。

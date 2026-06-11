@@ -119,7 +119,7 @@ Structured View の利点:
 
 ## Host API
 
-プラグインに Daibase 操作 API を渡す場合は capability 制にします。現行実装ではページ CRUD と location open を Plugin Host API として公開しています。`readCurrentPage` / `writeCurrentPage` は後方互換のため残し、新しい API は `window.daibase.page.*` と `window.daibase.location.*` に整理します。
+プラグインに Daibase 操作 API を渡す場合は capability 制にします。現行実装ではページ CRUD と location open を `window.daibase.page.*` と `window.daibase.location.*` に整理して公開しています。
 
 ```ts
 type PluginHostApi = {
@@ -134,8 +134,6 @@ type PluginHostApi = {
   location: {
     open(location: string): Promise<void>;
   };
-  readCurrentPage(): Promise<PageSnapshot>;
-  writeCurrentPage(content: string): Promise<void>;
 };
 
 type PageRef = { location: string } | { namespaceId: string; path: string };
@@ -145,9 +143,9 @@ API 呼び出しは manifest の permission と現在の context で検査しま
 
 現行 API:
 
-- `page.readCurrent`, `page.read`, `readCurrentPage` には `page-read` が必要。
+- `page.readCurrent`, `page.read` には `page-read` が必要。
 - `page.create` には `page-create` が必要。
-- `page.writeCurrent`, `page.write`, `writeCurrentPage` には `page-write` が必要。
+- `page.writeCurrent`, `page.write` には `page-write` が必要。
 - `page.delete` には `page-delete` が必要。
 - `location.open` には `location-open` が必要。
 
