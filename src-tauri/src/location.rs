@@ -7,6 +7,7 @@ pub const DELETED_PAGES_LOCATION: &str = "Special:DeletedPages";
 pub const FAVORITES_LOCATION: &str = "Special:Favorites";
 pub const CATEGORIES_LOCATION: &str = "Special:Categories";
 pub const PLUGINS_LOCATION: &str = "Special:Plugins";
+pub const HELP_LOCATION: &str = "Special:Help";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -24,6 +25,10 @@ pub enum ResolvedLocation {
         location: String,
     },
     SpecialNamespaces {
+        location: String,
+    },
+    SpecialHelp {
+        document_path: Option<String>,
         location: String,
     },
     SpecialPages {
@@ -61,6 +66,17 @@ pub fn resolve_location(
     if location == NAMESPACES_LOCATION {
         return Ok(ResolvedLocation::SpecialNamespaces {
             location: NAMESPACES_LOCATION.to_string(),
+        });
+    }
+
+    if location == HELP_LOCATION || location.starts_with("Special:Help/") {
+        let document_path = location
+            .strip_prefix("Special:Help/")
+            .filter(|path| !path.is_empty())
+            .map(ToString::to_string);
+        return Ok(ResolvedLocation::SpecialHelp {
+            document_path,
+            location: location.to_string(),
         });
     }
 
@@ -345,6 +361,32 @@ mod tests {
             resolved,
             ResolvedLocation::SpecialNamespaces {
                 location: "Special:Namespaces".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_global_help_page_without_namespace() {
+        let resolved = resolve_location("Special:Help", &[], None).unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedLocation::SpecialHelp {
+                document_path: None,
+                location: "Special:Help".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_embedded_help_document_without_namespace() {
+        let resolved = resolve_location("Special:Help/plugin-development.md", &[], None).unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedLocation::SpecialHelp {
+                document_path: Some("plugin-development.md".to_string()),
+                location: "Special:Help/plugin-development.md".to_string(),
             }
         );
     }

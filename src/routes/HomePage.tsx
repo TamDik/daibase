@@ -19,6 +19,8 @@ import {
   type ContentTree,
   type FavoriteContentSummary,
   type FileHistoryEntry,
+  type HelpDocument,
+  type HelpDocumentSummary,
   type InstalledPluginSummary,
   type ManagedFileContent,
   type NamespaceSummary,
@@ -69,6 +71,7 @@ import {
   CategoriesSpecialPage,
   DeletedPagesSpecialPage,
   FavoritesSpecialPage,
+  HelpSpecialPage,
   PagesSpecialPage,
   NamespacesSpecialPage,
   PluginsSpecialPage,
@@ -97,6 +100,12 @@ type SpecialView =
   | {
       kind: "namespaces";
       location: string;
+    }
+  | {
+      kind: "help";
+      location: string;
+      documents: HelpDocumentSummary[];
+      document: HelpDocument | null;
     }
   | {
       kind: "specialPages";
@@ -213,6 +222,21 @@ export function HomePage() {
       setPageView(null);
       setFileView(null);
       setSpecialView({ kind: "namespaces", location: opened.location });
+      setDraft("");
+      setCurrentLocation(opened.location);
+      setPageMode("view");
+      return nextLocation;
+    }
+
+    if (opened.kind === "specialHelp") {
+      setPageView(null);
+      setFileView(null);
+      setSpecialView({
+        kind: "help",
+        location: opened.location,
+        documents: opened.documents,
+        document: opened.document,
+      });
       setDraft("");
       setCurrentLocation(opened.location);
       setPageMode("view");
@@ -439,7 +463,7 @@ export function HomePage() {
     [pageMode],
   );
 
-  const handlePluginWriteCurrentPage = useCallback(
+  const handlePluginWriteCurrent = useCallback(
     async (nextContent: string) => {
       const currentPageView = pageViewRef.current;
 
@@ -521,7 +545,7 @@ export function HomePage() {
         throw new Error("指定したページはまだ存在しません。page.create を使ってください。");
       }
       if (isCurrentPluginPageTarget(target, pageViewRef.current)) {
-        await handlePluginWriteCurrentPage(nextContent);
+        await handlePluginWriteCurrent(nextContent);
         const currentPage = pageViewRef.current?.page;
         if (!currentPage) {
           throw new Error("保存後のページを読み込めません。");
@@ -536,7 +560,7 @@ export function HomePage() {
       }
       return pluginPageSnapshot(saved.page);
     },
-    [activeNamespace, handlePluginWriteCurrentPage],
+    [activeNamespace, handlePluginWriteCurrent],
   );
 
   const createPluginPage = useCallback(
@@ -1336,7 +1360,11 @@ export function HomePage() {
                   />
                   <Box
                     data-testid="special-page-scroll"
-                    sx={{ flex: "1 1 auto", minHeight: 0, overflow: "auto" }}
+                    sx={{
+                      flex: "1 1 auto",
+                      minHeight: 0,
+                      overflow: specialView.kind === "help" ? "hidden" : "auto",
+                    }}
                   >
                     {specialView.kind === "namespaces" && (
                       <NamespacesSpecialPage
@@ -1354,6 +1382,15 @@ export function HomePage() {
                       <SpecialPagesIndex
                         location={specialView.location}
                         pages={specialView.pages}
+                        onOpenLocation={(location) => void navigate(location)}
+                      />
+                    )}
+
+                    {specialView.kind === "help" && (
+                      <HelpSpecialPage
+                        document={specialView.document}
+                        documents={specialView.documents}
+                        location={specialView.location}
                         onOpenLocation={(location) => void navigate(location)}
                       />
                     )}
@@ -1453,7 +1490,7 @@ export function HomePage() {
                     await navigate(location);
                   }}
                   onPluginReadPage={readPluginPage}
-                  onPluginWriteCurrentPage={handlePluginWriteCurrentPage}
+                  onPluginWriteCurrent={handlePluginWriteCurrent}
                   onPluginWritePage={writePluginPage}
                   onResolveMarkdownImage={handleResolvePageMarkdownImage}
                   onResolveMarkdownLinkStatus={handleResolvePageMarkdownLinkStatus}

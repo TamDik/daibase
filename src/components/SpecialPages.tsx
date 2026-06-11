@@ -27,6 +27,9 @@ import {
   RestoreOutlined,
 } from "@mui/icons-material";
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
+import remarkGfm from "remark-gfm";
 
 import type {
   CategoryGroupSummary,
@@ -34,11 +37,139 @@ import type {
   ContentTree,
   DeletedContentSummary,
   FavoriteContentSummary,
+  HelpDocument,
+  HelpDocumentSummary,
   PluginDocumentation,
   InstalledPluginSummary,
   NamespaceSummary,
   SpecialPageSummary,
 } from "../api/tauriCommands";
+
+export function HelpSpecialPage({
+  document,
+  documents,
+  location,
+  onOpenLocation,
+}: {
+  document: HelpDocument | null;
+  documents: HelpDocumentSummary[];
+  location: string;
+  onOpenLocation: (location: string) => void;
+}) {
+  return (
+    <Paper
+      elevation={0}
+      sx={{ bgcolor: "#ffffff", display: "flex", flexDirection: "column", height: "100%" }}
+    >
+      <Box sx={{ flex: "0 0 auto", px: 2, py: 1.5 }}>
+        <Typography variant="h5" component="h2">
+          Help
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {location}
+        </Typography>
+      </Box>
+      <Box
+        sx={{
+          display: "grid",
+          flex: "1 1 auto",
+          gap: 3,
+          gridTemplateColumns: "240px minmax(0, 1fr)",
+          minHeight: 0,
+          overflow: "hidden",
+          p: 0,
+        }}
+      >
+        <List
+          dense
+          disablePadding
+          aria-label="ヘルプドキュメント一覧"
+          sx={{ minHeight: 0, overflowY: "auto" }}
+        >
+          {documents.map((item) => (
+            <ListItemButton
+              key={item.path}
+              selected={document?.path === item.path}
+              onClick={() => onOpenLocation(item.location)}
+              sx={{ borderRadius: 1 }}
+            >
+              <ListItemText primary={item.title} secondary={item.path} />
+            </ListItemButton>
+          ))}
+        </List>
+        {document ? (
+          <Box
+            aria-label="ヘルプドキュメント本文"
+            component="article"
+            sx={{
+              minHeight: 0,
+              minWidth: 0,
+              overflowY: "auto",
+              "& a": { color: "primary.main" },
+              "& blockquote": { borderLeft: "4px solid #d0d7de", color: "text.secondary", pl: 2 },
+              "& code": { bgcolor: "#f6f8fa", borderRadius: 0.5, px: 0.5 },
+              "& code.hljs": { display: "block", overflowX: "auto", p: 0 },
+              "& .hljs-attr, & .hljs-number, & .hljs-string": { color: "#0550ae" },
+              "& .hljs-built_in, & .hljs-title, & .hljs-type": { color: "#953800" },
+              "& .hljs-comment, & .hljs-meta": { color: "#57606a" },
+              "& .hljs-keyword, & .hljs-literal, & .hljs-selector-tag": { color: "#cf222e" },
+              "& .hljs-name, & .hljs-property, & .hljs-variable": { color: "#8250df" },
+              "& pre": { bgcolor: "#f6f8fa", borderRadius: 1, overflowX: "auto", p: 2 },
+              "& pre code": { bgcolor: "transparent", p: 0 },
+              "& table": { borderCollapse: "collapse", display: "block", overflowX: "auto" },
+              "& td, & th": { border: "1px solid #d0d7de", px: 1.5, py: 0.75 },
+            }}
+          >
+            <ReactMarkdown
+              rehypePlugins={[rehypeHighlight]}
+              remarkPlugins={[remarkGfm]}
+              components={{
+                a: ({ href, ...props }) => {
+                  const helpLocation = helpDocumentLocation(href);
+                  return (
+                    <a
+                      {...props}
+                      href={href}
+                      onClick={
+                        helpLocation
+                          ? (event) => {
+                              event.preventDefault();
+                              onOpenLocation(helpLocation);
+                            }
+                          : undefined
+                      }
+                      rel={helpLocation ? undefined : "noreferrer"}
+                      target={helpLocation ? undefined : "_blank"}
+                    />
+                  );
+                },
+              }}
+            >
+              {document.markdown}
+            </ReactMarkdown>
+          </Box>
+        ) : (
+          <Typography color="text.secondary" variant="body2">
+            左の一覧からドキュメントを選択してください。
+          </Typography>
+        )}
+      </Box>
+    </Paper>
+  );
+}
+
+function helpDocumentLocation(href: string | undefined) {
+  if (!href || /^(?:[a-z]+:|#)/i.test(href)) {
+    return null;
+  }
+  const path = href
+    .split(/[?#]/, 1)[0]
+    .replace(/^\.\//, "")
+    .replace(/^docs\//, "");
+  return path.endsWith(".md") && !path.includes("/") && !path.includes("..")
+    ? `Special:Help/${path}`
+    : null;
+}
 
 export function SpecialPagesIndex({
   location,

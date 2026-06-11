@@ -389,6 +389,7 @@ pub fn resolve_markdown_link_status(
             ..
         } => crate::namespace::file_exists_for_namespace(&namespace, &file_path)?,
         ResolvedLocation::SpecialNamespaces { .. }
+        | ResolvedLocation::SpecialHelp { .. }
         | ResolvedLocation::SpecialPages { .. }
         | ResolvedLocation::SpecialPagesList { .. }
         | ResolvedLocation::SpecialDeletedPages { .. }
@@ -529,6 +530,17 @@ pub fn open_location(
                 namespaces,
             })
         }
+        ResolvedLocation::SpecialHelp {
+            document_path,
+            location,
+        } => Ok(OpenLocationResult::SpecialHelp {
+            location,
+            documents: crate::help::list_documents(),
+            document: document_path
+                .as_deref()
+                .map(crate::help::read_document)
+                .transpose()?,
+        }),
         ResolvedLocation::SpecialPages {
             namespace,
             location,

@@ -5,6 +5,7 @@ import {
   DeleteOutlined,
   InsertDriveFileOutlined,
   FolderOutlined,
+  HelpOutlined,
   NoteAddOutlined,
   PublicOutlined,
   SortByAlphaOutlined,
@@ -249,6 +250,15 @@ function SidebarToolbar({
               <PublicOutlined fontSize="small" />
             </IconButton>
           </span>
+        </Tooltip>
+        <Tooltip title="ヘルプ">
+          <IconButton
+            aria-label="ヘルプ"
+            size="small"
+            onClick={() => onOpenLocation("Special:Help")}
+          >
+            <HelpOutlined fontSize="small" />
+          </IconButton>
         </Tooltip>
         <Tooltip title="ターミナル">
           <IconButton aria-label="ターミナル" size="small" onClick={onToggleTerminal}>

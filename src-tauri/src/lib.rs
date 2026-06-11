@@ -1,4 +1,5 @@
 mod commands;
+mod help;
 mod location;
 mod mcp;
 mod models;
