@@ -1243,6 +1243,35 @@ fn search_content_for_namespace(
         })
         .collect::<Vec<_>>();
 
+    for summary in crate::help::list_documents() {
+        let document = crate::help::read_document(&summary.path)?;
+        let title_match = fuzzy_match(&mut matcher, &document.title, &normalized_query);
+        let path_match = fuzzy_match(&mut matcher, &document.location, &normalized_query);
+        let snippet = search_snippet(&document.markdown, &normalized_query);
+
+        if let Some(score) = search_rank(
+            &document.title,
+            &document.location,
+            &normalized_query,
+            title_match.as_ref(),
+            path_match.as_ref(),
+            snippet.is_some(),
+        ) {
+            results.push(ScoredSearchResult {
+                score,
+                result: SearchContentResult {
+                    content_kind: "special".to_string(),
+                    path: document.location.clone(),
+                    title: document.title,
+                    location: document.location,
+                    snippet,
+                    title_match_indices: match_indices(title_match),
+                    path_match_indices: match_indices(path_match),
+                },
+            });
+        }
+    }
+
     let mut paths = Vec::new();
     collect_visible_file_paths(&namespace.root_path, &namespace.root_path, &mut paths)?;
     paths.sort();
@@ -2018,11 +2047,9 @@ mod tests {
         assert_eq!(results[1].snippet.as_deref(), Some("beta note"));
 
         let path_results = search_content_for_namespace(&namespace, "intro").unwrap();
-        assert_eq!(path_results.len(), 1);
         assert_eq!(path_results[0].path, "Guide/Intro.md");
 
         let special_results = search_content_for_namespace(&namespace, "favorites").unwrap();
-        assert_eq!(special_results.len(), 1);
         assert_eq!(special_results[0].content_kind, "special");
         assert_eq!(special_results[0].title, "Favorites");
         assert_eq!(special_results[0].location, "Work:Special:Favorites");
@@ -2037,10 +2064,34 @@ mod tests {
             Some("カテゴリ別にページを表示します。")
         );
 
+        let help_path_results =
+            search_content_for_namespace(&namespace, "plugin-development.md").unwrap();
+        assert_eq!(help_path_results[0].content_kind, "special");
+        assert_eq!(
+            help_path_results[0].location,
+            "Special:Help/plugin-development.md"
+        );
+        assert!(!help_path_results[0].path_match_indices.is_empty());
+
+        let help_content_results =
+            search_content_for_namespace(&namespace, "capability 制").unwrap();
+        assert_eq!(help_content_results.len(), 1);
+        assert_eq!(help_content_results[0].content_kind, "special");
+        assert_eq!(
+            help_content_results[0].location,
+            "Special:Help/plugin-host-design.md"
+        );
+        assert!(help_content_results[0]
+            .snippet
+            .as_deref()
+            .is_some_and(|snippet| snippet.contains("capability 制")));
+
         let fuzzy_results = search_content_for_namespace(&namespace, "gdi").unwrap();
-        assert_eq!(fuzzy_results.len(), 1);
-        assert_eq!(fuzzy_results[0].path, "Guide/Intro.md");
-        assert_eq!(fuzzy_results[0].path_match_indices, vec![0, 3, 6]);
+        let guide_result = fuzzy_results
+            .iter()
+            .find(|result| result.path == "Guide/Intro.md")
+            .unwrap();
+        assert_eq!(guide_result.path_match_indices, vec![0, 3, 6]);
 
         let ranked_results = search_content_for_namespace(&namespace, "main").unwrap();
         assert_eq!(ranked_results[0].path, "Main.md");

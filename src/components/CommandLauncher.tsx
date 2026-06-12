@@ -13,6 +13,7 @@ import {
 import {
   ArticleOutlined,
   AutoAwesomeOutlined,
+  HelpOutlined,
   InsertDriveFileOutlined,
   SearchRounded,
 } from "@mui/icons-material";
@@ -307,7 +308,7 @@ function SearchResultItem({
   onMouseEnter: () => void;
   onOpen: () => void;
 }) {
-  const visual = searchResultVisual(result.content_kind);
+  const visual = searchResultVisual(result);
   const ResultIcon = visual.icon;
 
   return (
@@ -449,13 +450,13 @@ function KeyboardHint({ keys, label }: { keys: string; label: string }) {
   );
 }
 
-function searchResultVisual(contentKind: string): {
+function searchResultVisual(result: SearchContentResult): {
   label: string;
   color: string;
   background: string;
   icon: ComponentType<{ fontSize?: "small" }>;
 } {
-  if (contentKind === "page") {
+  if (result.content_kind === "page") {
     return {
       label: "ページ",
       color: "#8250df",
@@ -463,7 +464,15 @@ function searchResultVisual(contentKind: string): {
       icon: ArticleOutlined,
     };
   }
-  if (contentKind === "special") {
+  if (result.content_kind === "special" && result.location.startsWith("Special:Help/")) {
+    return {
+      label: "ヘルプ",
+      color: "#1a7f37",
+      background: "#dafbe1",
+      icon: HelpOutlined,
+    };
+  }
+  if (result.content_kind === "special") {
     return {
       label: "Special",
       color: "#9a6700",

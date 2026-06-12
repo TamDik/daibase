@@ -618,6 +618,42 @@ describe("HomePage", () => {
     expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue("# Intro");
   });
 
+  it("Help文書をSpecial親ページと異なる種別で表示する", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.searchContent).mockResolvedValue([
+      {
+        content_kind: "special",
+        path: "Special:Help/plugin-development.md",
+        title: "Plugin Development",
+        location: "Special:Help/plugin-development.md",
+        snippet: "プラグインの実装仕様です。",
+        title_match_indices: [],
+        path_match_indices: [8, 9, 10, 11],
+      },
+      {
+        content_kind: "special",
+        path: "Special:Help",
+        title: "Help",
+        location: "Special:Help",
+        snippet: "Daibase のドキュメントを表示します。",
+        title_match_indices: [0, 1, 2, 3],
+        path_match_indices: [8, 9, 10, 11],
+      },
+    ]);
+    renderHomePage();
+
+    await screen.findByRole("treeitem", { name: "Main" });
+    await user.click(screen.getByRole("button", { name: "全体検索" }));
+    await user.type(screen.getByRole("textbox", { name: "検索またはコマンド" }), "help");
+
+    const results = await screen.findByRole("list", { name: "検索結果" });
+    const helpDocument = within(results).getByRole("button", { name: /Plugin Development/ });
+    const specialHelp = within(results).getByRole("button", { name: /Special Help/ });
+    expect(within(helpDocument).getByLabelText("ヘルプ")).toBeInTheDocument();
+    expect(within(helpDocument).getByText("ヘルプ")).toBeInTheDocument();
+    expect(within(specialHelp).getByLabelText("Special")).toBeInTheDocument();
+  });
+
   it("ページ内検索バーで現在のページ本文を検索できる", async () => {
     const user = userEvent.setup();
     renderHomePage();
