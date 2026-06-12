@@ -15,6 +15,7 @@ use crate::versioning::{
     set_favorite_path, write_path_index,
 };
 use chrono::Utc;
+use nucleo_matcher::{Config, Matcher, Utf32Str};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
@@ -1212,15 +1213,32 @@ fn search_content_for_namespace(
     }
 
     let normalized_query = query.to_lowercase();
+    let mut matcher = Matcher::new(Config::DEFAULT.match_paths());
     let mut results = special_pages_for_namespace(namespace)
         .into_iter()
-        .filter(|page| special_page_matches_query(page, &normalized_query))
-        .map(|page| SearchContentResult {
-            content_kind: "special".to_string(),
-            path: page.location.clone(),
-            title: page.title,
-            location: page.location,
-            snippet: Some(page.description),
+        .filter_map(|page| {
+            let title_match = fuzzy_match(&mut matcher, &page.title, &normalized_query);
+            let path_match = fuzzy_match(&mut matcher, &page.location, &normalized_query);
+            search_rank(
+                &page.title,
+                &page.location,
+                &normalized_query,
+                title_match.as_ref(),
+                path_match.as_ref(),
+                false,
+            )
+            .map(|score| ScoredSearchResult {
+                score,
+                result: SearchContentResult {
+                    content_kind: "special".to_string(),
+                    path: page.location.clone(),
+                    title: page.title,
+                    location: page.location,
+                    snippet: Some(page.description),
+                    title_match_indices: match_indices(title_match),
+                    path_match_indices: match_indices(path_match),
+                },
+            })
         })
         .collect::<Vec<_>>();
 
@@ -1244,8 +1262,8 @@ fn search_content_for_namespace(
             )
         };
 
-        let title_matches = title.to_lowercase().contains(&normalized_query);
-        let path_matches = path.to_lowercase().contains(&normalized_query);
+        let title_match = fuzzy_match(&mut matcher, &title, &normalized_query);
+        let path_match = fuzzy_match(&mut matcher, &path, &normalized_query);
         let content_type = guess_content_type(&path);
         let text_content = if path.ends_with(".md") || is_text_content_type(&content_type) {
             fs::read_to_string(&resolved_path).ok()
@@ -1256,18 +1274,103 @@ fn search_content_for_namespace(
             .as_deref()
             .and_then(|content| search_snippet(content, &normalized_query));
 
-        if title_matches || path_matches || snippet.is_some() {
-            results.push(SearchContentResult {
-                content_kind,
-                path,
-                title,
-                location,
-                snippet,
+        if let Some(score) = search_rank(
+            &title,
+            &path,
+            &normalized_query,
+            title_match.as_ref(),
+            path_match.as_ref(),
+            snippet.is_some(),
+        ) {
+            results.push(ScoredSearchResult {
+                score,
+                result: SearchContentResult {
+                    content_kind,
+                    path,
+                    title,
+                    location,
+                    snippet,
+                    title_match_indices: match_indices(title_match),
+                    path_match_indices: match_indices(path_match),
+                },
             });
         }
     }
 
-    Ok(results)
+    results.sort_by(|left, right| {
+        right
+            .score
+            .cmp(&left.score)
+            .then_with(|| left.result.path.cmp(&right.result.path))
+    });
+    results.truncate(100);
+    Ok(results.into_iter().map(|result| result.result).collect())
+}
+
+struct ScoredSearchResult {
+    score: u32,
+    result: SearchContentResult,
+}
+
+struct FuzzyMatch {
+    score: u16,
+    indices: Vec<u32>,
+}
+
+fn fuzzy_match(matcher: &mut Matcher, text: &str, normalized_query: &str) -> Option<FuzzyMatch> {
+    let normalized_text = text.to_lowercase();
+    let mut text_buffer = Vec::new();
+    let mut query_buffer = Vec::new();
+    let mut indices = Vec::new();
+    let haystack = Utf32Str::new(&normalized_text, &mut text_buffer);
+    let needle = Utf32Str::new(normalized_query, &mut query_buffer);
+    matcher
+        .fuzzy_indices(haystack, needle, &mut indices)
+        .map(|score| FuzzyMatch { score, indices })
+}
+
+fn search_rank(
+    title: &str,
+    path: &str,
+    normalized_query: &str,
+    title_match: Option<&FuzzyMatch>,
+    path_match: Option<&FuzzyMatch>,
+    content_matches: bool,
+) -> Option<u32> {
+    let normalized_title = title.to_lowercase();
+    let normalized_path = path.to_lowercase();
+    let title_score = title_match.map(|matched| {
+        1_000_000
+            + u32::from(matched.score)
+            + if normalized_title == normalized_query {
+                200_000
+            } else if normalized_title.starts_with(normalized_query) {
+                100_000
+            } else {
+                0
+            }
+    });
+    let path_score = path_match.map(|matched| {
+        500_000
+            + u32::from(matched.score)
+            + if normalized_path == normalized_query {
+                100_000
+            } else if normalized_path.starts_with(normalized_query) {
+                50_000
+            } else {
+                0
+            }
+    });
+
+    title_score
+        .into_iter()
+        .chain(path_score)
+        .max()
+        .or(content_matches.then_some(1))
+}
+
+fn match_indices(matched: Option<FuzzyMatch>) -> Vec<u32> {
+    matched.map_or_else(Vec::new, |matched| matched.indices)
 }
 
 pub fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialPageSummary> {
@@ -1313,11 +1416,6 @@ pub fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialP
             location: format!("{}:Special:Plugins", namespace.name),
         },
     ]
-}
-
-fn special_page_matches_query(page: &SpecialPageSummary, normalized_query: &str) -> bool {
-    page.title.to_lowercase().contains(normalized_query)
-        || page.location.to_lowercase().contains(normalized_query)
 }
 
 fn search_snippet(content: &str, normalized_query: &str) -> Option<String> {
@@ -1927,6 +2025,15 @@ mod tests {
         assert_eq!(special_results[0].content_kind, "special");
         assert_eq!(special_results[0].title, "Favorites");
         assert_eq!(special_results[0].location, "Work:Special:Favorites");
+
+        let fuzzy_results = search_content_for_namespace(&namespace, "gdi").unwrap();
+        assert_eq!(fuzzy_results.len(), 1);
+        assert_eq!(fuzzy_results[0].path, "Guide/Intro.md");
+        assert_eq!(fuzzy_results[0].path_match_indices, vec![0, 3, 6]);
+
+        let ranked_results = search_content_for_namespace(&namespace, "main").unwrap();
+        assert_eq!(ranked_results[0].path, "Main.md");
+        assert!(!ranked_results[0].title_match_indices.is_empty());
 
         fs::remove_dir_all(root_path).unwrap();
     }

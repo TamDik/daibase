@@ -26,9 +26,11 @@ export function CommandLauncher({
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchContentResult[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const resultRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   useEffect(() => {
     if (isOpen) {
@@ -46,34 +48,39 @@ export function CommandLauncher({
     }
 
     let isActive = true;
-    setIsSearching(true);
     setError(null);
-    searchContent(namespaceId, trimmedQuery)
-      .then((nextResults) => {
-        if (isActive) {
-          setResults(nextResults);
-        }
-      })
-      .catch((searchError) => {
-        if (isActive) {
-          setResults([]);
-          setError(searchError instanceof Error ? searchError.message : String(searchError));
-        }
-      })
-      .finally(() => {
-        if (isActive) {
-          setIsSearching(false);
-        }
-      });
+    const timeoutId = window.setTimeout(() => {
+      setIsSearching(true);
+      searchContent(namespaceId, trimmedQuery)
+        .then((nextResults) => {
+          if (isActive) {
+            setResults(nextResults);
+            setSelectedIndex(0);
+          }
+        })
+        .catch((searchError) => {
+          if (isActive) {
+            setResults([]);
+            setError(searchError instanceof Error ? searchError.message : String(searchError));
+          }
+        })
+        .finally(() => {
+          if (isActive) {
+            setIsSearching(false);
+          }
+        });
+    }, 80);
 
     return () => {
       isActive = false;
+      window.clearTimeout(timeoutId);
     };
   }, [isOpen, namespaceId, query]);
 
   const resetSearch = () => {
     setQuery("");
     setResults([]);
+    setSelectedIndex(0);
     setError(null);
     setIsSearching(false);
   };
@@ -92,7 +99,10 @@ export function CommandLauncher({
     onOpenLocation(result.location);
     closeLauncher();
   };
-  const highlightQuery = query.trim();
+
+  useEffect(() => {
+    resultRefs.current[selectedIndex]?.scrollIntoView?.({ block: "nearest" });
+  }, [selectedIndex]);
 
   return (
     <Box sx={{ alignItems: "center", display: "flex" }}>
@@ -142,10 +152,22 @@ export function CommandLauncher({
                 placeholder="検索"
                 size="medium"
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setSelectedIndex(0);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     closeLauncher();
+                  } else if (event.key === "ArrowDown" && results.length > 0) {
+                    event.preventDefault();
+                    setSelectedIndex((current) => (current + 1) % results.length);
+                  } else if (event.key === "ArrowUp" && results.length > 0) {
+                    event.preventDefault();
+                    setSelectedIndex((current) => (current - 1 + results.length) % results.length);
+                  } else if (event.key === "Enter" && results[selectedIndex]) {
+                    event.preventDefault();
+                    openResult(results[selectedIndex]);
                   }
                 }}
                 slotProps={{
@@ -190,13 +212,24 @@ export function CommandLauncher({
                   </Typography>
                 ) : results.length > 0 ? (
                   <List dense disablePadding aria-label="検索結果">
-                    {results.map((result) => (
+                    {results.map((result, index) => (
                       <ListItemButton
+                        ref={(element) => {
+                          resultRefs.current[index] = element;
+                        }}
                         key={`${result.content_kind}:${result.location}`}
+                        aria-selected={index === selectedIndex}
+                        selected={index === selectedIndex}
+                        onMouseEnter={() => setSelectedIndex(index)}
                         onClick={() => openResult(result)}
                       >
                         <ListItemText
-                          primary={<HighlightedText text={result.title} query={highlightQuery} />}
+                          primary={
+                            <HighlightedText
+                              text={result.title}
+                              matchIndices={result.title_match_indices}
+                            />
+                          }
                           secondary={
                             <>
                               <Typography
@@ -205,7 +238,10 @@ export function CommandLauncher({
                                 color="text.secondary"
                                 sx={{ display: "block", overflowWrap: "anywhere" }}
                               >
-                                <HighlightedText text={result.path} query={highlightQuery} />
+                                <HighlightedText
+                                  text={result.path}
+                                  matchIndices={result.path_match_indices}
+                                />
                               </Typography>
                               {result.snippet && (
                                 <Typography
@@ -214,7 +250,7 @@ export function CommandLauncher({
                                   color="text.secondary"
                                   sx={{ display: "block", overflowWrap: "anywhere" }}
                                 >
-                                  <HighlightedText text={result.snippet} query={highlightQuery} />
+                                  <HighlightedText text={result.snippet} query={query.trim()} />
                                 </Typography>
                               )}
                             </>
@@ -241,8 +277,43 @@ export function CommandLauncher({
   );
 }
 
-function HighlightedText({ text, query }: { text: string; query: string }) {
-  return <>{highlightText(text, query)}</>;
+function HighlightedText({
+  text,
+  query = "",
+  matchIndices = [],
+}: {
+  text: string;
+  query?: string;
+  matchIndices?: number[];
+}) {
+  return (
+    <>
+      {matchIndices.length > 0
+        ? highlightMatchIndices(text, matchIndices)
+        : highlightText(text, query)}
+    </>
+  );
+}
+
+export function highlightMatchIndices(text: string, matchIndices: number[]): ReactNode[] {
+  const characters = Array.from(text);
+  const matched = new Set(matchIndices);
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+
+  while (cursor < characters.length) {
+    const isMatched = matched.has(cursor);
+    let end = cursor + 1;
+    while (end < characters.length && matched.has(end) === isMatched) {
+      end += 1;
+    }
+
+    const value = characters.slice(cursor, end).join("");
+    nodes.push(isMatched ? <SearchMark key={`${cursor}-${end}`}>{value}</SearchMark> : value);
+    cursor = end;
+  }
+
+  return nodes;
 }
 
 export function highlightText(text: string, query: string): ReactNode[] {
@@ -263,18 +334,7 @@ export function highlightText(text: string, query: string): ReactNode[] {
 
     const matchEnd = matchIndex + normalizedQuery.length;
     nodes.push(
-      <Box
-        key={`${matchIndex}-${matchEnd}`}
-        component="mark"
-        sx={{
-          bgcolor: "#fff0a6",
-          borderRadius: 0.75,
-          color: "inherit",
-          px: 0.25,
-        }}
-      >
-        {text.slice(matchIndex, matchEnd)}
-      </Box>,
+      <SearchMark key={`${matchIndex}-${matchEnd}`}>{text.slice(matchIndex, matchEnd)}</SearchMark>,
     );
     cursor = matchEnd;
     matchIndex = normalizedText.indexOf(normalizedQuery, cursor);
@@ -285,4 +345,20 @@ export function highlightText(text: string, query: string): ReactNode[] {
   }
 
   return nodes.length > 0 ? nodes : [text];
+}
+
+function SearchMark({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      component="mark"
+      sx={{
+        bgcolor: "#fff0a6",
+        borderRadius: 0.75,
+        color: "inherit",
+        px: 0.25,
+      }}
+    >
+      {children}
+    </Box>
+  );
 }

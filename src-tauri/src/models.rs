@@ -165,6 +165,8 @@ pub struct SearchContentResult {
     pub title: String,
     pub location: String,
     pub snippet: Option<String>,
+    pub title_match_indices: Vec<u32>,
+    pub path_match_indices: Vec<u32>,
 }
 
 #[derive(Debug, Serialize)]

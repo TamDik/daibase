@@ -571,6 +571,46 @@ describe("HomePage", () => {
     expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue("# Intro");
   });
 
+  it("全体検索の結果をキーボードで選択して開く", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.searchContent).mockResolvedValue([
+      {
+        content_kind: "page",
+        path: "Main.md",
+        title: "Main",
+        location: "Work:Main.md",
+        snippet: null,
+        title_match_indices: [0, 2],
+        path_match_indices: [0, 2],
+      },
+      {
+        content_kind: "page",
+        path: "Guide/Intro.md",
+        title: "Intro",
+        location: "Work:Guide/Intro.md",
+        snippet: null,
+        title_match_indices: [],
+        path_match_indices: [0, 3, 6],
+      },
+    ]);
+    renderHomePage();
+
+    await screen.findByRole("treeitem", { name: "Main" });
+    await user.click(screen.getByRole("button", { name: "全体検索" }));
+    await user.type(screen.getByRole("textbox", { name: "検索またはコマンド" }), "gdi");
+
+    const results = await screen.findByRole("list", { name: "検索結果" });
+    const resultButtons = within(results).getAllByRole("button");
+    expect(resultButtons[0]).toHaveAttribute("aria-selected", "true");
+
+    await user.keyboard("{ArrowDown}");
+    expect(resultButtons[1]).toHaveAttribute("aria-selected", "true");
+    expect(resultButtons[1].querySelectorAll("mark")).toHaveLength(3);
+
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue("# Intro");
+  });
+
   it("ページ内検索バーで現在のページ本文を検索できる", async () => {
     const user = userEvent.setup();
     renderHomePage();
@@ -1955,6 +1995,8 @@ function searchResults(): SearchContentResult[] {
       title: "Intro",
       location: "Work:Guide/Intro.md",
       snippet: "本文の Intro に一致しました。",
+      title_match_indices: [0, 1, 2, 3, 4],
+      path_match_indices: [6, 7, 8, 9, 10],
     },
   ];
 }

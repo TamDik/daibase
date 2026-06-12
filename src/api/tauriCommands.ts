@@ -26,6 +26,8 @@ export type SearchContentResult = {
   title: string;
   location: string;
   snippet: string | null;
+  title_match_indices: number[];
+  path_match_indices: number[];
 };
 
 export type FolderSummary = {
