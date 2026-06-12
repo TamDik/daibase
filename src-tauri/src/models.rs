@@ -396,6 +396,9 @@ pub enum OpenLocationResult {
         documents: Vec<HelpDocumentSummary>,
         document: Option<HelpDocument>,
     },
+    SpecialShortcuts {
+        location: String,
+    },
     SpecialPages {
         location: String,
         namespace: NamespaceSummary,

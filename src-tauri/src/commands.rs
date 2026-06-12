@@ -390,6 +390,7 @@ pub fn resolve_markdown_link_status(
         } => crate::namespace::file_exists_for_namespace(&namespace, &file_path)?,
         ResolvedLocation::SpecialNamespaces { .. }
         | ResolvedLocation::SpecialHelp { .. }
+        | ResolvedLocation::SpecialShortcuts { .. }
         | ResolvedLocation::SpecialPages { .. }
         | ResolvedLocation::SpecialPagesList { .. }
         | ResolvedLocation::SpecialDeletedPages { .. }
@@ -541,6 +542,9 @@ pub fn open_location(
                 .map(crate::help::read_document)
                 .transpose()?,
         }),
+        ResolvedLocation::SpecialShortcuts { location } => {
+            Ok(OpenLocationResult::SpecialShortcuts { location })
+        }
         ResolvedLocation::SpecialPages {
             namespace,
             location,

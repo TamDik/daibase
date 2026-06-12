@@ -48,6 +48,7 @@ export function PageSidebar({
   content,
   currentLocation,
   namespace,
+  searchOpenRequestId = 0,
   onCreateFolder,
   onCreatePage,
   onDeleteContent,
@@ -58,6 +59,7 @@ export function PageSidebar({
   content: ContentTree | null;
   currentLocation: string;
   namespace: NamespaceSummary | null;
+  searchOpenRequestId?: number;
   onCreateFolder: (parentDirectory: string) => void;
   onCreatePage: (parentDirectory: string) => void;
   onDeleteContent: (path: string, kind: "page" | "folder" | "file") => void;
@@ -119,6 +121,7 @@ export function PageSidebar({
       <SidebarToolbar
         canCreate={namespace !== null}
         searchNamespaceId={namespace?.id ?? null}
+        searchOpenRequestId={searchOpenRequestId}
         sortDirection={sortDirection}
         onCreateFolder={() => onCreateFolder(createParentDirectory)}
         onCreatePage={() => onCreatePage(createParentDirectory)}
@@ -175,6 +178,7 @@ type SortDirection = "asc" | "desc";
 function SidebarToolbar({
   canCreate,
   searchNamespaceId,
+  searchOpenRequestId,
   sortDirection,
   onCreateFolder,
   onCreatePage,
@@ -184,6 +188,7 @@ function SidebarToolbar({
 }: {
   canCreate: boolean;
   searchNamespaceId: string | null;
+  searchOpenRequestId: number;
   sortDirection: SortDirection;
   onCreateFolder: () => void;
   onCreatePage: () => void;
@@ -226,7 +231,11 @@ function SidebarToolbar({
         spacing={0.5}
         sx={{ alignItems: "center" }}
       >
-        <CommandLauncher namespaceId={searchNamespaceId} onOpenLocation={onOpenLocation} />
+        <CommandLauncher
+          namespaceId={searchNamespaceId}
+          openRequestId={searchOpenRequestId}
+          onOpenLocation={onOpenLocation}
+        />
         <Tooltip title="Favorites">
           <span>
             <IconButton

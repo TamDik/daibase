@@ -23,9 +23,11 @@ import { searchContent, type SearchContentResult } from "../api/tauriCommands";
 
 export function CommandLauncher({
   namespaceId,
+  openRequestId = 0,
   onOpenLocation,
 }: {
   namespaceId: string | null;
+  openRequestId?: number;
   onOpenLocation: (location: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -36,6 +38,7 @@ export function CommandLauncher({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const resultRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const previousOpenRequestId = useRef(openRequestId);
 
   useEffect(() => {
     if (isOpen) {
@@ -99,6 +102,13 @@ export function CommandLauncher({
     resetSearch();
     setIsOpen(false);
   };
+
+  useEffect(() => {
+    if (openRequestId !== previousOpenRequestId.current && namespaceId) {
+      previousOpenRequestId.current = openRequestId;
+      openLauncher();
+    }
+  }, [namespaceId, openRequestId]);
 
   const openResult = (result: SearchContentResult) => {
     onOpenLocation(result.location);
@@ -205,12 +215,13 @@ export function CommandLauncher({
             </Box>
             {query.trim().length > 0 && (
               <Box
+                data-testid="search-results-panel"
                 sx={{
                   borderTop: "1px solid #d0d7de",
                   bgcolor: "#f6f8fa",
                   display: "flex",
                   flexDirection: "column",
-                  maxHeight: "min(480px, calc(100vh - 180px))",
+                  maxHeight: "min(640px, calc(100vh - 140px))",
                   overflow: "hidden",
                 }}
               >

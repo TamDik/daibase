@@ -128,6 +128,7 @@ describe("HomePage", () => {
   });
 
   beforeEach(() => {
+    window.localStorage.clear();
     vi.mocked(api.createFolder).mockReset();
     vi.mocked(api.deleteFile).mockReset();
     vi.mocked(api.deleteFolder).mockReset();
@@ -376,6 +377,12 @@ describe("HomePage", () => {
           document: null,
         };
       }
+      if (location === "Special:Shortcuts") {
+        return {
+          kind: "specialShortcuts",
+          location: "Special:Shortcuts",
+        };
+      }
       if (location === "Special:Help/plugin-development.md") {
         return {
           kind: "specialHelp",
@@ -553,6 +560,9 @@ describe("HomePage", () => {
 
     await waitFor(() => expect(api.searchContent).toHaveBeenCalledWith(workNamespace.id, "intro"));
     const results = await screen.findByRole("list", { name: "検索結果" });
+    expect(screen.getByTestId("search-results-panel")).toHaveStyle({
+      maxHeight: "min(640px, calc(100vh - 140px))",
+    });
     expect(screen.getByTestId("search-results-scroll")).toHaveStyle({ overflowY: "auto" });
     expect(screen.getByTestId("search-results-footer")).toHaveStyle({ flex: "0 0 auto" });
     const resultButton = within(results).getByRole("button", { name: /Intro/ });
@@ -652,6 +662,48 @@ describe("HomePage", () => {
     expect(within(helpDocument).getByLabelText("ヘルプ")).toBeInTheDocument();
     expect(within(helpDocument).getByText("ヘルプ")).toBeInTheDocument();
     expect(within(specialHelp).getByLabelText("Special")).toBeInTheDocument();
+  });
+
+  it("キーボードショートカットで検索と一覧を開き割り当てを変更できる", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+    await screen.findByRole("treeitem", { name: "Main" });
+
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    expect(await screen.findByRole("dialog", { name: "検索パネル" })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "検索またはコマンド" }), {
+      key: "Escape",
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "検索パネル" })).not.toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    expect(await screen.findByRole("search", { name: "ページ内検索" })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "k", metaKey: true, shiftKey: true });
+    expect(await screen.findByRole("heading", { name: "Keyboard Shortcuts" })).toBeInTheDocument();
+    expect(api.openLocation).toHaveBeenCalledWith("Special:Shortcuts", workNamespace.id);
+    const input = await screen.findByRole("textbox", { name: "全体検索のショートカット" });
+    const defaultButton = screen.getAllByRole("button", { name: "デフォルト" })[0];
+    expect(input).toHaveValue("Mod+K");
+    expect(defaultButton).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.keyDown(input, { key: "g", metaKey: true });
+    expect(input).toHaveValue("Mod+G");
+    expect(defaultButton).toHaveAttribute("aria-pressed", "false");
+    fireEvent.keyDown(window, { key: "g", metaKey: true });
+    expect(await screen.findByRole("dialog", { name: "検索パネル" })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "検索またはコマンド" }), {
+      key: "Escape",
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "検索パネル" })).not.toBeInTheDocument();
+    });
+
+    await user.click(defaultButton);
+    expect(input).toHaveValue("Mod+K");
+    expect(defaultButton).toHaveAttribute("aria-pressed", "true");
   });
 
   it("ページ内検索バーで現在のページ本文を検索できる", async () => {

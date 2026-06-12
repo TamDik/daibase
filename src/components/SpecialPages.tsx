@@ -44,6 +44,120 @@ import type {
   NamespaceSummary,
   SpecialPageSummary,
 } from "../api/tauriCommands";
+import {
+  bindingFromKeyboardEvent,
+  shortcutConflict,
+  type ShortcutBindings,
+  type ShortcutCommand,
+} from "../lib/keyboardShortcuts";
+
+export function ShortcutsSpecialPage({
+  bindings,
+  commands,
+  location,
+  onBindingChange,
+  onReset,
+}: {
+  bindings: ShortcutBindings;
+  commands: ShortcutCommand[];
+  location: string;
+  onBindingChange: (commandId: string, binding: string) => void;
+  onReset: () => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <Box sx={{ p: 2 }}>
+      <Stack direction="row" spacing={2} sx={{ alignItems: "flex-start", mb: 2 }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="h5" component="h2">
+            Keyboard Shortcuts
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {location}
+          </Typography>
+        </Box>
+        <Button variant="outlined" onClick={onReset}>
+          デフォルトに戻す
+        </Button>
+      </Stack>
+      {error && (
+        <Typography color="error" variant="body2" sx={{ mb: 1 }}>
+          {error}
+        </Typography>
+      )}
+      <Stack spacing={1}>
+        {commands.map((command) => {
+          const isDefault = (bindings[command.id] ?? "") === command.defaultBinding;
+
+          return (
+            <Paper key={command.id} variant="outlined" sx={{ p: 1.5 }}>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={2}
+                sx={{ alignItems: "center" }}
+              >
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="subtitle2">{command.title}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                    {command.description}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {command.category} / {command.id}
+                  </Typography>
+                </Box>
+                <TextField
+                  size="small"
+                  value={bindings[command.id] ?? ""}
+                  placeholder="未割り当て"
+                  slotProps={{
+                    htmlInput: {
+                      "aria-label": `${command.title}のショートカット`,
+                      readOnly: true,
+                    },
+                  }}
+                  sx={{ width: 190 }}
+                  onKeyDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const binding = bindingFromKeyboardEvent(event.nativeEvent);
+                    if (!binding) return;
+                    const conflictId = shortcutConflict(command.id, binding, bindings);
+                    if (conflictId) {
+                      const conflictCommand = commands.find((item) => item.id === conflictId);
+                      setError(
+                        `「${binding}」は「${conflictCommand?.title ?? conflictId}」で使用中です。`,
+                      );
+                      return;
+                    }
+                    setError(null);
+                    onBindingChange(command.id, binding);
+                  }}
+                />
+                <Button
+                  size="small"
+                  color="inherit"
+                  onClick={() => onBindingChange(command.id, "")}
+                >
+                  解除
+                </Button>
+                <Button
+                  size="small"
+                  variant={isDefault ? "contained" : "outlined"}
+                  color={isDefault ? "primary" : "inherit"}
+                  aria-pressed={isDefault}
+                  onClick={() => onBindingChange(command.id, command.defaultBinding)}
+                >
+                  デフォルト
+                </Button>
+              </Stack>
+            </Paper>
+          );
+        })}
+      </Stack>
+    </Box>
+  );
+}
 
 export function HelpSpecialPage({
   document,

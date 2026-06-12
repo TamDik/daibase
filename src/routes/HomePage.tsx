@@ -74,12 +74,22 @@ import {
   PagesSpecialPage,
   NamespacesSpecialPage,
   PluginsSpecialPage,
+  ShortcutsSpecialPage,
   SpecialPagesIndex,
 } from "../components/SpecialPages";
 import { TerminalPanel } from "../components/TerminalPanel";
 import { defaultPageLocation, namespacesLocation } from "../lib/location";
 import { updateMarkdownCategories } from "../lib/pageCategories";
 import { markdownContext } from "../lib/pluginHost";
+import {
+  defaultShortcutBindings,
+  isEditableShortcutTarget,
+  loadShortcutBindings,
+  saveShortcutBindings,
+  shortcutCommandForEvent,
+  shortcutCommands,
+  type ShortcutBindings,
+} from "../lib/keyboardShortcuts";
 
 type PageView = {
   kind: "page";
@@ -105,6 +115,10 @@ type SpecialView =
       location: string;
       documents: HelpDocumentSummary[];
       document: HelpDocument | null;
+    }
+  | {
+      kind: "shortcuts";
+      location: string;
     }
   | {
       kind: "specialPages";
@@ -189,6 +203,11 @@ export function HomePage() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [createDialog, setCreateDialog] = useState<CreateDialogState | null>(null);
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const [shortcutBindings, setShortcutBindings] = useState<ShortcutBindings>(() =>
+    loadShortcutBindings(),
+  );
+  const [globalSearchRequestId, setGlobalSearchRequestId] = useState(0);
+  const [pageSearchRequestId, setPageSearchRequestId] = useState(0);
   const pageViewRef = useRef<PageView | null>(null);
   const draftRef = useRef("");
   const isSavingRef = useRef(false);
@@ -235,6 +254,16 @@ export function HomePage() {
         documents: opened.documents,
         document: opened.document,
       });
+      setDraft("");
+      setCurrentLocation(opened.location);
+      setPageMode("view");
+      return nextLocation;
+    }
+
+    if (opened.kind === "specialShortcuts") {
+      setPageView(null);
+      setFileView(null);
+      setSpecialView({ kind: "shortcuts", location: opened.location });
       setDraft("");
       setCurrentLocation(opened.location);
       setPageMode("view");
@@ -1073,6 +1102,49 @@ export function HomePage() {
     }
   };
 
+  const updateShortcutBinding = (commandId: string, binding: string) => {
+    setShortcutBindings((current) => {
+      const next = { ...current, [commandId]: binding };
+      saveShortcutBindings(next);
+      return next;
+    });
+  };
+
+  const resetShortcutBindings = () => {
+    const next = defaultShortcutBindings();
+    saveShortcutBindings(next);
+    setShortcutBindings(next);
+  };
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      const command = shortcutCommandForEvent(event, shortcutCommands, shortcutBindings);
+      if (!command) return;
+      if (
+        isEditableShortcutTarget(event.target) &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey
+      ) {
+        return;
+      }
+      event.preventDefault();
+      if (command.id === "search.global") {
+        if (activeNamespace) setGlobalSearchRequestId((current) => current + 1);
+      } else if (command.id === "search.page") {
+        if (pageView) setPageSearchRequestId((current) => current + 1);
+      } else if (command.id === "navigation.back") {
+        void handleGoBack();
+      } else if (command.id === "navigation.forward") {
+        void handleGoForward();
+      } else if (command.id === "shortcuts.open") {
+        void navigate("Special:Shortcuts");
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  });
+
   const handleModeChange = async (mode: PageMode) => {
     if (!pageView) {
       return;
@@ -1314,6 +1386,7 @@ export function HomePage() {
             content={sidebarContent}
             currentLocation={currentLocation}
             namespace={activeNamespace}
+            searchOpenRequestId={globalSearchRequestId}
             onCreateFolder={(parentDirectory) => handleOpenCreateDialog("folder", parentDirectory)}
             onCreatePage={(parentDirectory) => handleOpenCreateDialog("page", parentDirectory)}
             onDeleteContent={(path, kind) => void handleDeleteContent(path, kind)}
@@ -1392,6 +1465,16 @@ export function HomePage() {
                       />
                     )}
 
+                    {specialView.kind === "shortcuts" && (
+                      <ShortcutsSpecialPage
+                        bindings={shortcutBindings}
+                        commands={shortcutCommands}
+                        location={specialView.location}
+                        onBindingChange={updateShortcutBinding}
+                        onReset={resetShortcutBindings}
+                      />
+                    )}
+
                     {specialView.kind === "pages" && (
                       <PagesSpecialPage
                         content={specialView.content}
@@ -1454,6 +1537,7 @@ export function HomePage() {
                   isVirtual={pageView.page.is_virtual ?? false}
                   isFavorite={pageView.page.is_favorite ?? false}
                   mode={pageMode}
+                  pageSearchRequestId={pageSearchRequestId}
                   canGoBack={canGoBack}
                   canGoForward={canGoForward}
                   pageContext={{

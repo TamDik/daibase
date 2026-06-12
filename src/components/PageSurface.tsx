@@ -87,6 +87,7 @@ export function PageSurface({
   isVirtual,
   isFavorite,
   mode,
+  pageSearchRequestId = 0,
   pageContext,
   plugins,
   readOnly = false,
@@ -126,6 +127,7 @@ export function PageSurface({
   isVirtual: boolean;
   isFavorite: boolean;
   mode: PageMode;
+  pageSearchRequestId?: number;
   pageContext: PagePluginContext;
   plugins: InstalledPluginSummary[];
   readOnly?: boolean;
@@ -169,6 +171,7 @@ export function PageSurface({
   const [categoryInput, setCategoryInput] = useState("");
   const [categoryValues, setCategoryValues] = useState<string[]>([]);
   const [pageSearchOpen, setPageSearchOpen] = useState(false);
+  const previousPageSearchRequestId = useRef(pageSearchRequestId);
   const [pageSearchQuery, setPageSearchQuery] = useState("");
   const [pageSearchIndex, setPageSearchIndex] = useState(0);
   const pluginViewMatch = editorView === "wysiwyg" ? findPageViewPlugin(draft, plugins) : null;
@@ -213,6 +216,13 @@ export function PageSurface({
     setPageSearchQuery("");
     setPageSearchIndex(0);
   };
+
+  useEffect(() => {
+    if (pageSearchRequestId !== previousPageSearchRequestId.current) {
+      previousPageSearchRequestId.current = pageSearchRequestId;
+      openPageSearch();
+    }
+  }, [pageSearchRequestId]);
 
   const goToPreviousPageSearchMatch = () => {
     if (pageSearchMatches.length === 0) {
