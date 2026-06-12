@@ -3,6 +3,7 @@ import {
   Box,
   CircularProgress,
   IconButton,
+  InputAdornment,
   List,
   ListItemButton,
   Paper,
@@ -49,10 +50,6 @@ export function CommandLauncher({
   const commandQuery = commandMode ? query.slice(1).trimStart() : "";
   const commandResults = commandMode ? searchCommands(commands, commandQuery) : [];
   const selectableCount = commandMode ? commandResults.length : results.length;
-  const commandCompletion = commandResults[selectedIndex];
-  const showCommandCompletion =
-    commandCompletion &&
-    commandCompletion.name.toLocaleLowerCase() !== commandQuery.toLocaleLowerCase();
 
   useEffect(() => {
     if (isOpen) {
@@ -222,12 +219,20 @@ export function CommandLauncher({
                   },
                   input: {
                     endAdornment:
-                      commandMode && showCommandCompletion ? (
-                        <Typography color="text.disabled" variant="body2" noWrap>
-                          {commandCompletion.name} · Tabで補完
-                        </Typography>
+                      commandMode && commandResults.length > 0 ? (
+                        <InputAdornment aria-label="コマンド候補件数" position="end">
+                          <Typography color="text.secondary" variant="body2" noWrap>
+                            {commandResults.length}件
+                          </Typography>
+                        </InputAdornment>
                       ) : isSearching ? (
                         <CircularProgress size={18} />
+                      ) : !commandMode && results.length > 0 ? (
+                        <InputAdornment aria-label="検索結果件数" position="end">
+                          <Typography color="text.secondary" variant="body2" noWrap>
+                            {results.length}件
+                          </Typography>
+                        </InputAdornment>
                       ) : null,
                   },
                 }}
@@ -267,26 +272,10 @@ export function CommandLauncher({
                   commandResults.length > 0 ? (
                     <>
                       <Box
-                        sx={{
-                          alignItems: "center",
-                          color: "text.secondary",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          flex: "0 0 auto",
-                          px: 1.5,
-                          py: 0.75,
-                        }}
-                      >
-                        <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                          コマンド
-                        </Typography>
-                        <Typography variant="caption">{commandResults.length}件</Typography>
-                      </Box>
-                      <Box
                         data-testid="command-results-scroll"
                         sx={{ minHeight: 0, overflowY: "auto" }}
                       >
-                        <List disablePadding aria-label="コマンド候補" sx={{ px: 0.75 }}>
+                        <List disablePadding aria-label="コマンド候補" sx={{ px: 0.75, pt: 0.75 }}>
                           {commandResults.map((command, index) => (
                             <CommandResultItem
                               command={command}
@@ -315,26 +304,10 @@ export function CommandLauncher({
                 ) : results.length > 0 ? (
                   <>
                     <Box
-                      sx={{
-                        alignItems: "center",
-                        color: "text.secondary",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        flex: "0 0 auto",
-                        px: 1.5,
-                        py: 0.75,
-                      }}
-                    >
-                      <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                        検索結果
-                      </Typography>
-                      <Typography variant="caption">{results.length}件</Typography>
-                    </Box>
-                    <Box
                       data-testid="search-results-scroll"
                       sx={{ minHeight: 0, overflowY: "auto" }}
                     >
-                      <List disablePadding aria-label="検索結果" sx={{ px: 0.75 }}>
+                      <List disablePadding aria-label="検索結果" sx={{ px: 0.75, pt: 0.75 }}>
                         {results.map((result, index) => (
                           <SearchResultItem
                             resultRef={(element) => {

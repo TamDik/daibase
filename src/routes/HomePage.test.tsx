@@ -571,17 +571,21 @@ describe("HomePage", () => {
 
     await waitFor(() => expect(api.searchContent).toHaveBeenCalledWith(workNamespace.id, "intro"));
     const results = await screen.findByRole("list", { name: "検索結果" });
+    expect(results).toHaveStyle({ paddingTop: "6px" });
     expect(screen.getByTestId("search-results-panel")).toHaveStyle({
       maxHeight: "min(640px, calc(100vh - 140px))",
     });
     expect(screen.getByTestId("search-results-scroll")).toHaveStyle({ overflowY: "auto" });
     expect(screen.getByTestId("search-results-footer")).toHaveStyle({ flex: "0 0 auto" });
+    expect(screen.queryByText("検索結果")).not.toBeInTheDocument();
     const resultButton = within(results).getByRole("button", { name: /Intro/ });
     expect(within(resultButton).getByLabelText("ページ")).toBeInTheDocument();
     expect(within(resultButton).getByText("ページ")).toBeInTheDocument();
     expect(resultButton).toHaveTextContent("Guide/Intro.md");
     expect(resultButton).toHaveTextContent("本文の Intro");
-    expect(screen.getByText("1件")).toBeInTheDocument();
+    const resultCount = screen.getByLabelText("検索結果件数");
+    expect(resultCount).toHaveTextContent("1件");
+    expect(resultCount).toHaveClass("MuiInputAdornment-root");
     expect(screen.getByText("移動")).toBeInTheDocument();
     expect(screen.getByText("開く")).toBeInTheDocument();
     expect(within(results).getAllByText("Intro", { selector: "mark" })).toHaveLength(3);
@@ -650,11 +654,16 @@ describe("HomePage", () => {
     await user.type(input, ">cmd");
 
     const commands = await screen.findByRole("list", { name: "コマンド候補" });
+    expect(commands).toHaveStyle({ paddingTop: "6px" });
+    expect(screen.queryByText("コマンド")).not.toBeInTheDocument();
+    const commandCount = screen.getByLabelText("コマンド候補件数");
+    expect(commandCount).toHaveTextContent(`${within(commands).getAllByRole("button").length}件`);
+    expect(commandCount).toHaveClass("MuiInputAdornment-root");
     expect(within(commands).getByRole("button", { name: /Commands/ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    expect(screen.getByText("Tabで補完", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByText("Tabで補完", { exact: false })).not.toBeInTheDocument();
     expect(api.searchContent).not.toHaveBeenCalledWith(workNamespace.id, ">cmd");
 
     await user.keyboard("{Tab}");
