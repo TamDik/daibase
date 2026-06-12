@@ -26,6 +26,8 @@ export type SearchContentResult = {
   title: string;
   location: string;
   snippet: string | null;
+  title_match_indices: number[];
+  path_match_indices: number[];
 };
 
 export type FolderSummary = {
@@ -60,6 +62,10 @@ export type TerminalOutputEvent = {
   session_id: string;
   stream: "stdout" | "stderr" | "system" | string;
   text: string;
+};
+
+export type TerminalExitEvent = {
+  session_id: string;
 };
 
 export type PageContent = {
@@ -317,6 +323,14 @@ export type ResolvedLocation =
       location: string;
     }
   | {
+      kind: "specialShortcuts";
+      location: string;
+    }
+  | {
+      kind: "specialCommands";
+      location: string;
+    }
+  | {
       kind: "specialPages";
       namespace: NamespaceSummary;
       location: string;
@@ -374,6 +388,14 @@ export type OpenLocationResult =
       document: HelpDocument | null;
     }
   | {
+      kind: "specialShortcuts";
+      location: string;
+    }
+  | {
+      kind: "specialCommands";
+      location: string;
+    }
+  | {
       kind: "specialPages";
       location: string;
       namespace: NamespaceSummary;
@@ -406,7 +428,6 @@ export type OpenLocationResult =
       namespace: NamespaceSummary;
       content: ContentTree;
       categories: CategoryGroupSummary[];
-      uncategorized_pages: CategoryPageSummary[];
     }
   | {
       kind: "specialPlugins";

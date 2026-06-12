@@ -8,6 +8,8 @@ pub const FAVORITES_LOCATION: &str = "Special:Favorites";
 pub const CATEGORIES_LOCATION: &str = "Special:Categories";
 pub const PLUGINS_LOCATION: &str = "Special:Plugins";
 pub const HELP_LOCATION: &str = "Special:Help";
+pub const SHORTCUTS_LOCATION: &str = "Special:Shortcuts";
+pub const COMMANDS_LOCATION: &str = "Special:Commands";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -29,6 +31,12 @@ pub enum ResolvedLocation {
     },
     SpecialHelp {
         document_path: Option<String>,
+        location: String,
+    },
+    SpecialShortcuts {
+        location: String,
+    },
+    SpecialCommands {
         location: String,
     },
     SpecialPages {
@@ -77,6 +85,18 @@ pub fn resolve_location(
         return Ok(ResolvedLocation::SpecialHelp {
             document_path,
             location: location.to_string(),
+        });
+    }
+
+    if location == SHORTCUTS_LOCATION {
+        return Ok(ResolvedLocation::SpecialShortcuts {
+            location: SHORTCUTS_LOCATION.to_string(),
+        });
+    }
+
+    if location == COMMANDS_LOCATION {
+        return Ok(ResolvedLocation::SpecialCommands {
+            location: COMMANDS_LOCATION.to_string(),
         });
     }
 
@@ -387,6 +407,26 @@ mod tests {
             ResolvedLocation::SpecialHelp {
                 document_path: Some("plugin-development.md".to_string()),
                 location: "Special:Help/plugin-development.md".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_global_shortcuts_page_without_namespace() {
+        assert_eq!(
+            resolve_location("Special:Shortcuts", &[], None).unwrap(),
+            ResolvedLocation::SpecialShortcuts {
+                location: "Special:Shortcuts".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_global_commands_page_without_namespace() {
+        assert_eq!(
+            resolve_location("Special:Commands", &[], None).unwrap(),
+            ResolvedLocation::SpecialCommands {
+                location: "Special:Commands".to_string(),
             }
         );
     }

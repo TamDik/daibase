@@ -1,9 +1,10 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { TerminalOutputEvent } from "../api/tauriCommands";
+import type { TerminalExitEvent, TerminalOutputEvent } from "../api/tauriCommands";
 
 let outputListener: ((event: { payload: TerminalOutputEvent }) => void) | null = null;
+let exitListener: ((event: { payload: TerminalExitEvent }) => void) | null = null;
 let terminalDataHandler: ((data: string) => void) | null = null;
 const terminalWrite = vi.fn();
 const terminalWriteln = vi.fn();
@@ -12,8 +13,13 @@ const fitMock = vi.fn();
 const proposeDimensions = vi.fn(() => ({ cols: 100, rows: 30 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn((_eventName, callback) => {
-    outputListener = callback;
+  listen: vi.fn((eventName, callback) => {
+    if (eventName === "terminal:output") {
+      outputListener = callback;
+    }
+    if (eventName === "terminal:exit") {
+      exitListener = callback;
+    }
     return Promise.resolve(vi.fn());
   }),
 }));
@@ -72,6 +78,7 @@ describe("TerminalPanel", () => {
     fitMock.mockClear();
     proposeDimensions.mockClear();
     outputListener = null;
+    exitListener = null;
     terminalDataHandler = null;
     vi.unstubAllGlobals();
     cleanup();
@@ -126,6 +133,38 @@ describe("TerminalPanel", () => {
     terminalDataHandler?.("pwd\r");
 
     expect(api.writeTerminal).toHaveBeenCalledWith("terminal-1", "pwd\r");
+  });
+
+  it("closes the panel when the shell exits", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+    vi.mocked(api.startTerminal).mockResolvedValue({
+      id: "terminal-1",
+      shell: "/bin/zsh",
+    });
+    const onClose = vi.fn();
+
+    render(<TerminalPanel onClose={onClose} />);
+    await screen.findByText("/bin/zsh");
+
+    exitListener?.({ payload: { session_id: "terminal-1" } });
+
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("resizes the panel height by dragging its top edge", () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+    vi.mocked(api.startTerminal).mockReturnValue(new Promise(() => {}));
+
+    render(<TerminalPanel onClose={vi.fn()} />);
+
+    const resizeHandle = screen.getByRole("separator", { name: "ターミナルの高さ" });
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "320");
+
+    fireEvent.pointerDown(resizeHandle, { clientY: 500 });
+    fireEvent.pointerMove(window, { clientY: 420 });
+    fireEvent.pointerUp(window);
+
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "400");
   });
 
   it("stops the terminal session when unmounted", async () => {

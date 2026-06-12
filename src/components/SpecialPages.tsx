@@ -8,6 +8,7 @@ import {
   DialogTitle,
   Divider,
   IconButton,
+  InputAdornment,
   List,
   ListItemButton,
   ListItemText,
@@ -19,12 +20,21 @@ import {
   Typography,
 } from "@mui/material";
 import {
+  ArrowBackOutlined,
+  ArrowForwardOutlined,
   ArticleOutlined,
+  BoltOutlined,
   CloseOutlined,
   DeleteOutlined,
   ExtensionOutlined,
+  FindInPageOutlined,
   FolderOpenOutlined,
+  KeyboardOutlined,
+  RefreshOutlined,
+  RestartAltOutlined,
   RestoreOutlined,
+  SearchOutlined,
+  TuneOutlined,
 } from "@mui/icons-material";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -44,6 +54,333 @@ import type {
   NamespaceSummary,
   SpecialPageSummary,
 } from "../api/tauriCommands";
+import {
+  bindingFromKeyboardEvent,
+  shortcutConflict,
+  type ShortcutBindings,
+  type ShortcutCommand,
+} from "../lib/keyboardShortcuts";
+
+export function CommandsSpecialPage({
+  commands,
+  location,
+  onExecute,
+}: {
+  commands: ShortcutCommand[];
+  location: string;
+  onExecute: (commandId: string) => void;
+}) {
+  return (
+    <Box sx={{ p: 2 }}>
+      <Typography variant="h5" component="h2">
+        Commands
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        {location}
+      </Typography>
+      <Stack spacing={1}>
+        {commands.map((command) => {
+          const CommandIcon = shortcutCommandIcon(command.id);
+          return (
+            <Paper key={command.id} variant="outlined" sx={{ p: 1.5 }}>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={2}
+                sx={{ alignItems: "center" }}
+              >
+                <Box
+                  sx={{
+                    alignItems: "center",
+                    bgcolor: "action.hover",
+                    borderRadius: 1.5,
+                    color: "text.secondary",
+                    display: "flex",
+                    height: 40,
+                    justifyContent: "center",
+                    width: 40,
+                  }}
+                >
+                  <CommandIcon />
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <Typography variant="subtitle2">{command.name}</Typography>
+                    <Chip
+                      label={command.source === "builtin" ? "Daibase" : command.source.slice(7)}
+                      size="small"
+                      variant="outlined"
+                    />
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                    {command.description}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {command.category} / {command.id}
+                  </Typography>
+                </Box>
+                <Button
+                  size="small"
+                  startIcon={<BoltOutlined />}
+                  onClick={() => onExecute(command.id)}
+                >
+                  実行
+                </Button>
+              </Stack>
+            </Paper>
+          );
+        })}
+      </Stack>
+    </Box>
+  );
+}
+
+export function ShortcutsSpecialPage({
+  bindings,
+  commands,
+  location,
+  onBindingChange,
+  onReset,
+}: {
+  bindings: ShortcutBindings;
+  commands: ShortcutCommand[];
+  location: string;
+  onBindingChange: (commandId: string, binding: string) => void;
+  onReset: () => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const allDefault = commands.every(
+    (command) => (bindings[command.id] ?? "") === command.defaultBinding,
+  );
+
+  return (
+    <Box sx={{ p: 2 }}>
+      <Stack direction="row" spacing={2} sx={{ alignItems: "flex-start", mb: 2 }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="h5" component="h2">
+            Keyboard Shortcuts
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {location}
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          startIcon={<RestartAltOutlined />}
+          disabled={allDefault}
+          onClick={onReset}
+        >
+          デフォルトに戻す
+        </Button>
+      </Stack>
+      {error && (
+        <Typography color="error" variant="body2" sx={{ mb: 1 }}>
+          {error}
+        </Typography>
+      )}
+      <Stack spacing={1}>
+        {commands.map((command) => {
+          const binding = bindings[command.id] ?? "";
+          const isDefault = binding === command.defaultBinding;
+          const CommandIcon = shortcutCommandIcon(command.id);
+
+          return (
+            <Paper key={command.id} variant="outlined" sx={{ p: 1.5 }}>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={2}
+                sx={{ alignItems: "center" }}
+              >
+                <Box
+                  sx={{
+                    alignItems: "center",
+                    bgcolor: "action.hover",
+                    borderRadius: 1.5,
+                    color: "text.secondary",
+                    display: "flex",
+                    flex: "0 0 auto",
+                    height: 40,
+                    justifyContent: "center",
+                    width: 40,
+                  }}
+                >
+                  <CommandIcon />
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="subtitle2">{command.title}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                    {command.description}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {command.category} / {command.id}
+                  </Typography>
+                </Box>
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+                  <TextField
+                    size="small"
+                    value={binding}
+                    placeholder="未割り当て"
+                    slotProps={{
+                      htmlInput: {
+                        "aria-label": `${command.title}のショートカット`,
+                        readOnly: true,
+                      },
+                      input: {
+                        startAdornment: binding ? (
+                          <InputAdornment position="start">
+                            <ShortcutKeycaps commandId={command.id} binding={binding} />
+                          </InputAdornment>
+                        ) : undefined,
+                        endAdornment: binding ? (
+                          <InputAdornment position="end" sx={{ ml: "auto" }}>
+                            <Tooltip title="割り当てを解除">
+                              <IconButton
+                                aria-label={`${command.title}の割り当てを解除`}
+                                edge="end"
+                                size="small"
+                                sx={{ mr: 0, p: 0.25 }}
+                                onClick={() => onBindingChange(command.id, "")}
+                              >
+                                <CloseOutlined sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          </InputAdornment>
+                        ) : undefined,
+                      },
+                    }}
+                    sx={{
+                      width: 170,
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: 2,
+                        height: 44,
+                        pl: binding ? 1 : 0,
+                        pr: binding ? 0.5 : 0,
+                      },
+                      "& .MuiInputAdornment-positionStart": { mr: 0.5 },
+                      "& .MuiOutlinedInput-input": {
+                        color: binding ? "transparent" : "text.primary",
+                        cursor: "pointer",
+                        minWidth: 0,
+                        px: binding ? 0 : 1.25,
+                        py: 1.25,
+                        width: binding ? 0 : undefined,
+                      },
+                    }}
+                    onKeyDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const nextBinding = bindingFromKeyboardEvent(event.nativeEvent);
+                      if (!nextBinding) return;
+                      const conflictId = shortcutConflict(command.id, nextBinding, bindings);
+                      if (conflictId) {
+                        const conflictCommand = commands.find((item) => item.id === conflictId);
+                        setError(
+                          `「${nextBinding}」は「${conflictCommand?.title ?? conflictId}」で使用中です。`,
+                        );
+                        return;
+                      }
+                      setError(null);
+                      onBindingChange(command.id, nextBinding);
+                    }}
+                  />
+                  <Tooltip title="デフォルトに戻す">
+                    <span>
+                      <IconButton
+                        aria-label={`${command.title}をデフォルトに戻す`}
+                        aria-pressed={isDefault}
+                        color="primary"
+                        disabled={isDefault}
+                        size="small"
+                        sx={{
+                          bgcolor: isDefault ? undefined : "action.hover",
+                          "&:hover": { bgcolor: "action.selected" },
+                        }}
+                        onClick={() => onBindingChange(command.id, command.defaultBinding)}
+                      >
+                        <RestartAltOutlined fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                </Stack>
+              </Stack>
+            </Paper>
+          );
+        })}
+      </Stack>
+    </Box>
+  );
+}
+
+function shortcutCommandIcon(commandId: string) {
+  if (commandId === "search.global") return SearchOutlined;
+  if (commandId === "search.page") return FindInPageOutlined;
+  if (commandId === "navigation.back") return ArrowBackOutlined;
+  if (commandId === "navigation.forward") return ArrowForwardOutlined;
+  if (commandId === "view.reload") return RefreshOutlined;
+  if (commandId === "shortcuts.open") return KeyboardOutlined;
+  return TuneOutlined;
+}
+
+function ShortcutKeycaps({ commandId, binding }: { commandId: string; binding: string }) {
+  return (
+    <Stack
+      aria-hidden="true"
+      data-testid={`shortcut-keycaps-${commandId}`}
+      direction="row"
+      spacing={0.5}
+      sx={{
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {binding.split("+").map((key) => (
+        <Box
+          component="kbd"
+          key={key}
+          title={key}
+          sx={{
+            bgcolor: "background.paper",
+            border: "1px solid",
+            borderColor: "divider",
+            borderBottomWidth: 2,
+            borderRadius: 1,
+            boxShadow: "0 1px 1px rgba(0, 0, 0, 0.08)",
+            color: "text.primary",
+            fontFamily: "inherit",
+            fontSize: "0.75rem",
+            fontWeight: 600,
+            lineHeight: 1,
+            minWidth: 26,
+            px: 0.75,
+            py: 0.625,
+            textAlign: "center",
+          }}
+        >
+          {shortcutKeyLabel(key)}
+        </Box>
+      ))}
+    </Stack>
+  );
+}
+
+function shortcutKeyLabel(key: string) {
+  const labels: Record<string, string> = {
+    Mod: "⌘",
+    Control: "⌃",
+    Alt: "⌥",
+    Shift: "⇧",
+    Enter: "↵",
+    Backspace: "⌫",
+    Delete: "⌦",
+    Escape: "⎋",
+    Tab: "⇥",
+    Space: "␣",
+    ArrowLeft: "←",
+    ArrowRight: "→",
+    ArrowUp: "↑",
+    ArrowDown: "↓",
+  };
+  return labels[key] ?? key;
+}
 
 export function HelpSpecialPage({
   document,
@@ -456,16 +793,12 @@ export function FavoritesSpecialPage({
 export function CategoriesSpecialPage({
   categories,
   namespace,
-  uncategorizedPages,
   onOpenLocation,
 }: {
   categories: CategoryGroupSummary[];
   namespace: NamespaceSummary;
-  uncategorizedPages: CategoryPageSummary[];
   onOpenLocation: (location: string) => void;
 }) {
-  const hasPages = categories.length > 0 || uncategorizedPages.length > 0;
-
   return (
     <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
       <Box sx={{ px: 2, py: 1.5 }}>
@@ -477,29 +810,19 @@ export function CategoriesSpecialPage({
         </Typography>
       </Box>
       <Stack spacing={3} sx={{ p: 3 }}>
-        {!hasPages ? (
+        {categories.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             カテゴリ付きのページはまだありません。
           </Typography>
         ) : (
-          <>
-            {categories.map((category) => (
-              <Box key={category.name}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  {category.name}
-                </Typography>
-                <CategoryPageList pages={category.pages} onOpenLocation={onOpenLocation} />
-              </Box>
-            ))}
-            {uncategorizedPages.length > 0 && (
-              <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  未分類
-                </Typography>
-                <CategoryPageList pages={uncategorizedPages} onOpenLocation={onOpenLocation} />
-              </Box>
-            )}
-          </>
+          categories.map((category) => (
+            <Box key={category.name}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                {category.name}
+              </Typography>
+              <CategoryPageList pages={category.pages} onOpenLocation={onOpenLocation} />
+            </Box>
+          ))
         )}
       </Stack>
     </Paper>

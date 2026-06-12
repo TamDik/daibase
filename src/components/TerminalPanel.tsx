@@ -10,20 +10,77 @@ import {
   resizeTerminal,
   startTerminal,
   stopTerminal,
+  type TerminalExitEvent,
   type TerminalOutputEvent,
   type TerminalSessionSummary,
   writeTerminal,
 } from "../api/tauriCommands";
 
 const TERMINAL_OUTPUT_EVENT = "terminal:output";
+const TERMINAL_EXIT_EVENT = "terminal:exit";
+const defaultTerminalHeight = 320;
+const minTerminalHeight = 160;
+const keyboardResizeStep = 24;
 
 export function TerminalPanel({ onClose }: { onClose: () => void }) {
   const [session, setSession] = useState<TerminalSessionSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [terminalHeight, setTerminalHeight] = useState(defaultTerminalHeight);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const onCloseRef = useRef(onClose);
+  const dragState = useRef<{ startY: number; startHeight: number } | null>(null);
+
+  onCloseRef.current = onClose;
+
+  const maxTerminalHeight = Math.max(minTerminalHeight, window.innerHeight - 120);
+  const clampTerminalHeight = (height: number) =>
+    Math.min(maxTerminalHeight, Math.max(minTerminalHeight, Math.round(height)));
+
+  const handleResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    dragState.current = {
+      startY: event.clientY,
+      startHeight: terminalHeight,
+    };
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  useEffect(() => {
+    const handleResizeMove = (event: PointerEvent) => {
+      if (!dragState.current) {
+        return;
+      }
+
+      const nextHeight = dragState.current.startHeight + dragState.current.startY - event.clientY;
+      setTerminalHeight(clampTerminalHeight(nextHeight));
+    };
+
+    const handleResizeEnd = () => {
+      if (!dragState.current) {
+        return;
+      }
+
+      dragState.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    window.addEventListener("pointermove", handleResizeMove);
+    window.addEventListener("pointerup", handleResizeEnd);
+    window.addEventListener("pointercancel", handleResizeEnd);
+
+    return () => {
+      window.removeEventListener("pointermove", handleResizeMove);
+      window.removeEventListener("pointerup", handleResizeEnd);
+      window.removeEventListener("pointercancel", handleResizeEnd);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [maxTerminalHeight]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -32,7 +89,8 @@ export function TerminalPanel({ onClose }: { onClose: () => void }) {
     }
 
     let isMounted = true;
-    let unlisten: UnlistenFn | null = null;
+    let unlistenOutput: UnlistenFn | null = null;
+    let unlistenExit: UnlistenFn | null = null;
     let startedSessionId: string | null = null;
 
     const terminal = new Terminal({
@@ -105,7 +163,21 @@ export function TerminalPanel({ onClose }: { onClose: () => void }) {
       terminal.write(event.payload.text);
     })
       .then((nextUnlisten) => {
-        unlisten = nextUnlisten;
+        unlistenOutput = nextUnlisten;
+      })
+      .catch((listenError) => {
+        if (isMounted) {
+          setError(String(listenError));
+        }
+      });
+
+    listen<TerminalExitEvent>(TERMINAL_EXIT_EVENT, (event) => {
+      if (event.payload.session_id === sessionIdRef.current) {
+        onCloseRef.current();
+      }
+    })
+      .then((nextUnlisten) => {
+        unlistenExit = nextUnlisten;
       })
       .catch((listenError) => {
         if (isMounted) {
@@ -139,7 +211,8 @@ export function TerminalPanel({ onClose }: { onClose: () => void }) {
       isMounted = false;
       resizeObserver.disconnect();
       dataDisposable.dispose();
-      unlisten?.();
+      unlistenOutput?.();
+      unlistenExit?.();
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
@@ -163,11 +236,48 @@ export function TerminalPanel({ onClose }: { onClose: () => void }) {
         borderTop: "1px solid #30363d",
         color: "#f0f6fc",
         display: "flex",
-        flex: "0 0 320px",
+        flex: `0 0 ${terminalHeight}px`,
         flexDirection: "column",
-        minHeight: 240,
+        minHeight: minTerminalHeight,
+        position: "relative",
       }}
     >
+      <Box
+        aria-label="ターミナルの高さ"
+        aria-orientation="horizontal"
+        aria-valuemax={maxTerminalHeight}
+        aria-valuemin={minTerminalHeight}
+        aria-valuenow={terminalHeight}
+        role="separator"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setTerminalHeight((height) => clampTerminalHeight(height + keyboardResizeStep));
+          }
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setTerminalHeight((height) => clampTerminalHeight(height - keyboardResizeStep));
+          }
+        }}
+        onPointerDown={handleResizeStart}
+        sx={{
+          cursor: "row-resize",
+          height: 8,
+          left: 0,
+          position: "absolute",
+          right: 0,
+          top: -4,
+          zIndex: 1,
+          "&:focus-visible": {
+            outline: "2px solid #58a6ff",
+            outlineOffset: -2,
+          },
+          "&:hover": {
+            bgcolor: "rgba(88, 166, 255, 0.2)",
+          },
+        }}
+      />
       <Stack
         direction="row"
         spacing={1}
@@ -197,7 +307,12 @@ export function TerminalPanel({ onClose }: { onClose: () => void }) {
         </Typography>
         {!session && !error && <CircularProgress color="inherit" size={16} />}
         <Tooltip title="閉じる">
-          <IconButton aria-label="ターミナルを閉じる" color="inherit" size="small" onClick={onClose}>
+          <IconButton
+            aria-label="ターミナルを閉じる"
+            color="inherit"
+            size="small"
+            onClick={onClose}
+          >
             <CloseRounded fontSize="small" />
           </IconButton>
         </Tooltip>

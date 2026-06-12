@@ -165,6 +165,8 @@ pub struct SearchContentResult {
     pub title: String,
     pub location: String,
     pub snippet: Option<String>,
+    pub title_match_indices: Vec<u32>,
+    pub path_match_indices: Vec<u32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -394,6 +396,12 @@ pub enum OpenLocationResult {
         documents: Vec<HelpDocumentSummary>,
         document: Option<HelpDocument>,
     },
+    SpecialShortcuts {
+        location: String,
+    },
+    SpecialCommands {
+        location: String,
+    },
     SpecialPages {
         location: String,
         namespace: NamespaceSummary,
@@ -422,7 +430,6 @@ pub enum OpenLocationResult {
         namespace: NamespaceSummary,
         content: ContentTree,
         categories: Vec<CategoryGroupSummary>,
-        uncategorized_pages: Vec<CategoryPageSummary>,
     },
     SpecialPlugins {
         location: String,

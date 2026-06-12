@@ -390,6 +390,8 @@ pub fn resolve_markdown_link_status(
         } => crate::namespace::file_exists_for_namespace(&namespace, &file_path)?,
         ResolvedLocation::SpecialNamespaces { .. }
         | ResolvedLocation::SpecialHelp { .. }
+        | ResolvedLocation::SpecialShortcuts { .. }
+        | ResolvedLocation::SpecialCommands { .. }
         | ResolvedLocation::SpecialPages { .. }
         | ResolvedLocation::SpecialPagesList { .. }
         | ResolvedLocation::SpecialDeletedPages { .. }
@@ -541,6 +543,12 @@ pub fn open_location(
                 .map(crate::help::read_document)
                 .transpose()?,
         }),
+        ResolvedLocation::SpecialShortcuts { location } => {
+            Ok(OpenLocationResult::SpecialShortcuts { location })
+        }
+        ResolvedLocation::SpecialCommands { location } => {
+            Ok(OpenLocationResult::SpecialCommands { location })
+        }
         ResolvedLocation::SpecialPages {
             namespace,
             location,
@@ -592,14 +600,12 @@ pub fn open_location(
             location,
         } => {
             let detail = crate::namespace::open_namespace(&app, namespace.id.clone())?;
-            let (categories, uncategorized_pages) =
-                crate::namespace::list_category_groups(&detail.namespace)?;
+            let categories = crate::namespace::list_category_groups(&detail.namespace)?;
             Ok(OpenLocationResult::SpecialCategories {
                 location,
                 namespace: detail.namespace,
                 content: detail.content,
                 categories,
-                uncategorized_pages,
             })
         }
         ResolvedLocation::SpecialPlugins {

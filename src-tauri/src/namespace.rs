@@ -15,6 +15,7 @@ use crate::versioning::{
     set_favorite_path, write_path_index,
 };
 use chrono::Utc;
+use nucleo_matcher::{Config, Matcher, Utf32Str};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
@@ -650,10 +651,9 @@ pub fn list_favorite_content(
 
 pub fn list_category_groups(
     namespace: &NamespaceSummary,
-) -> Result<(Vec<CategoryGroupSummary>, Vec<CategoryPageSummary>), String> {
+) -> Result<Vec<CategoryGroupSummary>, String> {
     let content = list_content_for_namespace(namespace)?;
     let mut groups = std::collections::BTreeMap::<String, Vec<CategoryPageSummary>>::new();
-    let mut uncategorized_pages = Vec::new();
 
     for page in content.pages {
         let page_path = resolve_namespace_path(&namespace.root_path, &page.path)?;
@@ -667,7 +667,6 @@ pub fn list_category_groups(
         };
 
         if categories.is_empty() {
-            uncategorized_pages.push(summary);
             continue;
         }
 
@@ -684,9 +683,8 @@ pub fn list_category_groups(
         })
         .collect::<Vec<_>>();
     categories.sort_by(|left, right| left.name.cmp(&right.name));
-    uncategorized_pages.sort_by(|left, right| left.path.cmp(&right.path));
 
-    Ok((categories, uncategorized_pages))
+    Ok(categories)
 }
 
 pub fn read_deleted_page(
@@ -1215,17 +1213,64 @@ fn search_content_for_namespace(
     }
 
     let normalized_query = query.to_lowercase();
+    let mut matcher = Matcher::new(Config::DEFAULT.match_paths());
     let mut results = special_pages_for_namespace(namespace)
         .into_iter()
-        .filter(|page| special_page_matches_query(page, &normalized_query))
-        .map(|page| SearchContentResult {
-            content_kind: "special".to_string(),
-            path: page.location.clone(),
-            title: page.title,
-            location: page.location,
-            snippet: Some(page.description),
+        .filter_map(|page| {
+            let title_match = fuzzy_match(&mut matcher, &page.title, &normalized_query);
+            let path_match = fuzzy_match(&mut matcher, &page.location, &normalized_query);
+            let description_matches = page.description.to_lowercase().contains(&normalized_query);
+            search_rank(
+                &page.title,
+                &page.location,
+                &normalized_query,
+                title_match.as_ref(),
+                path_match.as_ref(),
+                description_matches,
+            )
+            .map(|score| ScoredSearchResult {
+                score,
+                result: SearchContentResult {
+                    content_kind: "special".to_string(),
+                    path: page.location.clone(),
+                    title: page.title,
+                    location: page.location,
+                    snippet: Some(page.description),
+                    title_match_indices: match_indices(title_match),
+                    path_match_indices: match_indices(path_match),
+                },
+            })
         })
         .collect::<Vec<_>>();
+
+    for summary in crate::help::list_documents() {
+        let document = crate::help::read_document(&summary.path)?;
+        let title_match = fuzzy_match(&mut matcher, &document.title, &normalized_query);
+        let path_match = fuzzy_match(&mut matcher, &document.location, &normalized_query);
+        let snippet = search_snippet(&document.markdown, &normalized_query);
+
+        if let Some(score) = search_rank(
+            &document.title,
+            &document.location,
+            &normalized_query,
+            title_match.as_ref(),
+            path_match.as_ref(),
+            snippet.is_some(),
+        ) {
+            results.push(ScoredSearchResult {
+                score,
+                result: SearchContentResult {
+                    content_kind: "special".to_string(),
+                    path: document.location.clone(),
+                    title: document.title,
+                    location: document.location,
+                    snippet,
+                    title_match_indices: match_indices(title_match),
+                    path_match_indices: match_indices(path_match),
+                },
+            });
+        }
+    }
 
     let mut paths = Vec::new();
     collect_visible_file_paths(&namespace.root_path, &namespace.root_path, &mut paths)?;
@@ -1247,8 +1292,8 @@ fn search_content_for_namespace(
             )
         };
 
-        let title_matches = title.to_lowercase().contains(&normalized_query);
-        let path_matches = path.to_lowercase().contains(&normalized_query);
+        let title_match = fuzzy_match(&mut matcher, &title, &normalized_query);
+        let path_match = fuzzy_match(&mut matcher, &path, &normalized_query);
         let content_type = guess_content_type(&path);
         let text_content = if path.ends_with(".md") || is_text_content_type(&content_type) {
             fs::read_to_string(&resolved_path).ok()
@@ -1259,18 +1304,103 @@ fn search_content_for_namespace(
             .as_deref()
             .and_then(|content| search_snippet(content, &normalized_query));
 
-        if title_matches || path_matches || snippet.is_some() {
-            results.push(SearchContentResult {
-                content_kind,
-                path,
-                title,
-                location,
-                snippet,
+        if let Some(score) = search_rank(
+            &title,
+            &path,
+            &normalized_query,
+            title_match.as_ref(),
+            path_match.as_ref(),
+            snippet.is_some(),
+        ) {
+            results.push(ScoredSearchResult {
+                score,
+                result: SearchContentResult {
+                    content_kind,
+                    path,
+                    title,
+                    location,
+                    snippet,
+                    title_match_indices: match_indices(title_match),
+                    path_match_indices: match_indices(path_match),
+                },
             });
         }
     }
 
-    Ok(results)
+    results.sort_by(|left, right| {
+        right
+            .score
+            .cmp(&left.score)
+            .then_with(|| left.result.path.cmp(&right.result.path))
+    });
+    results.truncate(100);
+    Ok(results.into_iter().map(|result| result.result).collect())
+}
+
+struct ScoredSearchResult {
+    score: u32,
+    result: SearchContentResult,
+}
+
+struct FuzzyMatch {
+    score: u16,
+    indices: Vec<u32>,
+}
+
+fn fuzzy_match(matcher: &mut Matcher, text: &str, normalized_query: &str) -> Option<FuzzyMatch> {
+    let normalized_text = text.to_lowercase();
+    let mut text_buffer = Vec::new();
+    let mut query_buffer = Vec::new();
+    let mut indices = Vec::new();
+    let haystack = Utf32Str::new(&normalized_text, &mut text_buffer);
+    let needle = Utf32Str::new(normalized_query, &mut query_buffer);
+    matcher
+        .fuzzy_indices(haystack, needle, &mut indices)
+        .map(|score| FuzzyMatch { score, indices })
+}
+
+fn search_rank(
+    title: &str,
+    path: &str,
+    normalized_query: &str,
+    title_match: Option<&FuzzyMatch>,
+    path_match: Option<&FuzzyMatch>,
+    content_matches: bool,
+) -> Option<u32> {
+    let normalized_title = title.to_lowercase();
+    let normalized_path = path.to_lowercase();
+    let title_score = title_match.map(|matched| {
+        1_000_000
+            + u32::from(matched.score)
+            + if normalized_title == normalized_query {
+                200_000
+            } else if normalized_title.starts_with(normalized_query) {
+                100_000
+            } else {
+                0
+            }
+    });
+    let path_score = path_match.map(|matched| {
+        500_000
+            + u32::from(matched.score)
+            + if normalized_path == normalized_query {
+                100_000
+            } else if normalized_path.starts_with(normalized_query) {
+                50_000
+            } else {
+                0
+            }
+    });
+
+    title_score
+        .into_iter()
+        .chain(path_score)
+        .max()
+        .or(content_matches.then_some(1))
+}
+
+fn match_indices(matched: Option<FuzzyMatch>) -> Vec<u32> {
+    matched.map_or_else(Vec::new, |matched| matched.indices)
 }
 
 pub fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialPageSummary> {
@@ -1289,6 +1419,16 @@ pub fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialP
             title: "Help".to_string(),
             description: "Daibase のドキュメントを表示します。".to_string(),
             location: "Special:Help".to_string(),
+        },
+        SpecialPageSummary {
+            title: "Keyboard Shortcuts".to_string(),
+            description: "キーボードショートカットの確認と編集を行います。".to_string(),
+            location: "Special:Shortcuts".to_string(),
+        },
+        SpecialPageSummary {
+            title: "Commands".to_string(),
+            description: "利用可能なコマンドを表示します。".to_string(),
+            location: "Special:Commands".to_string(),
         },
         SpecialPageSummary {
             title: "Pages".to_string(),
@@ -1316,11 +1456,6 @@ pub fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialP
             location: format!("{}:Special:Plugins", namespace.name),
         },
     ]
-}
-
-fn special_page_matches_query(page: &SpecialPageSummary, normalized_query: &str) -> bool {
-    page.title.to_lowercase().contains(normalized_query)
-        || page.location.to_lowercase().contains(normalized_query)
 }
 
 fn search_snippet(content: &str, normalized_query: &str) -> Option<String> {
@@ -1922,14 +2057,55 @@ mod tests {
         assert_eq!(results[1].snippet.as_deref(), Some("beta note"));
 
         let path_results = search_content_for_namespace(&namespace, "intro").unwrap();
-        assert_eq!(path_results.len(), 1);
         assert_eq!(path_results[0].path, "Guide/Intro.md");
 
         let special_results = search_content_for_namespace(&namespace, "favorites").unwrap();
-        assert_eq!(special_results.len(), 1);
         assert_eq!(special_results[0].content_kind, "special");
         assert_eq!(special_results[0].title, "Favorites");
         assert_eq!(special_results[0].location, "Work:Special:Favorites");
+
+        let special_description_results =
+            search_content_for_namespace(&namespace, "カテゴリ別").unwrap();
+        assert_eq!(special_description_results.len(), 1);
+        assert_eq!(special_description_results[0].content_kind, "special");
+        assert_eq!(special_description_results[0].title, "Categories");
+        assert_eq!(
+            special_description_results[0].snippet.as_deref(),
+            Some("カテゴリ別にページを表示します。")
+        );
+
+        let help_path_results =
+            search_content_for_namespace(&namespace, "plugin-development.md").unwrap();
+        assert_eq!(help_path_results[0].content_kind, "special");
+        assert_eq!(
+            help_path_results[0].location,
+            "Special:Help/plugin-development.md"
+        );
+        assert!(!help_path_results[0].path_match_indices.is_empty());
+
+        let help_content_results =
+            search_content_for_namespace(&namespace, "capability 制").unwrap();
+        assert_eq!(help_content_results.len(), 1);
+        assert_eq!(help_content_results[0].content_kind, "special");
+        assert_eq!(
+            help_content_results[0].location,
+            "Special:Help/plugin-host-design.md"
+        );
+        assert!(help_content_results[0]
+            .snippet
+            .as_deref()
+            .is_some_and(|snippet| snippet.contains("capability 制")));
+
+        let fuzzy_results = search_content_for_namespace(&namespace, "gdi").unwrap();
+        let guide_result = fuzzy_results
+            .iter()
+            .find(|result| result.path == "Guide/Intro.md")
+            .unwrap();
+        assert_eq!(guide_result.path_match_indices, vec![0, 3, 6]);
+
+        let ranked_results = search_content_for_namespace(&namespace, "main").unwrap();
+        assert_eq!(ranked_results[0].path, "Main.md");
+        assert!(!ranked_results[0].title_match_indices.is_empty());
 
         fs::remove_dir_all(root_path).unwrap();
     }
@@ -1947,7 +2123,7 @@ mod tests {
     }
 
     #[test]
-    fn list_category_groups_groups_pages_and_uncategorized_pages() {
+    fn list_category_groups_ignores_uncategorized_pages() {
         let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
         fs::create_dir_all(&root_path).unwrap();
         fs::write(
@@ -1973,7 +2149,7 @@ mod tests {
             updated_at: "2026-06-01T00:00:00Z".to_string(),
         };
 
-        let (categories, uncategorized_pages) = list_category_groups(&namespace).unwrap();
+        let categories = list_category_groups(&namespace).unwrap();
 
         assert_eq!(categories.len(), 2);
         assert_eq!(categories[0].name, "Research");
@@ -1987,7 +2163,10 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["Draft.md", "Main.md"]
         );
-        assert_eq!(uncategorized_pages[0].path, "Free.md");
+        assert!(categories
+            .iter()
+            .flat_map(|category| &category.pages)
+            .all(|page| page.path != "Free.md"));
 
         fs::remove_dir_all(root_path).unwrap();
     }

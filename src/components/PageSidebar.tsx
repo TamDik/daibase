@@ -24,6 +24,7 @@ import type {
   FolderSummary,
   NamespaceSummary,
 } from "../api/tauriCommands";
+import type { AppCommand } from "../lib/commandRegistry";
 import { CommandLauncher } from "./CommandLauncher";
 import { ResizableSidebar } from "./ResizableSidebar";
 
@@ -48,20 +49,26 @@ export function PageSidebar({
   content,
   currentLocation,
   namespace,
+  searchOpenRequestId = 0,
+  commands,
   onCreateFolder,
   onCreatePage,
   onDeleteContent,
   onOpenLocation,
+  onExecuteCommand,
   onToggleTerminal,
   onToggleFavorite,
 }: {
   content: ContentTree | null;
   currentLocation: string;
   namespace: NamespaceSummary | null;
+  searchOpenRequestId?: number;
+  commands: AppCommand[];
   onCreateFolder: (parentDirectory: string) => void;
   onCreatePage: (parentDirectory: string) => void;
   onDeleteContent: (path: string, kind: "page" | "folder" | "file") => void;
   onOpenLocation: (location: string) => void;
+  onExecuteCommand: (commandId: string) => void;
   onToggleTerminal: () => void;
   onToggleFavorite: (path: string, isFavorite: boolean) => void;
 }) {
@@ -119,10 +126,13 @@ export function PageSidebar({
       <SidebarToolbar
         canCreate={namespace !== null}
         searchNamespaceId={namespace?.id ?? null}
+        searchOpenRequestId={searchOpenRequestId}
+        commands={commands}
         sortDirection={sortDirection}
         onCreateFolder={() => onCreateFolder(createParentDirectory)}
         onCreatePage={() => onCreatePage(createParentDirectory)}
         onOpenLocation={onOpenLocation}
+        onExecuteCommand={onExecuteCommand}
         onToggleTerminal={onToggleTerminal}
         onToggleSortDirection={() =>
           setSortDirection((current) => (current === "asc" ? "desc" : "asc"))
@@ -175,19 +185,25 @@ type SortDirection = "asc" | "desc";
 function SidebarToolbar({
   canCreate,
   searchNamespaceId,
+  searchOpenRequestId,
+  commands,
   sortDirection,
   onCreateFolder,
   onCreatePage,
   onOpenLocation,
+  onExecuteCommand,
   onToggleTerminal,
   onToggleSortDirection,
 }: {
   canCreate: boolean;
   searchNamespaceId: string | null;
+  searchOpenRequestId: number;
+  commands: AppCommand[];
   sortDirection: SortDirection;
   onCreateFolder: () => void;
   onCreatePage: () => void;
   onOpenLocation: (location: string) => void;
+  onExecuteCommand: (commandId: string) => void;
   onToggleTerminal: () => void;
   onToggleSortDirection: () => void;
 }) {
@@ -226,7 +242,13 @@ function SidebarToolbar({
         spacing={0.5}
         sx={{ alignItems: "center" }}
       >
-        <CommandLauncher namespaceId={searchNamespaceId} onOpenLocation={onOpenLocation} />
+        <CommandLauncher
+          namespaceId={searchNamespaceId}
+          openRequestId={searchOpenRequestId}
+          commands={commands}
+          onExecuteCommand={onExecuteCommand}
+          onOpenLocation={onOpenLocation}
+        />
         <Tooltip title="Favorites">
           <span>
             <IconButton
