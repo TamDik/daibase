@@ -87,13 +87,23 @@ export function searchCommands(commands: AppCommand[], query: string): AppComman
   if (!normalizedQuery) return commands;
 
   return commands
-    .map((command, index) => ({
-      command,
-      index,
-      score: commandSearchScore(command, normalizedQuery),
-    }))
+    .map((command, index) => {
+      const nameScore = fuzzyScore(command.name.toLocaleLowerCase(), normalizedQuery);
+      const score = commandSearchScore(command, normalizedQuery);
+      return {
+        command,
+        index,
+        namePriority: nameScore === null ? 1 : 0,
+        score: nameScore ?? score,
+      };
+    })
     .filter((entry) => entry.score !== null)
-    .sort((left, right) => (left.score ?? 0) - (right.score ?? 0) || left.index - right.index)
+    .sort(
+      (left, right) =>
+        left.namePriority - right.namePriority ||
+        (left.score ?? 0) - (right.score ?? 0) ||
+        left.index - right.index,
+    )
     .map((entry) => entry.command);
 }
 
