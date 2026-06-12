@@ -1,5 +1,6 @@
 export type AppCommand = {
   id: string;
+  name: string;
   title: string;
   description: string;
   category: string;
@@ -11,6 +12,7 @@ export type AppCommand = {
 export const builtinCommands: AppCommand[] = [
   {
     id: "search.global",
+    name: "Global Search",
     title: "全体検索",
     description: "現在の namespace を検索します。",
     category: "検索",
@@ -20,6 +22,7 @@ export const builtinCommands: AppCommand[] = [
   },
   {
     id: "search.page",
+    name: "Find in Page",
     title: "ページ内検索",
     description: "表示中のページ本文を検索します。",
     category: "検索",
@@ -29,6 +32,7 @@ export const builtinCommands: AppCommand[] = [
   },
   {
     id: "navigation.back",
+    name: "Back",
     title: "戻る",
     description: "前に表示していたlocationへ戻ります。",
     category: "ナビゲーション",
@@ -38,6 +42,7 @@ export const builtinCommands: AppCommand[] = [
   },
   {
     id: "navigation.forward",
+    name: "Forward",
     title: "進む",
     description: "戻る前に表示していたlocationへ進みます。",
     category: "ナビゲーション",
@@ -46,7 +51,18 @@ export const builtinCommands: AppCommand[] = [
     keywords: ["forward", "next"],
   },
   {
+    id: "view.reload",
+    name: "Reload",
+    title: "再読み込み",
+    description: "現在のロケーションを再読み込みします。",
+    category: "ナビゲーション",
+    defaultBinding: "Mod+R",
+    source: "builtin",
+    keywords: ["reload", "refresh"],
+  },
+  {
     id: "shortcuts.open",
+    name: "Keyboard Shortcuts",
     title: "ショートカット一覧",
     description: "キーボードショートカットの確認と編集を行います。",
     category: "アプリケーション",
@@ -56,6 +72,7 @@ export const builtinCommands: AppCommand[] = [
   },
   {
     id: "commands.open",
+    name: "Commands",
     title: "コマンド一覧",
     description: "利用可能なコマンドを表示します。",
     category: "アプリケーション",
@@ -82,6 +99,7 @@ export function searchCommands(commands: AppCommand[], query: string): AppComman
 
 function commandSearchScore(command: AppCommand, query: string): number | null {
   const values = [
+    command.name,
     command.title,
     command.id,
     command.description,

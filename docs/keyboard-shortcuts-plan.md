@@ -10,13 +10,14 @@ Daibase の主要操作をキーボードから実行できるようにし、ユ
 
 ### 対応済みのコマンド
 
-| コマンド ID          | 操作                     | デフォルト       |
-| -------------------- | ------------------------ | ---------------- |
-| `search.global`      | 全体検索                 | `Mod+K`          |
-| `search.page`        | ページ内検索             | `Mod+F`          |
-| `navigation.back`    | 戻る                     | `Alt+ArrowLeft`  |
-| `navigation.forward` | 進む                     | `Alt+ArrowRight` |
-| `shortcuts.open`     | ショートカット一覧を開く | `Mod+Shift+K`    |
+| コマンド ID          | 操作                           | デフォルト       |
+| -------------------- | ------------------------------ | ---------------- |
+| `search.global`      | 全体検索                       | `Mod+K`          |
+| `search.page`        | ページ内検索                   | `Mod+F`          |
+| `navigation.back`    | 戻る                           | `Alt+ArrowLeft`  |
+| `navigation.forward` | 進む                           | `Alt+ArrowRight` |
+| `view.reload`        | 現在のロケーションを再読み込み | `Mod+R`          |
+| `shortcuts.open`     | ショートカット一覧を開く       | `Mod+Shift+K`    |
 
 `Mod` は実行時に macOS の Command または Windows / Linux の Control と照合します。保存値には OS 固有のキー名を使わず、共通表現を保持します。
 
@@ -27,6 +28,7 @@ Daibase の主要操作をキーボードから実行できるようにし、ユ
 ```ts
 type ShortcutCommand = {
   id: string;
+  name: string;
   title: string;
   description: string;
   category: string;
@@ -81,7 +83,7 @@ keydown
 
 ### コマンド一覧
 
-`Special:Commands` をグローバルな Special ページとして実装しています。組み込みコマンドの名前、説明、カテゴリ、コマンド ID、提供元、現在のショートカットを表示し、その場で実行できます。
+`Special:Commands` をグローバルな Special ページとして実装しています。組み込みコマンドの名前、説明、カテゴリ、コマンド ID、提供元を表示し、その場で実行できます。ショートカットの表示と編集は `Special:Shortcuts` に集約します。
 
 コマンド型の `source` は `builtin` と `plugin:{pluginId}` を区別できるため、将来 Plugin Host が検証したコマンドを同じレジストリへ追加できます。
 

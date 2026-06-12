@@ -30,6 +30,7 @@ import {
   FindInPageOutlined,
   FolderOpenOutlined,
   KeyboardOutlined,
+  RefreshOutlined,
   RestartAltOutlined,
   RestoreOutlined,
   SearchOutlined,
@@ -61,12 +62,10 @@ import {
 } from "../lib/keyboardShortcuts";
 
 export function CommandsSpecialPage({
-  bindings,
   commands,
   location,
   onExecute,
 }: {
-  bindings: ShortcutBindings;
   commands: ShortcutCommand[];
   location: string;
   onExecute: (commandId: string) => void;
@@ -82,7 +81,6 @@ export function CommandsSpecialPage({
       <Stack spacing={1}>
         {commands.map((command) => {
           const CommandIcon = shortcutCommandIcon(command.id);
-          const binding = bindings[command.id] ?? "";
           return (
             <Paper key={command.id} variant="outlined" sx={{ p: 1.5 }}>
               <Stack
@@ -106,7 +104,7 @@ export function CommandsSpecialPage({
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                    <Typography variant="subtitle2">{command.title}</Typography>
+                    <Typography variant="subtitle2">{command.name}</Typography>
                     <Chip
                       label={command.source === "builtin" ? "Daibase" : command.source.slice(7)}
                       size="small"
@@ -120,9 +118,6 @@ export function CommandsSpecialPage({
                     {command.category} / {command.id}
                   </Typography>
                 </Box>
-                {binding && (
-                  <ShortcutKeycaps commandId={`commands-${command.id}`} binding={binding} />
-                )}
                 <Button
                   size="small"
                   startIcon={<BoltOutlined />}
@@ -320,6 +315,7 @@ function shortcutCommandIcon(commandId: string) {
   if (commandId === "search.page") return FindInPageOutlined;
   if (commandId === "navigation.back") return ArrowBackOutlined;
   if (commandId === "navigation.forward") return ArrowForwardOutlined;
+  if (commandId === "view.reload") return RefreshOutlined;
   if (commandId === "shortcuts.open") return KeyboardOutlined;
   return TuneOutlined;
 }

@@ -25,7 +25,6 @@ import type {
   NamespaceSummary,
 } from "../api/tauriCommands";
 import type { AppCommand } from "../lib/commandRegistry";
-import type { ShortcutBindings } from "../lib/keyboardShortcuts";
 import { CommandLauncher } from "./CommandLauncher";
 import { ResizableSidebar } from "./ResizableSidebar";
 
@@ -52,7 +51,6 @@ export function PageSidebar({
   namespace,
   searchOpenRequestId = 0,
   commands,
-  shortcutBindings,
   onCreateFolder,
   onCreatePage,
   onDeleteContent,
@@ -66,7 +64,6 @@ export function PageSidebar({
   namespace: NamespaceSummary | null;
   searchOpenRequestId?: number;
   commands: AppCommand[];
-  shortcutBindings: ShortcutBindings;
   onCreateFolder: (parentDirectory: string) => void;
   onCreatePage: (parentDirectory: string) => void;
   onDeleteContent: (path: string, kind: "page" | "folder" | "file") => void;
@@ -131,7 +128,6 @@ export function PageSidebar({
         searchNamespaceId={namespace?.id ?? null}
         searchOpenRequestId={searchOpenRequestId}
         commands={commands}
-        shortcutBindings={shortcutBindings}
         sortDirection={sortDirection}
         onCreateFolder={() => onCreateFolder(createParentDirectory)}
         onCreatePage={() => onCreatePage(createParentDirectory)}
@@ -191,7 +187,6 @@ function SidebarToolbar({
   searchNamespaceId,
   searchOpenRequestId,
   commands,
-  shortcutBindings,
   sortDirection,
   onCreateFolder,
   onCreatePage,
@@ -204,7 +199,6 @@ function SidebarToolbar({
   searchNamespaceId: string | null;
   searchOpenRequestId: number;
   commands: AppCommand[];
-  shortcutBindings: ShortcutBindings;
   sortDirection: SortDirection;
   onCreateFolder: () => void;
   onCreatePage: () => void;
@@ -252,7 +246,6 @@ function SidebarToolbar({
           namespaceId={searchNamespaceId}
           openRequestId={searchOpenRequestId}
           commands={commands}
-          shortcutBindings={shortcutBindings}
           onExecuteCommand={onExecuteCommand}
           onOpenLocation={onOpenLocation}
         />

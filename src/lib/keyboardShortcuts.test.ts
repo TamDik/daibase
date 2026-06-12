@@ -12,6 +12,7 @@ describe("keyboardShortcuts", () => {
       "search.global": "Mod+K",
       "search.page": "Mod+F",
       "navigation.back": "Alt+ArrowLeft",
+      "view.reload": "Mod+R",
     });
   });
 

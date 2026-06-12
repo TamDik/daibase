@@ -22,20 +22,17 @@ import { type ComponentType, type ReactNode, useEffect, useRef, useState } from 
 
 import { searchContent, type SearchContentResult } from "../api/tauriCommands";
 import { searchCommands, type AppCommand } from "../lib/commandRegistry";
-import type { ShortcutBindings } from "../lib/keyboardShortcuts";
 
 export function CommandLauncher({
   namespaceId,
   openRequestId = 0,
   commands,
-  shortcutBindings,
   onExecuteCommand,
   onOpenLocation,
 }: {
   namespaceId: string | null;
   openRequestId?: number;
   commands: AppCommand[];
-  shortcutBindings: ShortcutBindings;
   onExecuteCommand: (commandId: string) => void;
   onOpenLocation: (location: string) => void;
 }) {
@@ -55,7 +52,7 @@ export function CommandLauncher({
   const commandCompletion = commandResults[selectedIndex];
   const showCommandCompletion =
     commandCompletion &&
-    commandCompletion.title.toLocaleLowerCase() !== commandQuery.toLocaleLowerCase();
+    commandCompletion.name.toLocaleLowerCase() !== commandQuery.toLocaleLowerCase();
 
   useEffect(() => {
     if (isOpen) {
@@ -198,7 +195,7 @@ export function CommandLauncher({
                     closeLauncher();
                   } else if (event.key === "Tab" && commandResults[selectedIndex]) {
                     event.preventDefault();
-                    setQuery(`>${commandResults[selectedIndex].title}`);
+                    setQuery(`>${commandResults[selectedIndex].name}`);
                   } else if (event.key === "ArrowDown" && selectableCount > 0) {
                     event.preventDefault();
                     setSelectedIndex((current) => (current + 1) % selectableCount);
@@ -227,7 +224,7 @@ export function CommandLauncher({
                     endAdornment:
                       commandMode && showCommandCompletion ? (
                         <Typography color="text.disabled" variant="body2" noWrap>
-                          {commandCompletion.title} · Tabで補完
+                          {commandCompletion.name} · Tabで補完
                         </Typography>
                       ) : isSearching ? (
                         <CircularProgress size={18} />
@@ -293,7 +290,6 @@ export function CommandLauncher({
                           {commandResults.map((command, index) => (
                             <CommandResultItem
                               command={command}
-                              binding={shortcutBindings[command.id] ?? ""}
                               commandRef={(element) => {
                                 resultRefs.current[index] = element;
                               }}
@@ -376,14 +372,12 @@ export function CommandLauncher({
 
 function CommandResultItem({
   command,
-  binding,
   commandRef,
   selected,
   onMouseEnter,
   onExecute,
 }: {
   command: AppCommand;
-  binding: string;
   commandRef: (element: HTMLDivElement | null) => void;
   selected: boolean;
   onMouseEnter: () => void;
@@ -401,17 +395,12 @@ function CommandResultItem({
       <BoltOutlined color="primary" fontSize="small" />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography variant="body2" sx={{ fontWeight: 700 }}>
-          {command.title}
+          {command.name}
         </Typography>
         <Typography color="text.secondary" variant="caption">
           {command.description} · {command.id}
         </Typography>
       </Box>
-      {binding && (
-        <Box component="kbd" sx={{ color: "text.secondary", fontFamily: "inherit", fontSize: 11 }}>
-          {binding}
-        </Box>
-      )}
     </ListItemButton>
   );
 }

@@ -1140,6 +1140,8 @@ export function HomePage() {
       void handleGoBack();
     } else if (commandId === "navigation.forward") {
       void handleGoForward();
+    } else if (commandId === "view.reload") {
+      void navigate(currentLocation, "history");
     } else if (commandId === "shortcuts.open") {
       void navigate("Special:Shortcuts");
     } else if (commandId === "commands.open") {
@@ -1409,7 +1411,6 @@ export function HomePage() {
             namespace={activeNamespace}
             searchOpenRequestId={globalSearchRequestId}
             commands={shortcutCommands}
-            shortcutBindings={shortcutBindings}
             onCreateFolder={(parentDirectory) => handleOpenCreateDialog("folder", parentDirectory)}
             onCreatePage={(parentDirectory) => handleOpenCreateDialog("page", parentDirectory)}
             onDeleteContent={(path, kind) => void handleDeleteContent(path, kind)}
@@ -1501,7 +1502,6 @@ export function HomePage() {
 
                     {specialView.kind === "commands" && (
                       <CommandsSpecialPage
-                        bindings={shortcutBindings}
                         commands={shortcutCommands}
                         location={specialView.location}
                         onExecute={executeCommand}

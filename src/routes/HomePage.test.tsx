@@ -650,7 +650,7 @@ describe("HomePage", () => {
     await user.type(input, ">cmd");
 
     const commands = await screen.findByRole("list", { name: "コマンド候補" });
-    expect(within(commands).getByRole("button", { name: /コマンド一覧/ })).toHaveAttribute(
+    expect(within(commands).getByRole("button", { name: /Commands/ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -658,11 +658,11 @@ describe("HomePage", () => {
     expect(api.searchContent).not.toHaveBeenCalledWith(workNamespace.id, ">cmd");
 
     await user.keyboard("{Tab}");
-    expect(input).toHaveValue(">コマンド一覧");
+    expect(input).toHaveValue(">Commands");
 
     await user.keyboard("{Enter}");
     expect(api.openLocation).toHaveBeenCalledWith("Special:Commands", workNamespace.id);
-    expect(await screen.findByRole("heading", { name: "Commands" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: "Commands" })).toBeInTheDocument();
     expect(screen.getAllByText("Daibase").length).toBeGreaterThan(1);
     expect(screen.getByText(/commands\.open/)).toBeInTheDocument();
   });
@@ -684,6 +684,31 @@ describe("HomePage", () => {
 
     expect(screen.queryByRole("dialog", { name: "検索パネル" })).not.toBeInTheDocument();
     expect(await screen.findByRole("search", { name: "ページ内検索" })).toBeInTheDocument();
+  });
+
+  it("ショートカットとコマンドから現在のロケーションを再読み込みできる", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await screen.findByRole("treeitem", { name: "Main" });
+    vi.mocked(api.openLocation).mockClear();
+
+    fireEvent.keyDown(window, { key: "r", metaKey: true });
+    await waitFor(() => {
+      expect(api.openLocation).toHaveBeenCalledWith("Work:Main.md", workNamespace.id);
+    });
+
+    vi.mocked(api.openLocation).mockClear();
+    await user.click(screen.getByRole("button", { name: "全体検索" }));
+    const input = screen.getByRole("textbox", { name: "検索またはコマンド" });
+    await user.type(input, ">reload");
+    const commands = await screen.findByRole("list", { name: "コマンド候補" });
+    expect(within(commands).getByRole("button", { name: /Reload/ })).toBeInTheDocument();
+
+    await user.keyboard("{Enter}");
+    await waitFor(() => {
+      expect(api.openLocation).toHaveBeenCalledWith("Work:Main.md", workNamespace.id);
+    });
   });
 
   it("Help文書をSpecial親ページと異なる種別で表示する", async () => {
