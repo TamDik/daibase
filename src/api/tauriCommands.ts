@@ -62,6 +62,10 @@ export type TerminalOutputEvent = {
   text: string;
 };
 
+export type TerminalExitEvent = {
+  session_id: string;
+};
+
 export type PageContent = {
   namespace_id: string;
   file_id: string;

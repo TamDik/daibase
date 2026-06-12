@@ -8,6 +8,7 @@ use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
 const TERMINAL_OUTPUT_EVENT: &str = "terminal:output";
+const TERMINAL_EXIT_EVENT: &str = "terminal:exit";
 const DEFAULT_TERMINAL_COLS: u16 = 80;
 const DEFAULT_TERMINAL_ROWS: u16 = 24;
 
@@ -33,6 +34,11 @@ struct TerminalOutputEvent {
     session_id: String,
     stream: String,
     text: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TerminalExitEvent {
+    session_id: String,
 }
 
 pub fn start_terminal(
@@ -122,8 +128,10 @@ pub fn stop_terminal(sessions: &TerminalSessions, session_id: String) -> Result<
         return Ok(());
     };
 
-    terminal.child.kill().map_err(to_error)?;
-    terminal.child.wait().map_err(to_error)?;
+    if terminal.child.try_wait().map_err(to_error)?.is_none() {
+        terminal.child.kill().map_err(to_error)?;
+        terminal.child.wait().map_err(to_error)?;
+    }
     Ok(())
 }
 
@@ -147,6 +155,12 @@ fn spawn_reader(app: AppHandle, session_id: String, mut reader: Box<dyn Read + S
             let text = String::from_utf8_lossy(&buffer[..read_size]).to_string();
             emit_terminal_output(&app, &session_id, "pty", &text);
         }
+        let _ = app.emit(
+            TERMINAL_EXIT_EVENT,
+            TerminalExitEvent {
+                session_id: session_id.clone(),
+            },
+        );
     });
 }
 
