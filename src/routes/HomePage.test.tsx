@@ -685,13 +685,19 @@ describe("HomePage", () => {
     expect(await screen.findByRole("heading", { name: "Keyboard Shortcuts" })).toBeInTheDocument();
     expect(api.openLocation).toHaveBeenCalledWith("Special:Shortcuts", workNamespace.id);
     const input = await screen.findByRole("textbox", { name: "全体検索のショートカット" });
-    const defaultButton = screen.getAllByRole("button", { name: "デフォルト" })[0];
+    const defaultButton = screen.getByRole("button", { name: "全体検索をデフォルトに戻す" });
     expect(input).toHaveValue("Mod+K");
+    expect(screen.getByTestId("shortcut-keycaps-search.global")).toHaveTextContent("⌘K");
+    expect(screen.getByTestId("shortcut-keycaps-shortcuts.open")).toHaveTextContent("⌘⇧K");
+    expect(screen.getByTestId("shortcut-keycaps-navigation.back")).toHaveTextContent("⌥←");
     expect(defaultButton).toHaveAttribute("aria-pressed", "true");
+    expect(defaultButton).toBeDisabled();
 
     fireEvent.keyDown(input, { key: "g", metaKey: true });
     expect(input).toHaveValue("Mod+G");
+    expect(screen.getByTestId("shortcut-keycaps-search.global")).toHaveTextContent("⌘G");
     expect(defaultButton).toHaveAttribute("aria-pressed", "false");
+    expect(defaultButton).toBeEnabled();
     fireEvent.keyDown(window, { key: "g", metaKey: true });
     expect(await screen.findByRole("dialog", { name: "検索パネル" })).toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole("textbox", { name: "検索またはコマンド" }), {
@@ -700,6 +706,10 @@ describe("HomePage", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "検索パネル" })).not.toBeInTheDocument();
     });
+
+    await user.click(screen.getByRole("button", { name: "全体検索の割り当てを解除" }));
+    expect(input).toHaveValue("");
+    expect(screen.queryByTestId("shortcut-keycaps-search.global")).not.toBeInTheDocument();
 
     await user.click(defaultButton);
     expect(input).toHaveValue("Mod+K");
