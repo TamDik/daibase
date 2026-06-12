@@ -180,16 +180,23 @@ export function CommandLauncher({
                 inputRef={inputRef}
                 autoComplete="off"
                 fullWidth
-                placeholder="検索"
+                placeholder={commandMode ? "コマンド" : "検索"}
                 size="medium"
-                value={query}
+                value={commandMode ? commandQuery : query}
                 onChange={(event) => {
-                  setQuery(event.target.value);
+                  setQuery(commandMode ? `>${event.target.value}` : event.target.value);
                   setSelectedIndex(0);
                 }}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     closeLauncher();
+                  } else if (
+                    event.key === "Backspace" &&
+                    commandMode &&
+                    commandQuery.length === 0
+                  ) {
+                    event.preventDefault();
+                    setQuery("");
                   } else if (event.key === "Tab" && commandResults[selectedIndex]) {
                     event.preventDefault();
                     setQuery(`>${commandResults[selectedIndex].name}`);
@@ -218,6 +225,11 @@ export function CommandLauncher({
                     "aria-label": "検索またはコマンド",
                   },
                   input: {
+                    startAdornment: commandMode ? (
+                      <InputAdornment position="start">
+                        <BoltOutlined aria-label="コマンドモード" color="primary" />
+                      </InputAdornment>
+                    ) : null,
                     endAdornment:
                       commandMode && commandResults.length > 0 ? (
                         <InputAdornment aria-label="コマンド候補件数" position="end">

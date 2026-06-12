@@ -650,10 +650,14 @@ describe("HomePage", () => {
     await screen.findByRole("treeitem", { name: "Main" });
     await user.click(screen.getByRole("button", { name: "全体検索" }));
     const input = screen.getByRole("textbox", { name: "検索またはコマンド" });
+    expect(input).toHaveAttribute("placeholder", "検索");
 
     await user.type(input, ">cmd");
 
     const commands = await screen.findByRole("list", { name: "コマンド候補" });
+    expect(input).toHaveValue("cmd");
+    expect(input).toHaveAttribute("placeholder", "コマンド");
+    expect(screen.getByLabelText("コマンドモード")).toBeInTheDocument();
     expect(commands).toHaveStyle({ paddingTop: "6px" });
     expect(screen.queryByText("コマンド")).not.toBeInTheDocument();
     const commandCount = screen.getByLabelText("コマンド候補件数");
@@ -667,7 +671,7 @@ describe("HomePage", () => {
     expect(api.searchContent).not.toHaveBeenCalledWith(workNamespace.id, ">cmd");
 
     await user.keyboard("{Tab}");
-    expect(input).toHaveValue(">Commands");
+    expect(input).toHaveValue("Commands");
 
     await user.keyboard("{Enter}");
     expect(api.openLocation).toHaveBeenCalledWith("Special:Commands", workNamespace.id);
