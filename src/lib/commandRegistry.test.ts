@@ -29,4 +29,30 @@ describe("commandRegistry", () => {
       pluginCommand,
     );
   });
+
+  it("コマンド名のマッチを他の項目のマッチより優先する", () => {
+    const descriptionMatch = {
+      id: "description.match",
+      name: "Unrelated",
+      title: "無関係",
+      description: "open",
+      category: "テスト",
+      defaultBinding: "",
+      source: "builtin" as const,
+    };
+    const nameMatch = {
+      id: "name.match",
+      name: "Open Something With A Long Name",
+      title: "名前一致",
+      description: "無関係",
+      category: "テスト",
+      defaultBinding: "",
+      source: "builtin" as const,
+    };
+
+    expect(searchCommands([descriptionMatch, nameMatch], "open")).toEqual([
+      nameMatch,
+      descriptionMatch,
+    ]);
+  });
 });
