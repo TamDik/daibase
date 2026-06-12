@@ -13,8 +13,8 @@ import {
 import {
   ArticleOutlined,
   AutoAwesomeOutlined,
-  HelpOutlined,
   InsertDriveFileOutlined,
+  QuestionMark,
   SearchRounded,
 } from "@mui/icons-material";
 import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react";
@@ -469,7 +469,7 @@ function searchResultVisual(result: SearchContentResult): {
       label: "ヘルプ",
       color: "#1a7f37",
       background: "#dafbe1",
-      icon: HelpOutlined,
+      icon: QuestionMark,
     };
   }
   if (result.content_kind === "special") {
