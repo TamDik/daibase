@@ -1426,6 +1426,11 @@ pub fn special_pages_for_namespace(namespace: &NamespaceSummary) -> Vec<SpecialP
             location: "Special:Shortcuts".to_string(),
         },
         SpecialPageSummary {
+            title: "Commands".to_string(),
+            description: "利用可能なコマンドを表示します。".to_string(),
+            location: "Special:Commands".to_string(),
+        },
+        SpecialPageSummary {
             title: "Pages".to_string(),
             description: "namespace 内の全ページを表示します。".to_string(),
             location: format!("{}:Special:Pages", namespace.name),

@@ -399,6 +399,9 @@ pub enum OpenLocationResult {
     SpecialShortcuts {
         location: String,
     },
+    SpecialCommands {
+        location: String,
+    },
     SpecialPages {
         location: String,
         namespace: NamespaceSummary,

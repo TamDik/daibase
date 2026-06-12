@@ -13,6 +13,7 @@ import {
 import {
   ArticleOutlined,
   AutoAwesomeOutlined,
+  BoltOutlined,
   InsertDriveFileOutlined,
   QuestionMark,
   SearchRounded,
@@ -20,14 +21,22 @@ import {
 import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { searchContent, type SearchContentResult } from "../api/tauriCommands";
+import { searchCommands, type AppCommand } from "../lib/commandRegistry";
+import type { ShortcutBindings } from "../lib/keyboardShortcuts";
 
 export function CommandLauncher({
   namespaceId,
   openRequestId = 0,
+  commands,
+  shortcutBindings,
+  onExecuteCommand,
   onOpenLocation,
 }: {
   namespaceId: string | null;
   openRequestId?: number;
+  commands: AppCommand[];
+  shortcutBindings: ShortcutBindings;
+  onExecuteCommand: (commandId: string) => void;
   onOpenLocation: (location: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -39,6 +48,14 @@ export function CommandLauncher({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const resultRefs = useRef<Array<HTMLDivElement | null>>([]);
   const previousOpenRequestId = useRef(openRequestId);
+  const commandMode = query.startsWith(">");
+  const commandQuery = commandMode ? query.slice(1).trimStart() : "";
+  const commandResults = commandMode ? searchCommands(commands, commandQuery) : [];
+  const selectableCount = commandMode ? commandResults.length : results.length;
+  const commandCompletion = commandResults[selectedIndex];
+  const showCommandCompletion =
+    commandCompletion &&
+    commandCompletion.title.toLocaleLowerCase() !== commandQuery.toLocaleLowerCase();
 
   useEffect(() => {
     if (isOpen) {
@@ -48,7 +65,7 @@ export function CommandLauncher({
 
   useEffect(() => {
     const trimmedQuery = query.trim();
-    if (!isOpen || !namespaceId || trimmedQuery.length === 0) {
+    if (!isOpen || !namespaceId || trimmedQuery.length === 0 || trimmedQuery.startsWith(">")) {
       setResults([]);
       setIsSearching(false);
       setError(null);
@@ -115,6 +132,11 @@ export function CommandLauncher({
     closeLauncher();
   };
 
+  const executeCommand = (command: AppCommand) => {
+    onExecuteCommand(command.id);
+    closeLauncher();
+  };
+
   useEffect(() => {
     resultRefs.current[selectedIndex]?.scrollIntoView?.({ block: "nearest" });
   }, [selectedIndex]);
@@ -174,12 +196,24 @@ export function CommandLauncher({
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     closeLauncher();
-                  } else if (event.key === "ArrowDown" && results.length > 0) {
+                  } else if (event.key === "Tab" && commandResults[selectedIndex]) {
                     event.preventDefault();
-                    setSelectedIndex((current) => (current + 1) % results.length);
-                  } else if (event.key === "ArrowUp" && results.length > 0) {
+                    setQuery(`>${commandResults[selectedIndex].title}`);
+                  } else if (event.key === "ArrowDown" && selectableCount > 0) {
                     event.preventDefault();
-                    setSelectedIndex((current) => (current - 1 + results.length) % results.length);
+                    setSelectedIndex((current) => (current + 1) % selectableCount);
+                  } else if (event.key === "ArrowUp" && selectableCount > 0) {
+                    event.preventDefault();
+                    setSelectedIndex(
+                      (current) => (current - 1 + selectableCount) % selectableCount,
+                    );
+                  } else if (
+                    event.key === "Enter" &&
+                    commandMode &&
+                    commandResults[selectedIndex]
+                  ) {
+                    event.preventDefault();
+                    executeCommand(commandResults[selectedIndex]);
                   } else if (event.key === "Enter" && results[selectedIndex]) {
                     event.preventDefault();
                     openResult(results[selectedIndex]);
@@ -190,7 +224,14 @@ export function CommandLauncher({
                     "aria-label": "検索またはコマンド",
                   },
                   input: {
-                    endAdornment: isSearching ? <CircularProgress size={18} /> : null,
+                    endAdornment:
+                      commandMode && showCommandCompletion ? (
+                        <Typography color="text.disabled" variant="body2" noWrap>
+                          {commandCompletion.title} · Tabで補完
+                        </Typography>
+                      ) : isSearching ? (
+                        <CircularProgress size={18} />
+                      ) : null,
                   },
                 }}
                 sx={{
@@ -225,7 +266,53 @@ export function CommandLauncher({
                   overflow: "hidden",
                 }}
               >
-                {error ? (
+                {commandMode ? (
+                  commandResults.length > 0 ? (
+                    <>
+                      <Box
+                        sx={{
+                          alignItems: "center",
+                          color: "text.secondary",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          flex: "0 0 auto",
+                          px: 1.5,
+                          py: 0.75,
+                        }}
+                      >
+                        <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                          コマンド
+                        </Typography>
+                        <Typography variant="caption">{commandResults.length}件</Typography>
+                      </Box>
+                      <Box
+                        data-testid="command-results-scroll"
+                        sx={{ minHeight: 0, overflowY: "auto" }}
+                      >
+                        <List disablePadding aria-label="コマンド候補" sx={{ px: 0.75 }}>
+                          {commandResults.map((command, index) => (
+                            <CommandResultItem
+                              command={command}
+                              binding={shortcutBindings[command.id] ?? ""}
+                              commandRef={(element) => {
+                                resultRefs.current[index] = element;
+                              }}
+                              key={command.id}
+                              selected={index === selectedIndex}
+                              onMouseEnter={() => setSelectedIndex(index)}
+                              onExecute={() => executeCommand(command)}
+                            />
+                          ))}
+                        </List>
+                      </Box>
+                      <ResultFooter enterLabel="実行" showTab />
+                    </>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary" sx={{ p: 1.25 }}>
+                      コマンドが見つかりません
+                    </Typography>
+                  )
+                ) : error ? (
                   <Typography color="error" variant="body2" sx={{ p: 1.25 }}>
                     {error}
                   </Typography>
@@ -267,24 +354,7 @@ export function CommandLauncher({
                         ))}
                       </List>
                     </Box>
-                    <Box
-                      data-testid="search-results-footer"
-                      sx={{
-                        alignItems: "center",
-                        bgcolor: "#f6f8fa",
-                        borderTop: "1px solid #d8dee4",
-                        color: "text.secondary",
-                        display: "flex",
-                        flex: "0 0 auto",
-                        gap: 2,
-                        px: 1.5,
-                        py: 0.75,
-                      }}
-                    >
-                      <KeyboardHint keys="↑↓" label="移動" />
-                      <KeyboardHint keys="Enter" label="開く" />
-                      <KeyboardHint keys="Esc" label="閉じる" />
-                    </Box>
+                    <ResultFooter enterLabel="開く" />
                   </>
                 ) : isSearching ? (
                   <Typography variant="body2" color="text.secondary" sx={{ p: 1.25 }}>
@@ -300,6 +370,72 @@ export function CommandLauncher({
           </Paper>
         </Backdrop>
       )}
+    </Box>
+  );
+}
+
+function CommandResultItem({
+  command,
+  binding,
+  commandRef,
+  selected,
+  onMouseEnter,
+  onExecute,
+}: {
+  command: AppCommand;
+  binding: string;
+  commandRef: (element: HTMLDivElement | null) => void;
+  selected: boolean;
+  onMouseEnter: () => void;
+  onExecute: () => void;
+}) {
+  return (
+    <ListItemButton
+      ref={commandRef}
+      aria-selected={selected}
+      selected={selected}
+      onMouseEnter={onMouseEnter}
+      onClick={onExecute}
+      sx={{ borderRadius: 2, gap: 1.25, mb: 0.5, px: 1.25, py: 1 }}
+    >
+      <BoltOutlined color="primary" fontSize="small" />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+          {command.title}
+        </Typography>
+        <Typography color="text.secondary" variant="caption">
+          {command.description} · {command.id}
+        </Typography>
+      </Box>
+      {binding && (
+        <Box component="kbd" sx={{ color: "text.secondary", fontFamily: "inherit", fontSize: 11 }}>
+          {binding}
+        </Box>
+      )}
+    </ListItemButton>
+  );
+}
+
+function ResultFooter({ enterLabel, showTab = false }: { enterLabel: string; showTab?: boolean }) {
+  return (
+    <Box
+      data-testid="search-results-footer"
+      sx={{
+        alignItems: "center",
+        bgcolor: "#f6f8fa",
+        borderTop: "1px solid #d8dee4",
+        color: "text.secondary",
+        display: "flex",
+        flex: "0 0 auto",
+        gap: 2,
+        px: 1.5,
+        py: 0.75,
+      }}
+    >
+      <KeyboardHint keys="↑↓" label="移動" />
+      {showTab && <KeyboardHint keys="Tab" label="補完" />}
+      <KeyboardHint keys="Enter" label={enterLabel} />
+      <KeyboardHint keys="Esc" label="閉じる" />
     </Box>
   );
 }

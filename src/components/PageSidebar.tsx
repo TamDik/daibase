@@ -24,6 +24,8 @@ import type {
   FolderSummary,
   NamespaceSummary,
 } from "../api/tauriCommands";
+import type { AppCommand } from "../lib/commandRegistry";
+import type { ShortcutBindings } from "../lib/keyboardShortcuts";
 import { CommandLauncher } from "./CommandLauncher";
 import { ResizableSidebar } from "./ResizableSidebar";
 
@@ -49,10 +51,13 @@ export function PageSidebar({
   currentLocation,
   namespace,
   searchOpenRequestId = 0,
+  commands,
+  shortcutBindings,
   onCreateFolder,
   onCreatePage,
   onDeleteContent,
   onOpenLocation,
+  onExecuteCommand,
   onToggleTerminal,
   onToggleFavorite,
 }: {
@@ -60,10 +65,13 @@ export function PageSidebar({
   currentLocation: string;
   namespace: NamespaceSummary | null;
   searchOpenRequestId?: number;
+  commands: AppCommand[];
+  shortcutBindings: ShortcutBindings;
   onCreateFolder: (parentDirectory: string) => void;
   onCreatePage: (parentDirectory: string) => void;
   onDeleteContent: (path: string, kind: "page" | "folder" | "file") => void;
   onOpenLocation: (location: string) => void;
+  onExecuteCommand: (commandId: string) => void;
   onToggleTerminal: () => void;
   onToggleFavorite: (path: string, isFavorite: boolean) => void;
 }) {
@@ -122,10 +130,13 @@ export function PageSidebar({
         canCreate={namespace !== null}
         searchNamespaceId={namespace?.id ?? null}
         searchOpenRequestId={searchOpenRequestId}
+        commands={commands}
+        shortcutBindings={shortcutBindings}
         sortDirection={sortDirection}
         onCreateFolder={() => onCreateFolder(createParentDirectory)}
         onCreatePage={() => onCreatePage(createParentDirectory)}
         onOpenLocation={onOpenLocation}
+        onExecuteCommand={onExecuteCommand}
         onToggleTerminal={onToggleTerminal}
         onToggleSortDirection={() =>
           setSortDirection((current) => (current === "asc" ? "desc" : "asc"))
@@ -179,20 +190,26 @@ function SidebarToolbar({
   canCreate,
   searchNamespaceId,
   searchOpenRequestId,
+  commands,
+  shortcutBindings,
   sortDirection,
   onCreateFolder,
   onCreatePage,
   onOpenLocation,
+  onExecuteCommand,
   onToggleTerminal,
   onToggleSortDirection,
 }: {
   canCreate: boolean;
   searchNamespaceId: string | null;
   searchOpenRequestId: number;
+  commands: AppCommand[];
+  shortcutBindings: ShortcutBindings;
   sortDirection: SortDirection;
   onCreateFolder: () => void;
   onCreatePage: () => void;
   onOpenLocation: (location: string) => void;
+  onExecuteCommand: (commandId: string) => void;
   onToggleTerminal: () => void;
   onToggleSortDirection: () => void;
 }) {
@@ -234,6 +251,9 @@ function SidebarToolbar({
         <CommandLauncher
           namespaceId={searchNamespaceId}
           openRequestId={searchOpenRequestId}
+          commands={commands}
+          shortcutBindings={shortcutBindings}
+          onExecuteCommand={onExecuteCommand}
           onOpenLocation={onOpenLocation}
         />
         <Tooltip title="Favorites">

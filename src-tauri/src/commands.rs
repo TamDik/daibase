@@ -391,6 +391,7 @@ pub fn resolve_markdown_link_status(
         ResolvedLocation::SpecialNamespaces { .. }
         | ResolvedLocation::SpecialHelp { .. }
         | ResolvedLocation::SpecialShortcuts { .. }
+        | ResolvedLocation::SpecialCommands { .. }
         | ResolvedLocation::SpecialPages { .. }
         | ResolvedLocation::SpecialPagesList { .. }
         | ResolvedLocation::SpecialDeletedPages { .. }
@@ -544,6 +545,9 @@ pub fn open_location(
         }),
         ResolvedLocation::SpecialShortcuts { location } => {
             Ok(OpenLocationResult::SpecialShortcuts { location })
+        }
+        ResolvedLocation::SpecialCommands { location } => {
+            Ok(OpenLocationResult::SpecialCommands { location })
         }
         ResolvedLocation::SpecialPages {
             namespace,

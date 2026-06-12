@@ -347,6 +347,11 @@ describe("HomePage", () => {
               description: "登録済みプラグインの確認と有効化を行います。",
               location: "Work:Special:Plugins",
             },
+            {
+              title: "Commands",
+              description: "利用可能なコマンドを表示します。",
+              location: "Special:Commands",
+            },
           ],
         };
       }
@@ -381,6 +386,12 @@ describe("HomePage", () => {
         return {
           kind: "specialShortcuts",
           location: "Special:Shortcuts",
+        };
+      }
+      if (location === "Special:Commands") {
+        return {
+          kind: "specialCommands",
+          location: "Special:Commands",
         };
       }
       if (location === "Special:Help/plugin-development.md") {
@@ -626,6 +637,53 @@ describe("HomePage", () => {
 
     await user.keyboard("{Enter}");
     expect(await screen.findByRole("textbox", { name: "Markdown" })).toHaveValue("# Intro");
+  });
+
+  it(">入力でコマンドを曖昧検索しTab補完して実行できる", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await screen.findByRole("treeitem", { name: "Main" });
+    await user.click(screen.getByRole("button", { name: "全体検索" }));
+    const input = screen.getByRole("textbox", { name: "検索またはコマンド" });
+
+    await user.type(input, ">cmd");
+
+    const commands = await screen.findByRole("list", { name: "コマンド候補" });
+    expect(within(commands).getByRole("button", { name: /コマンド一覧/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByText("Tabで補完", { exact: false })).toBeInTheDocument();
+    expect(api.searchContent).not.toHaveBeenCalledWith(workNamespace.id, ">cmd");
+
+    await user.keyboard("{Tab}");
+    expect(input).toHaveValue(">コマンド一覧");
+
+    await user.keyboard("{Enter}");
+    expect(api.openLocation).toHaveBeenCalledWith("Special:Commands", workNamespace.id);
+    expect(await screen.findByRole("heading", { name: "Commands" })).toBeInTheDocument();
+    expect(screen.getAllByText("Daibase").length).toBeGreaterThan(1);
+    expect(screen.getByText(/commands\.open/)).toBeInTheDocument();
+  });
+
+  it(">入力のコマンド候補を矢印で選択してEnter実行できる", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await screen.findByRole("treeitem", { name: "Main" });
+    await user.click(screen.getByRole("button", { name: "全体検索" }));
+    const input = screen.getByRole("textbox", { name: "検索またはコマンド" });
+    await user.type(input, ">");
+
+    const commands = await screen.findByRole("list", { name: "コマンド候補" });
+    const candidates = within(commands).getAllByRole("button");
+    expect(candidates[0]).toHaveAttribute("aria-selected", "true");
+
+    await user.keyboard("{ArrowDown}{Enter}");
+
+    expect(screen.queryByRole("dialog", { name: "検索パネル" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("search", { name: "ページ内検索" })).toBeInTheDocument();
   });
 
   it("Help文書をSpecial親ページと異なる種別で表示する", async () => {

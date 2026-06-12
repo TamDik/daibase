@@ -327,6 +327,10 @@ export type ResolvedLocation =
       location: string;
     }
   | {
+      kind: "specialCommands";
+      location: string;
+    }
+  | {
       kind: "specialPages";
       namespace: NamespaceSummary;
       location: string;
@@ -385,6 +389,10 @@ export type OpenLocationResult =
     }
   | {
       kind: "specialShortcuts";
+      location: string;
+    }
+  | {
+      kind: "specialCommands";
       location: string;
     }
   | {

@@ -23,6 +23,7 @@ import {
   ArrowBackOutlined,
   ArrowForwardOutlined,
   ArticleOutlined,
+  BoltOutlined,
   CloseOutlined,
   DeleteOutlined,
   ExtensionOutlined,
@@ -58,6 +59,85 @@ import {
   type ShortcutBindings,
   type ShortcutCommand,
 } from "../lib/keyboardShortcuts";
+
+export function CommandsSpecialPage({
+  bindings,
+  commands,
+  location,
+  onExecute,
+}: {
+  bindings: ShortcutBindings;
+  commands: ShortcutCommand[];
+  location: string;
+  onExecute: (commandId: string) => void;
+}) {
+  return (
+    <Box sx={{ p: 2 }}>
+      <Typography variant="h5" component="h2">
+        Commands
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        {location}
+      </Typography>
+      <Stack spacing={1}>
+        {commands.map((command) => {
+          const CommandIcon = shortcutCommandIcon(command.id);
+          const binding = bindings[command.id] ?? "";
+          return (
+            <Paper key={command.id} variant="outlined" sx={{ p: 1.5 }}>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={2}
+                sx={{ alignItems: "center" }}
+              >
+                <Box
+                  sx={{
+                    alignItems: "center",
+                    bgcolor: "action.hover",
+                    borderRadius: 1.5,
+                    color: "text.secondary",
+                    display: "flex",
+                    height: 40,
+                    justifyContent: "center",
+                    width: 40,
+                  }}
+                >
+                  <CommandIcon />
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <Typography variant="subtitle2">{command.title}</Typography>
+                    <Chip
+                      label={command.source === "builtin" ? "Daibase" : command.source.slice(7)}
+                      size="small"
+                      variant="outlined"
+                    />
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                    {command.description}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {command.category} / {command.id}
+                  </Typography>
+                </Box>
+                {binding && (
+                  <ShortcutKeycaps commandId={`commands-${command.id}`} binding={binding} />
+                )}
+                <Button
+                  size="small"
+                  startIcon={<BoltOutlined />}
+                  onClick={() => onExecute(command.id)}
+                >
+                  実行
+                </Button>
+              </Stack>
+            </Paper>
+          );
+        })}
+      </Stack>
+    </Box>
+  );
+}
 
 export function ShortcutsSpecialPage({
   bindings,

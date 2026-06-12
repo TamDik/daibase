@@ -1,56 +1,10 @@
-export type ShortcutCommand = {
-  id: string;
-  title: string;
-  description: string;
-  category: string;
-  defaultBinding: string;
-  source: "builtin" | `plugin:${string}`;
-};
+import { builtinCommands, type AppCommand } from "./commandRegistry";
+
+export type ShortcutCommand = AppCommand;
 
 export type ShortcutBindings = Record<string, string>;
 
-export const shortcutCommands: ShortcutCommand[] = [
-  {
-    id: "search.global",
-    title: "全体検索",
-    description: "現在の namespace を検索します。",
-    category: "検索",
-    defaultBinding: "Mod+K",
-    source: "builtin",
-  },
-  {
-    id: "search.page",
-    title: "ページ内検索",
-    description: "表示中のページ本文を検索します。",
-    category: "検索",
-    defaultBinding: "Mod+F",
-    source: "builtin",
-  },
-  {
-    id: "navigation.back",
-    title: "戻る",
-    description: "前に表示していたlocationへ戻ります。",
-    category: "ナビゲーション",
-    defaultBinding: "Alt+ArrowLeft",
-    source: "builtin",
-  },
-  {
-    id: "navigation.forward",
-    title: "進む",
-    description: "戻る前に表示していたlocationへ進みます。",
-    category: "ナビゲーション",
-    defaultBinding: "Alt+ArrowRight",
-    source: "builtin",
-  },
-  {
-    id: "shortcuts.open",
-    title: "ショートカット一覧",
-    description: "キーボードショートカットの確認と編集を行います。",
-    category: "アプリケーション",
-    defaultBinding: "Mod+Shift+K",
-    source: "builtin",
-  },
-];
+export const shortcutCommands: ShortcutCommand[] = builtinCommands;
 
 const storageKey = "daibase.keyboard-shortcuts.v1";
 

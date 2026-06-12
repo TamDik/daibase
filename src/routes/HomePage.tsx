@@ -68,6 +68,7 @@ import {
 } from "../components/PageSurface";
 import {
   CategoriesSpecialPage,
+  CommandsSpecialPage,
   DeletedPagesSpecialPage,
   FavoritesSpecialPage,
   HelpSpecialPage,
@@ -118,6 +119,10 @@ type SpecialView =
     }
   | {
       kind: "shortcuts";
+      location: string;
+    }
+  | {
+      kind: "commands";
       location: string;
     }
   | {
@@ -264,6 +269,16 @@ export function HomePage() {
       setPageView(null);
       setFileView(null);
       setSpecialView({ kind: "shortcuts", location: opened.location });
+      setDraft("");
+      setCurrentLocation(opened.location);
+      setPageMode("view");
+      return nextLocation;
+    }
+
+    if (opened.kind === "specialCommands") {
+      setPageView(null);
+      setFileView(null);
+      setSpecialView({ kind: "commands", location: opened.location });
       setDraft("");
       setCurrentLocation(opened.location);
       setPageMode("view");
@@ -1116,6 +1131,22 @@ export function HomePage() {
     setShortcutBindings(next);
   };
 
+  const executeCommand = (commandId: string) => {
+    if (commandId === "search.global") {
+      if (activeNamespace) setGlobalSearchRequestId((current) => current + 1);
+    } else if (commandId === "search.page") {
+      if (pageView) setPageSearchRequestId((current) => current + 1);
+    } else if (commandId === "navigation.back") {
+      void handleGoBack();
+    } else if (commandId === "navigation.forward") {
+      void handleGoForward();
+    } else if (commandId === "shortcuts.open") {
+      void navigate("Special:Shortcuts");
+    } else if (commandId === "commands.open") {
+      void navigate("Special:Commands");
+    }
+  };
+
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       const command = shortcutCommandForEvent(event, shortcutCommands, shortcutBindings);
@@ -1129,17 +1160,7 @@ export function HomePage() {
         return;
       }
       event.preventDefault();
-      if (command.id === "search.global") {
-        if (activeNamespace) setGlobalSearchRequestId((current) => current + 1);
-      } else if (command.id === "search.page") {
-        if (pageView) setPageSearchRequestId((current) => current + 1);
-      } else if (command.id === "navigation.back") {
-        void handleGoBack();
-      } else if (command.id === "navigation.forward") {
-        void handleGoForward();
-      } else if (command.id === "shortcuts.open") {
-        void navigate("Special:Shortcuts");
-      }
+      executeCommand(command.id);
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
@@ -1387,10 +1408,13 @@ export function HomePage() {
             currentLocation={currentLocation}
             namespace={activeNamespace}
             searchOpenRequestId={globalSearchRequestId}
+            commands={shortcutCommands}
+            shortcutBindings={shortcutBindings}
             onCreateFolder={(parentDirectory) => handleOpenCreateDialog("folder", parentDirectory)}
             onCreatePage={(parentDirectory) => handleOpenCreateDialog("page", parentDirectory)}
             onDeleteContent={(path, kind) => void handleDeleteContent(path, kind)}
             onOpenLocation={(location) => void navigate(location)}
+            onExecuteCommand={executeCommand}
             onToggleTerminal={() => setIsTerminalOpen((current) => !current)}
             onToggleFavorite={(path, isFavorite) =>
               void handleToggleFavoriteContent(path, isFavorite)
@@ -1472,6 +1496,15 @@ export function HomePage() {
                         location={specialView.location}
                         onBindingChange={updateShortcutBinding}
                         onReset={resetShortcutBindings}
+                      />
+                    )}
+
+                    {specialView.kind === "commands" && (
+                      <CommandsSpecialPage
+                        bindings={shortcutBindings}
+                        commands={shortcutCommands}
+                        location={specialView.location}
+                        onExecute={executeCommand}
                       />
                     )}
 
