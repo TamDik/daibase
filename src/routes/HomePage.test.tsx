@@ -553,9 +553,16 @@ describe("HomePage", () => {
 
     await waitFor(() => expect(api.searchContent).toHaveBeenCalledWith(workNamespace.id, "intro"));
     const results = await screen.findByRole("list", { name: "検索結果" });
+    expect(screen.getByTestId("search-results-scroll")).toHaveStyle({ overflowY: "auto" });
+    expect(screen.getByTestId("search-results-footer")).toHaveStyle({ flex: "0 0 auto" });
     const resultButton = within(results).getByRole("button", { name: /Intro/ });
+    expect(within(resultButton).getByLabelText("ページ")).toBeInTheDocument();
+    expect(within(resultButton).getByText("ページ")).toBeInTheDocument();
     expect(resultButton).toHaveTextContent("Guide/Intro.md");
     expect(resultButton).toHaveTextContent("本文の Intro");
+    expect(screen.getByText("1件")).toBeInTheDocument();
+    expect(screen.getByText("移動")).toBeInTheDocument();
+    expect(screen.getByText("開く")).toBeInTheDocument();
     expect(within(results).getAllByText("Intro", { selector: "mark" })).toHaveLength(3);
 
     await user.keyboard("{Escape}");

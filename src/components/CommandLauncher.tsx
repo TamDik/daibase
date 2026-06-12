@@ -5,14 +5,18 @@ import {
   IconButton,
   List,
   ListItemButton,
-  ListItemText,
   Paper,
   TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
-import { SearchRounded } from "@mui/icons-material";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  ArticleOutlined,
+  AutoAwesomeOutlined,
+  InsertDriveFileOutlined,
+  SearchRounded,
+} from "@mui/icons-material";
+import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { searchContent, type SearchContentResult } from "../api/tauriCommands";
 
@@ -202,8 +206,11 @@ export function CommandLauncher({
               <Box
                 sx={{
                   borderTop: "1px solid #d0d7de",
+                  bgcolor: "#f6f8fa",
+                  display: "flex",
+                  flexDirection: "column",
                   maxHeight: "min(480px, calc(100vh - 180px))",
-                  overflow: "auto",
+                  overflow: "hidden",
                 }}
               >
                 {error ? (
@@ -211,54 +218,62 @@ export function CommandLauncher({
                     {error}
                   </Typography>
                 ) : results.length > 0 ? (
-                  <List dense disablePadding aria-label="検索結果">
-                    {results.map((result, index) => (
-                      <ListItemButton
-                        ref={(element) => {
-                          resultRefs.current[index] = element;
-                        }}
-                        key={`${result.content_kind}:${result.location}`}
-                        aria-selected={index === selectedIndex}
-                        selected={index === selectedIndex}
-                        onMouseEnter={() => setSelectedIndex(index)}
-                        onClick={() => openResult(result)}
-                      >
-                        <ListItemText
-                          primary={
-                            <HighlightedText
-                              text={result.title}
-                              matchIndices={result.title_match_indices}
-                            />
-                          }
-                          secondary={
-                            <>
-                              <Typography
-                                component="span"
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{ display: "block", overflowWrap: "anywhere" }}
-                              >
-                                <HighlightedText
-                                  text={result.path}
-                                  matchIndices={result.path_match_indices}
-                                />
-                              </Typography>
-                              {result.snippet && (
-                                <Typography
-                                  component="span"
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ display: "block", overflowWrap: "anywhere" }}
-                                >
-                                  <HighlightedText text={result.snippet} query={query.trim()} />
-                                </Typography>
-                              )}
-                            </>
-                          }
-                        />
-                      </ListItemButton>
-                    ))}
-                  </List>
+                  <>
+                    <Box
+                      sx={{
+                        alignItems: "center",
+                        color: "text.secondary",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        flex: "0 0 auto",
+                        px: 1.5,
+                        py: 0.75,
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                        検索結果
+                      </Typography>
+                      <Typography variant="caption">{results.length}件</Typography>
+                    </Box>
+                    <Box
+                      data-testid="search-results-scroll"
+                      sx={{ minHeight: 0, overflowY: "auto" }}
+                    >
+                      <List disablePadding aria-label="検索結果" sx={{ px: 0.75 }}>
+                        {results.map((result, index) => (
+                          <SearchResultItem
+                            resultRef={(element) => {
+                              resultRefs.current[index] = element;
+                            }}
+                            key={`${result.content_kind}:${result.location}`}
+                            result={result}
+                            query={query.trim()}
+                            selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onOpen={() => openResult(result)}
+                          />
+                        ))}
+                      </List>
+                    </Box>
+                    <Box
+                      data-testid="search-results-footer"
+                      sx={{
+                        alignItems: "center",
+                        bgcolor: "#f6f8fa",
+                        borderTop: "1px solid #d8dee4",
+                        color: "text.secondary",
+                        display: "flex",
+                        flex: "0 0 auto",
+                        gap: 2,
+                        px: 1.5,
+                        py: 0.75,
+                      }}
+                    >
+                      <KeyboardHint keys="↑↓" label="移動" />
+                      <KeyboardHint keys="Enter" label="開く" />
+                      <KeyboardHint keys="Esc" label="閉じる" />
+                    </Box>
+                  </>
                 ) : isSearching ? (
                   <Typography variant="body2" color="text.secondary" sx={{ p: 1.25 }}>
                     検索中
@@ -275,6 +290,193 @@ export function CommandLauncher({
       )}
     </Box>
   );
+}
+
+function SearchResultItem({
+  resultRef,
+  result,
+  query,
+  selected,
+  onMouseEnter,
+  onOpen,
+}: {
+  resultRef: (element: HTMLDivElement | null) => void;
+  result: SearchContentResult;
+  query: string;
+  selected: boolean;
+  onMouseEnter: () => void;
+  onOpen: () => void;
+}) {
+  const visual = searchResultVisual(result.content_kind);
+  const ResultIcon = visual.icon;
+
+  return (
+    <ListItemButton
+      ref={resultRef}
+      aria-selected={selected}
+      selected={selected}
+      onMouseEnter={onMouseEnter}
+      onClick={onOpen}
+      sx={{
+        alignItems: "flex-start",
+        border: "1px solid transparent",
+        borderRadius: 2,
+        gap: 1.25,
+        mb: 0.5,
+        px: 1.25,
+        py: 1.1,
+        transition: "background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease",
+        "&:hover": {
+          bgcolor: "#ffffff",
+          borderColor: "#d8dee4",
+        },
+        "&.Mui-selected": {
+          bgcolor: "#eef5ff",
+          borderColor: "#b6d4fe",
+          boxShadow: "inset 3px 0 0 #1f6feb",
+        },
+        "&.Mui-selected:hover": {
+          bgcolor: "#e7f1ff",
+        },
+      }}
+    >
+      <Box
+        aria-label={visual.label}
+        role="img"
+        sx={{
+          alignItems: "center",
+          bgcolor: visual.background,
+          borderRadius: 2,
+          color: visual.color,
+          display: "flex",
+          flex: "0 0 auto",
+          height: 38,
+          justifyContent: "center",
+          mt: 0.1,
+          width: 38,
+        }}
+      >
+        <ResultIcon fontSize="small" />
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ alignItems: "center", display: "flex", gap: 0.75, minWidth: 0 }}>
+          <Typography
+            component="div"
+            variant="body2"
+            sx={{ fontSize: 15, fontWeight: 700, minWidth: 0, overflowWrap: "anywhere" }}
+          >
+            <HighlightedText text={result.title} matchIndices={result.title_match_indices} />
+          </Typography>
+          <Box
+            component="span"
+            sx={{
+              bgcolor: visual.background,
+              borderRadius: 10,
+              color: visual.color,
+              flex: "0 0 auto",
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 0.2,
+              lineHeight: 1,
+              px: 0.75,
+              py: 0.45,
+            }}
+          >
+            {visual.label}
+          </Box>
+        </Box>
+        <Typography
+          component="div"
+          variant="caption"
+          color="text.secondary"
+          sx={{
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            mt: 0.3,
+            overflowWrap: "anywhere",
+          }}
+        >
+          <HighlightedText text={result.path} matchIndices={result.path_match_indices} />
+        </Typography>
+        {result.snippet && (
+          <Box
+            sx={{
+              alignItems: "flex-start",
+              bgcolor: selected ? "rgba(255, 255, 255, 0.72)" : "#ffffff",
+              border: "1px solid #d8dee4",
+              borderRadius: 1.5,
+              color: "text.secondary",
+              display: "flex",
+              gap: 0.65,
+              mt: 0.8,
+              px: 0.85,
+              py: 0.65,
+            }}
+          >
+            <SearchRounded sx={{ color: "#57606a", flex: "0 0 auto", fontSize: 15, mt: 0.1 }} />
+            <Typography component="div" variant="caption" sx={{ overflowWrap: "anywhere" }}>
+              <HighlightedText text={result.snippet} query={query} />
+            </Typography>
+          </Box>
+        )}
+      </Box>
+    </ListItemButton>
+  );
+}
+
+function KeyboardHint({ keys, label }: { keys: string; label: string }) {
+  return (
+    <Box sx={{ alignItems: "center", display: "flex", gap: 0.5 }}>
+      <Box
+        component="kbd"
+        sx={{
+          bgcolor: "#ffffff",
+          border: "1px solid #d0d7de",
+          borderBottomColor: "#afb8c1",
+          borderRadius: 1,
+          boxShadow: "0 1px 0 rgba(27, 31, 36, 0.08)",
+          color: "#24292f",
+          fontFamily: "inherit",
+          fontSize: 10,
+          lineHeight: 1,
+          px: 0.55,
+          py: 0.4,
+        }}
+      >
+        {keys}
+      </Box>
+      <Typography variant="caption">{label}</Typography>
+    </Box>
+  );
+}
+
+function searchResultVisual(contentKind: string): {
+  label: string;
+  color: string;
+  background: string;
+  icon: ComponentType<{ fontSize?: "small" }>;
+} {
+  if (contentKind === "page") {
+    return {
+      label: "ページ",
+      color: "#8250df",
+      background: "#f3e8ff",
+      icon: ArticleOutlined,
+    };
+  }
+  if (contentKind === "special") {
+    return {
+      label: "Special",
+      color: "#9a6700",
+      background: "#fff8c5",
+      icon: AutoAwesomeOutlined,
+    };
+  }
+  return {
+    label: "ファイル",
+    color: "#0969da",
+    background: "#ddf4ff",
+    icon: InsertDriveFileOutlined,
+  };
 }
 
 function HighlightedText({

@@ -1219,13 +1219,14 @@ fn search_content_for_namespace(
         .filter_map(|page| {
             let title_match = fuzzy_match(&mut matcher, &page.title, &normalized_query);
             let path_match = fuzzy_match(&mut matcher, &page.location, &normalized_query);
+            let description_matches = page.description.to_lowercase().contains(&normalized_query);
             search_rank(
                 &page.title,
                 &page.location,
                 &normalized_query,
                 title_match.as_ref(),
                 path_match.as_ref(),
-                false,
+                description_matches,
             )
             .map(|score| ScoredSearchResult {
                 score,
@@ -2025,6 +2026,16 @@ mod tests {
         assert_eq!(special_results[0].content_kind, "special");
         assert_eq!(special_results[0].title, "Favorites");
         assert_eq!(special_results[0].location, "Work:Special:Favorites");
+
+        let special_description_results =
+            search_content_for_namespace(&namespace, "カテゴリ別").unwrap();
+        assert_eq!(special_description_results.len(), 1);
+        assert_eq!(special_description_results[0].content_kind, "special");
+        assert_eq!(special_description_results[0].title, "Categories");
+        assert_eq!(
+            special_description_results[0].snippet.as_deref(),
+            Some("カテゴリ別にページを表示します。")
+        );
 
         let fuzzy_results = search_content_for_namespace(&namespace, "gdi").unwrap();
         assert_eq!(fuzzy_results.len(), 1);
