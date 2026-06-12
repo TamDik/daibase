@@ -438,14 +438,6 @@ describe("HomePage", () => {
               ],
             },
           ],
-          uncategorized_pages: [
-            {
-              file_id: "file-guide",
-              path: "Guide/Intro.md",
-              title: "Intro",
-              location: "Work:Guide/Intro.md",
-            },
-          ],
         };
       }
       if (location === "Special:Plugins" || location === "Work:Special:Plugins") {
@@ -1602,8 +1594,8 @@ describe("HomePage", () => {
 
     expect(await screen.findByRole("heading", { name: "Categories" })).toBeInTheDocument();
     expect(screen.getByText("Work")).toBeInTheDocument();
-    expect(screen.getByText("未分類")).toBeInTheDocument();
-    expect(screen.getByText("Work:Guide/Intro.md")).toBeInTheDocument();
+    expect(screen.queryByText("未分類")).not.toBeInTheDocument();
+    expect(screen.getByText("Work:Main.md")).toBeInTheDocument();
   });
 
   it("Special:Favorites でお気に入りページとファイルを表示して開ける", async () => {

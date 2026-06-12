@@ -422,7 +422,6 @@ pub enum OpenLocationResult {
         namespace: NamespaceSummary,
         content: ContentTree,
         categories: Vec<CategoryGroupSummary>,
-        uncategorized_pages: Vec<CategoryPageSummary>,
     },
     SpecialPlugins {
         location: String,

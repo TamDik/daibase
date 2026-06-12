@@ -15,7 +15,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   type CategoryGroupSummary,
-  type CategoryPageSummary,
   type ContentTree,
   type FavoriteContentSummary,
   type FileHistoryEntry,
@@ -139,7 +138,6 @@ type SpecialView =
       namespace: NamespaceSummary;
       content: ContentTree;
       categories: CategoryGroupSummary[];
-      uncategorizedPages: CategoryPageSummary[];
     }
   | {
       kind: "plugins";
@@ -324,7 +322,6 @@ export function HomePage() {
         namespace: opened.namespace,
         content: opened.content,
         categories: opened.categories,
-        uncategorizedPages: opened.uncategorized_pages,
       });
       setDraft("");
       setCurrentLocation(opened.location);
@@ -1424,7 +1421,6 @@ export function HomePage() {
                       <CategoriesSpecialPage
                         categories={specialView.categories}
                         namespace={specialView.namespace}
-                        uncategorizedPages={specialView.uncategorizedPages}
                         onOpenLocation={(location) => void navigate(location)}
                       />
                     )}

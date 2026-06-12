@@ -456,16 +456,12 @@ export function FavoritesSpecialPage({
 export function CategoriesSpecialPage({
   categories,
   namespace,
-  uncategorizedPages,
   onOpenLocation,
 }: {
   categories: CategoryGroupSummary[];
   namespace: NamespaceSummary;
-  uncategorizedPages: CategoryPageSummary[];
   onOpenLocation: (location: string) => void;
 }) {
-  const hasPages = categories.length > 0 || uncategorizedPages.length > 0;
-
   return (
     <Paper elevation={0} sx={{ bgcolor: "#ffffff" }}>
       <Box sx={{ px: 2, py: 1.5 }}>
@@ -477,29 +473,19 @@ export function CategoriesSpecialPage({
         </Typography>
       </Box>
       <Stack spacing={3} sx={{ p: 3 }}>
-        {!hasPages ? (
+        {categories.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             カテゴリ付きのページはまだありません。
           </Typography>
         ) : (
-          <>
-            {categories.map((category) => (
-              <Box key={category.name}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  {category.name}
-                </Typography>
-                <CategoryPageList pages={category.pages} onOpenLocation={onOpenLocation} />
-              </Box>
-            ))}
-            {uncategorizedPages.length > 0 && (
-              <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  未分類
-                </Typography>
-                <CategoryPageList pages={uncategorizedPages} onOpenLocation={onOpenLocation} />
-              </Box>
-            )}
-          </>
+          categories.map((category) => (
+            <Box key={category.name}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                {category.name}
+              </Typography>
+              <CategoryPageList pages={category.pages} onOpenLocation={onOpenLocation} />
+            </Box>
+          ))
         )}
       </Stack>
     </Paper>

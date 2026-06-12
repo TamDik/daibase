@@ -592,14 +592,12 @@ pub fn open_location(
             location,
         } => {
             let detail = crate::namespace::open_namespace(&app, namespace.id.clone())?;
-            let (categories, uncategorized_pages) =
-                crate::namespace::list_category_groups(&detail.namespace)?;
+            let categories = crate::namespace::list_category_groups(&detail.namespace)?;
             Ok(OpenLocationResult::SpecialCategories {
                 location,
                 namespace: detail.namespace,
                 content: detail.content,
                 categories,
-                uncategorized_pages,
             })
         }
         ResolvedLocation::SpecialPlugins {

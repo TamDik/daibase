@@ -410,7 +410,6 @@ export type OpenLocationResult =
       namespace: NamespaceSummary;
       content: ContentTree;
       categories: CategoryGroupSummary[];
-      uncategorized_pages: CategoryPageSummary[];
     }
   | {
       kind: "specialPlugins";

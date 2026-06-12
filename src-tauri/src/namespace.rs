@@ -650,10 +650,9 @@ pub fn list_favorite_content(
 
 pub fn list_category_groups(
     namespace: &NamespaceSummary,
-) -> Result<(Vec<CategoryGroupSummary>, Vec<CategoryPageSummary>), String> {
+) -> Result<Vec<CategoryGroupSummary>, String> {
     let content = list_content_for_namespace(namespace)?;
     let mut groups = std::collections::BTreeMap::<String, Vec<CategoryPageSummary>>::new();
-    let mut uncategorized_pages = Vec::new();
 
     for page in content.pages {
         let page_path = resolve_namespace_path(&namespace.root_path, &page.path)?;
@@ -667,7 +666,6 @@ pub fn list_category_groups(
         };
 
         if categories.is_empty() {
-            uncategorized_pages.push(summary);
             continue;
         }
 
@@ -684,9 +682,8 @@ pub fn list_category_groups(
         })
         .collect::<Vec<_>>();
     categories.sort_by(|left, right| left.name.cmp(&right.name));
-    uncategorized_pages.sort_by(|left, right| left.path.cmp(&right.path));
 
-    Ok((categories, uncategorized_pages))
+    Ok(categories)
 }
 
 pub fn read_deleted_page(
@@ -1947,7 +1944,7 @@ mod tests {
     }
 
     #[test]
-    fn list_category_groups_groups_pages_and_uncategorized_pages() {
+    fn list_category_groups_ignores_uncategorized_pages() {
         let root_path = std::env::temp_dir().join(format!("daibase_test_{}", Uuid::new_v4()));
         fs::create_dir_all(&root_path).unwrap();
         fs::write(
@@ -1973,7 +1970,7 @@ mod tests {
             updated_at: "2026-06-01T00:00:00Z".to_string(),
         };
 
-        let (categories, uncategorized_pages) = list_category_groups(&namespace).unwrap();
+        let categories = list_category_groups(&namespace).unwrap();
 
         assert_eq!(categories.len(), 2);
         assert_eq!(categories[0].name, "Research");
@@ -1987,7 +1984,10 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["Draft.md", "Main.md"]
         );
-        assert_eq!(uncategorized_pages[0].path, "Free.md");
+        assert!(categories
+            .iter()
+            .flat_map(|category| &category.pages)
+            .all(|page| page.path != "Free.md"));
 
         fs::remove_dir_all(root_path).unwrap();
     }
